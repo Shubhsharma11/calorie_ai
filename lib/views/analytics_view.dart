@@ -30,10 +30,10 @@ class AnalyticsView extends GetView<AnalyticsController> {
         final metric = controller.trendMetric.value;
         final _ = food.entriesRevision.value;
         final values = controller.activeValues;
-        final maxVal = values.fold<double>(
-          0,
-          (a, b) => a > b ? a : b,
-        ).clamp(1, double.infinity);
+        final maxVal = values
+            .fold<double>(0, (a, b) => a > b ? a : b)
+            .clamp(1.0, double.infinity)
+            .toDouble();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,44 +67,16 @@ class AnalyticsView extends GetView<AnalyticsController> {
                 chartHeight: r.scale(180, tablet: 200, desktop: 220),
               )
             else
-              SizedBox(
-                height: r.scale(180, tablet: 200, desktop: 220),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final barAreaHeight = constraints.maxHeight;
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: values.map((v) {
-                        final h =
-                            (v / maxVal * barAreaHeight).clamp(4.0, barAreaHeight);
-                        return Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 2),
-                            child: Align(
-                              alignment: Alignment.bottomCenter,
-                              child: Container(
-                                height: h,
-                                decoration: BoxDecoration(
-                                  color: _metricColor(metric),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  },
-                ),
+              _AnalyticsBarChart(
+                values: values,
+                metric: metric,
+                maxValue: maxVal,
+                chartHeight: r.scale(180, tablet: 200, desktop: 220),
               ),
             const SizedBox(height: 24),
             _SummaryRow(
               label: 'Avg Calories',
               value: '${controller.averageCalories} kcal',
-            ),
-            _SummaryRow(
-              label: 'Total Burn',
-              value: '${dash.exerciseCalories.value} kcal',
             ),
             _SummaryRow(
               label: 'Goal Achievement',
@@ -170,13 +142,126 @@ class AnalyticsView extends GetView<AnalyticsController> {
       }),
     );
   }
+}
+
+class _AnalyticsBarChart extends StatelessWidget {
+  const _AnalyticsBarChart({
+    required this.values,
+    required this.metric,
+    required this.maxValue,
+    required this.chartHeight,
+  });
+
+  final List<double> values;
+  final NutritionTrendMetric metric;
+  final double maxValue;
+  final double chartHeight;
+
+  static const double _valueLabelHeight = 18;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: chartHeight,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final barAreaHeight = constraints.maxHeight - _valueLabelHeight;
+          final hasSingleBar = values.length == 1;
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: values.map((value) {
+              final barHeight = (value / maxValue * barAreaHeight).clamp(
+                4.0,
+                barAreaHeight,
+              );
+
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: hasSingleBar ? 0 : 2,
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, slotConstraints) {
+                      final width = hasSingleBar
+                          ? 44.0
+                          : slotConstraints.maxWidth.clamp(6.0, 18.0);
+
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          SizedBox(
+                            height: _valueLabelHeight,
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: Text(
+                                value > 0 ? _formatValue(value) : '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary,
+                                  height: 1,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Align(
+                            alignment: Alignment.bottomCenter,
+                            child: SizedBox(
+                              width: width,
+                              height: barAreaHeight,
+                              child: Stack(
+                                alignment: Alignment.bottomCenter,
+                                children: [
+                                  Positioned.fill(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: AppColors.surface,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 280),
+                                    curve: Curves.easeOutCubic,
+                                    height: barHeight,
+                                    decoration: BoxDecoration(
+                                      color: _metricColor(metric),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              );
+            }).toList(),
+          );
+        },
+      ),
+    );
+  }
 
   Color _metricColor(NutritionTrendMetric metric) => switch (metric) {
-        NutritionTrendMetric.calories => AppColors.primary,
-        NutritionTrendMetric.protein => Colors.blue,
-        NutritionTrendMetric.carbs => Colors.orange,
-        NutritionTrendMetric.fat => Colors.purple,
-      };
+    NutritionTrendMetric.calories => AppColors.primary,
+    NutritionTrendMetric.protein => Colors.blue,
+    NutritionTrendMetric.carbs => Colors.orange,
+    NutritionTrendMetric.fat => Colors.purple,
+  };
+
+  String _formatValue(double value) {
+    if (metric == NutritionTrendMetric.calories) {
+      return value.round().toString();
+    }
+    return value.toStringAsFixed(0);
+  }
 }
 
 class _SummaryRow extends StatelessWidget {

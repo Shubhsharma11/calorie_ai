@@ -4,8 +4,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
 import '../controllers/user_controller.dart';
+import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
+import '../models/onboarding_request_model.dart';
+import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/primary_button.dart';
@@ -24,6 +27,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   late final TextEditingController _heightCtrl;
   late final TextEditingController _weightCtrl;
   late String _gender;
+  late final ProfileSyncSnapshot _baseline;
 
   static const _genders = ['Male', 'Female'];
   static const _ageIconAsset = 'assets/image/age.svg';
@@ -39,6 +43,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     _ageCtrl = TextEditingController(text: '${u.age}');
     _heightCtrl = TextEditingController(text: '${u.heightCm}');
     _weightCtrl = TextEditingController(text: '${u.weightKg}');
+    _baseline = _user.captureProfileSyncSnapshot();
   }
 
   @override
@@ -49,7 +54,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     final u = _user.user;
     final age = int.tryParse(_ageCtrl.text);
     final height = int.tryParse(_heightCtrl.text);
@@ -72,20 +77,35 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     u.gender = _gender;
     u.heightCm = height;
     u.weightKg = weight;
-    _user.onProfileUpdated();
-    _user.syncWeightFromProfile();
 
     if (RouteArgs.isEditingFromProfile) {
+      final patch = OnboardingPatchModel.personalDetailsDiff(u, _baseline);
+      if (patch.isEmpty) {
+        AppSnackbar.info('No changes to save.', title: 'Nothing changed');
+        return;
+      }
+
+      final error = await _user.patchOnboarding(patch);
+      if (!mounted) return;
+      if (error != null) {
+        _showError(error);
+        return;
+      }
+
+      _baseline = _user.captureProfileSyncSnapshot();
+      _user.onProfileUpdated();
+      _user.syncWeightFromProfile();
       Get.back();
+      AppSnackbar.success('Personal details updated.');
     } else {
+      _user.onProfileUpdated();
+      _user.syncWeightFromProfile();
       Get.toNamed(AppRoutes.goalSetup);
     }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    AppSnackbar.error(message);
   }
 
   @override
@@ -105,10 +125,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
             _HeroSection(r: r, compact: compact),
             SizedBox(height: r.scale(20)),
             _DetailCard(
-              iconWidget: SvgPicture.asset(
-                _ageIconAsset,
-                fit: BoxFit.contain,
-              ),
+              iconWidget: SvgPicture.asset(_ageIconAsset, fit: BoxFit.contain),
               label: 'Age',
               subtitle: 'Enter your age',
               child: _NumberInput(
@@ -171,10 +188,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
 }
 
 class _HeroSection extends StatelessWidget {
-  const _HeroSection({
-    required this.r,
-    required this.compact,
-  });
+  const _HeroSection({required this.r, required this.compact});
 
   final Responsive r;
   final bool compact;
@@ -327,11 +341,7 @@ class _DetailCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (iconWidget != null)
-            SizedBox(
-              width: 40,
-              height: 40,
-              child: iconWidget,
-            )
+            SizedBox(width: 40, height: 40, child: iconWidget)
           else
             Container(
               width: 40,

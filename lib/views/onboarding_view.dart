@@ -30,7 +30,7 @@ class _OnboardingViewState extends State<OnboardingView> {
     _OnboardPage(
       image: 'assets/image/onboarding2.png',
       title: 'AI Powered Tracking',
-      body: 'Scan food or search quickly to log calories with ease.',
+      body: 'Scan barcodes or search quickly to log calories with ease.',
     ),
     _OnboardPage(
       image: 'assets/image/onboarding3.png',
@@ -65,7 +65,7 @@ class _OnboardingViewState extends State<OnboardingView> {
     final horizontalPadding = r.pagePadding.left;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
@@ -155,7 +155,7 @@ class _OnboardingViewState extends State<OnboardingView> {
               SizedBox(height: r.scale(12)),
             ],
           ),
-        ),  
+        ),
       ),
     );
   }
@@ -166,7 +166,7 @@ class _OnboardPage {
     required this.image,
     required this.title,
     required this.body,
-  }); 
+  });
 
   final String image;
   final String title;

@@ -1,16 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 
+import 'package:calorie_ai/controllers/theme_controller.dart';
 import 'package:calorie_ai/main.dart';
+import 'package:calorie_ai/routes/app_routes.dart';
 
 void main() {
-  testWidgets('App loads log screen', (WidgetTester tester) async {
-    await tester.pumpWidget(const CalorieAiApp());
-    await tester.pumpAndSettle();
+  tearDown(Get.reset);
 
-    expect(find.text('Log'), findsOneWidget);
-    expect(find.text('Calories'), findsOneWidget);
+  testWidgets('App opens onboarding when logged out', (WidgetTester tester) async {
+    Get.put(ThemeController(), permanent: true);
+    await tester.pumpWidget(
+      const CalorieAiApp(initialRoute: AppRoutes.onboarding),
+    );
+    await tester.pump();
 
-    Get.reset();
+    expect(find.text('Eat Healthy Live Healthy'), findsOneWidget);
   });
 }

@@ -7,14 +7,14 @@ import 'rotating_motivation_text.dart';
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({
     super.key,
-    required this.userName,
+    required this.firstName,
     this.showNotificationBadge = false,
     this.onSearch,
     this.onCalendar,
     this.onNotifications,
   });
 
-  final String userName;
+  final String firstName;
   final bool showNotificationBadge;
   final VoidCallback? onSearch;
   final VoidCallback? onCalendar;
@@ -23,6 +23,7 @@ class DashboardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final greeting = _Greeting.forNow();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -34,23 +35,61 @@ class DashboardHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: r.scale(24),
+                        height: r.scale(24),
+                        decoration: BoxDecoration(
+                          color: greeting.color.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          greeting.icon,
+                          size: r.scale(15),
+                          color: greeting.color,
+                        ),
+                      ),
+                      SizedBox(width: r.scale(8)),
+                      Flexible(
+                        child: Text(
+                          greeting.message,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: r.scale(13, tablet: 14),
+                            fontWeight: FontWeight.w700,
+                            color: greeting.color,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: r.scale(4)),
                   Text(
-                    'Hello, $userName 👋',
+                    firstName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: r.scale(24, tablet: 26, desktop: 28),
+                      fontSize: r.scale(28, tablet: 30, desktop: 32),
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
+                      height: 1.05,
                     ),
                   ),
                   SizedBox(height: r.scale(6)),
-                  const RotatingMotivationText(),
+                  RotatingMotivationText(
+                    style: TextStyle(
+                      fontSize: r.scale(14),
+                      color: AppColors.textSecondary,
+                      height: 1.3,
+                    ),
+                  ),
                 ],
               ),
             ),
-            _HeaderIconButton(
-              icon: Icons.search_rounded,
-              onTap: onSearch,
-            ),
+            _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearch),
             SizedBox(width: r.scale(8)),
             _HeaderIconButton(
               icon: Icons.calendar_today_rounded,
@@ -65,6 +104,51 @@ class DashboardHeader extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _Greeting {
+  const _Greeting(this.message, this.icon, this.color);
+
+  final String message;
+  final IconData icon;
+  final Color color;
+
+  factory _Greeting.forNow([DateTime? now]) {
+    final hour = (now ?? DateTime.now()).hour;
+    if (hour < 5) {
+      return const _Greeting(
+        'Good night',
+        Icons.dark_mode_rounded,
+        Color(0xFF7C8CFF),
+      );
+    }
+    if (hour < 12) {
+      return const _Greeting(
+        'Good morning',
+        Icons.wb_sunny_rounded,
+        Color(0xFFFFB800),
+      );
+    }
+    if (hour < 17) {
+      return const _Greeting(
+        'Good afternoon',
+        Icons.wb_twilight_rounded,
+        Color(0xFFFF9500),
+      );
+    }
+    if (hour < 21) {
+      return const _Greeting(
+        'Good evening',
+        Icons.nights_stay_rounded,
+        Color(0xFF8B5CF6),
+      );
+    }
+    return const _Greeting(
+      'Good night',
+      Icons.dark_mode_rounded,
+      Color(0xFF7C8CFF),
     );
   }
 }

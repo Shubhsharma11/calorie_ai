@@ -21,15 +21,34 @@ class StreakView extends GetView<StreakController> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Your Streak')),
-      body: ResponsivePage(
-        scrollable: true,
-        child: Obx(() {
-          final _ = controller.revision.value;
-          final stats = controller.stats;
+      body: RefreshIndicator(
+        onRefresh: controller.refreshFromApi,
+        child: ResponsivePage(
+          scrollable: true,
+          child: Obx(() {
+            final _ = controller.revision.value;
+            final stats = controller.stats;
+            final isLoading = controller.isLoadingApi.value;
+            final apiError = controller.apiErrorMessage.value;
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (isLoading) ...[
+                  const LinearProgressIndicator(minHeight: 2),
+                  SizedBox(height: r.scale(12)),
+                ],
+                if (apiError != null) ...[
+                  Text(
+                    apiError,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: r.scale(13),
+                    ),
+                  ),
+                  SizedBox(height: r.scale(12)),
+                ],
               _StreakHero(
                 streak: stats.currentStreak,
                 isAtRisk: stats.isAtRisk,
@@ -95,6 +114,7 @@ class StreakView extends GetView<StreakController> {
             ],
           );
         }),
+        ),
       ),
     );
   }

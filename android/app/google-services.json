@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "950645223660",
+    "project_id": "calorie-ai-2cbb0",
+    "storage_bucket": "calorie-ai-2cbb0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:950645223660:android:b9843bac3bf84d57a0b5c9",
+        "android_client_info": {
+          "package_name": "com.example.calorie_ai"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "950645223660-jd5s1vk7jmt7sakg097bn3kg0o8m0sl0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.calorie_ai",
+            "certificate_hash": "983e9ed7dfa21268e2f9ab0165b14c620968e719"
+          }
+        },
+        {
+          "client_id": "950645223660-73fq24ua6hn9h7u92bc9nhtg22rjag1d.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCd7ujYg_75XV-lFg6jDXFTfZ3MtfZZ9rA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "950645223660-73fq24ua6hn9h7u92bc9nhtg22rjag1d.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "950645223660-8vth06aobvau1jviupkuhe60bg5r6kg3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.calorieAi"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

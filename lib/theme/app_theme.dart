@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/app_page_transitions.dart';
 import 'app_colors.dart';
 
 abstract final class AppTheme {
+  static const fontFamily = 'Manrope';
+
   static ThemeData get light => _buildTheme(
         brightness: Brightness.light,
         background: AppColors.lightBackground,
@@ -46,10 +49,13 @@ abstract final class AppTheme {
     required double selectionFillAlpha,
   }) {
     final isDark = brightness == Brightness.dark;
+    final textTheme = _textTheme(textPrimary, textSecondary);
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: fontFamily,
       brightness: brightness,
+      canvasColor: background,
       scaffoldBackgroundColor: background,
       colorScheme: ColorScheme(
         brightness: brightness,
@@ -62,6 +68,10 @@ abstract final class AppTheme {
         surface: card,
         onSurface: textPrimary,
       ),
+      textTheme: textTheme,
+      primaryTextTheme: textTheme,
+      iconTheme: IconThemeData(color: textPrimary),
+      primaryIconTheme: IconThemeData(color: textPrimary),
       appBarTheme: AppBarTheme(
         backgroundColor: background,
         foregroundColor: textPrimary,
@@ -84,6 +94,21 @@ abstract final class AppTheme {
       listTileTheme: ListTileThemeData(
         iconColor: AppColors.primary,
         textColor: textPrimary,
+        titleTextStyle: TextStyle(
+          color: textPrimary,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+        subtitleTextStyle: TextStyle(
+          color: textSecondary,
+          fontSize: 12,
+        ),
+        tileColor: card,
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: AppColors.primary,
+        selectionColor: AppColors.primary.withValues(alpha: selectionFillAlpha),
+        selectionHandleColor: AppColors.primary,
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
@@ -101,9 +126,16 @@ abstract final class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isDark ? AppColors.darkSurface : null,
-        contentTextStyle: TextStyle(color: textPrimary),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: isDark ? AppColors.darkSurface : card,
+        contentTextStyle: TextStyle(
+          color: textPrimary,
+          fontWeight: FontWeight.w500,
+        ),
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: border.withValues(alpha: 0.55)),
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -176,11 +208,37 @@ abstract final class AppTheme {
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: card,
         modalBackgroundColor: card,
+        surfaceTintColor: Colors.transparent,
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: card,
         surfaceTintColor: Colors.transparent,
+        titleTextStyle: TextStyle(
+          color: textPrimary,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+        ),
+        contentTextStyle: TextStyle(
+          color: textPrimary,
+          fontSize: 14,
+          height: 1.45,
+        ),
       ),
+      pageTransitionsTheme: AppPageTransitions.pageTransitionsTheme,
+    );
+  }
+
+  static TextTheme _textTheme(Color textPrimary, Color textSecondary) {
+    final base = Typography.material2021().black.apply(
+          fontFamily: fontFamily,
+          bodyColor: textPrimary,
+          displayColor: textPrimary,
+        );
+
+    return base.copyWith(
+      bodySmall: base.bodySmall?.copyWith(color: textSecondary),
+      labelSmall: base.labelSmall?.copyWith(color: textSecondary),
+      titleSmall: base.titleSmall?.copyWith(color: textPrimary),
     );
   }
 }

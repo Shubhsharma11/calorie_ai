@@ -1,30 +1,34 @@
+import 'dart:async';
+
 import 'package:get/get.dart';
 
 import '../controllers/analytics_controller.dart';
 import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
+import '../controllers/nutrition_plan_controller.dart';
 import '../controllers/main_controller.dart';
 import '../controllers/scan_controller.dart';
 import '../controllers/settings_controller.dart';
 import '../controllers/streak_controller.dart';
 import '../controllers/tracker_controller.dart';
-import '../controllers/user_controller.dart';
 
 /// Registers controllers for the main app shell (tabs + features).
 class HomeBinding extends Bindings {
   @override
   void dependencies() {
     if (!Get.isRegistered<MainController>()) {
-      Get.put(MainController());
+      Get.put(MainController(), permanent: true);
     }
     if (!Get.isRegistered<FoodController>()) {
-      Get.put(FoodController());
+      Get.put(FoodController(), permanent: true);
     }
+    unawaited(Get.find<FoodController>().refreshMealsFromApi());
     if (!Get.isRegistered<StreakController>()) {
-      Get.put(StreakController());
+      Get.put(StreakController(), permanent: true);
     }
+    unawaited(Get.find<StreakController>().refreshFromApi());
     if (!Get.isRegistered<DashboardController>()) {
-      Get.put(DashboardController());
+      Get.put(DashboardController(), permanent: true);
     }
     if (!Get.isRegistered<ScanController>()) {
       Get.put(ScanController());
@@ -33,13 +37,15 @@ class HomeBinding extends Bindings {
       Get.put(AnalyticsController());
     }
     if (!Get.isRegistered<TrackerController>()) {
-      final weight = Get.isRegistered<UserController>()
-          ? Get.find<UserController>().user.weightKg.toDouble()
-          : null;
-      Get.put(TrackerController(initialWeight: weight));
+      // Weight is hydrated from GET /api/v1/weight — not local profile defaults.
+      Get.put(TrackerController());
     }
     if (!Get.isRegistered<SettingsController>()) {
       Get.lazyPut(SettingsController.new);
     }
+    if (!Get.isRegistered<NutritionPlanController>()) {
+      Get.put(NutritionPlanController(), permanent: true);
+    }
+    unawaited(Get.find<NutritionPlanController>().loadPlan());
   }
 }

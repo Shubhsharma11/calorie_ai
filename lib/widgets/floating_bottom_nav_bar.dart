@@ -18,45 +18,182 @@ class FloatingBottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.circular(32),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
+      minimum: const EdgeInsets.only(bottom: 8),
+      child: SizedBox(
+        height: 100,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Stack(
+            alignment: Alignment.bottomCenter,
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: CustomPaint(painter: _NavBarShapePainter()),
               ),
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
+              Positioned(
+                left: 4,
+                right: 4,
+                bottom: 5,
+                child: SizedBox(
+                  height: 90,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: List.generate(items.length, (index) {
+                      final item = items[index];
+                      final selected = index == selectedIndex;
+                      final isCenter = index == items.length ~/ 2;
+
+                      return Expanded(
+                        child: _NavItem(
+                          icon: item.icon,
+                          label: item.label,
+                          selected: selected,
+                          isCenter: isCenter,
+                          onTap: () => onTap(index),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
               ),
             ],
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: Row(
-              children: List.generate(items.length, (index) {
-                final item = items[index];
-                final selected = index == selectedIndex;
-
-                return Expanded(
-                  child: _NavItem(
-                    icon: item.icon,
-                    label: item.label,
-                    selected: selected,
-                    onTap: () => onTap(index),
-                  ),
-                );
-              }),
-            ),
-          ),
         ),
       ),
+    );
+  }
+}
+
+class _NavBarShapePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _buildPath(size);
+
+    canvas.drawShadow(
+      path,
+      AppColors.primary.withValues(alpha: 0.22),
+      16,
+      true,
+    );
+    canvas.drawShadow(path, Colors.black.withValues(alpha: 0.12), 18, true);
+
+    final fill = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFFF8FFF7), Color(0xFFEFFFF4), Color(0xFFEAF8F1)],
+      ).createShader(Offset.zero & size);
+    canvas.drawPath(path, fill);
+
+    final glow = Paint()
+      ..shader = RadialGradient(
+        center: Alignment.topCenter,
+        radius: 0.9,
+        colors: [AppColors.primary.withValues(alpha: 0.11), Colors.transparent],
+      ).createShader(Offset.zero & size);
+    canvas.drawPath(path, glow);
+
+    final border = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..color = AppColors.onPrimary.withValues(alpha: 0.76);
+    canvas.drawPath(path, border);
+  }
+
+  Path _buildPath(Size size) {
+    const top = 28.0;
+    const bumpTop = 1.0;
+    const radius = 38.0;
+    final centerX = size.width / 2;
+    final bumpHalfWidth = size.width * 0.17;
+
+    return Path()
+      ..moveTo(radius, top)
+      ..lineTo(centerX - bumpHalfWidth, top)
+      ..cubicTo(centerX - 45, top, centerX - 46, bumpTop, centerX, bumpTop)
+      ..cubicTo(
+        centerX + 46,
+        bumpTop,
+        centerX + 45,
+        top,
+        centerX + bumpHalfWidth,
+        top,
+      )
+      ..lineTo(size.width - radius, top)
+      ..quadraticBezierTo(size.width, top, size.width, top + radius)
+      ..lineTo(size.width, size.height - radius)
+      ..quadraticBezierTo(
+        size.width,
+        size.height,
+        size.width - radius,
+        size.height,
+      )
+      ..lineTo(radius, size.height)
+      ..quadraticBezierTo(0, size.height, 0, size.height - radius)
+      ..lineTo(0, top + radius)
+      ..quadraticBezierTo(0, top, radius, top)
+      ..close();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _CenterAction extends StatelessWidget {
+  const _CenterAction({required this.icon, required this.selected});
+
+  final IconData icon;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = selected
+        ? null
+        : LinearGradient(colors: [AppColors.surface, AppColors.surface]);
+    final iconColor = selected ? AppColors.onPrimary : AppColors.textSecondary;
+    final shadowColor = selected
+        ? AppColors.primary.withValues(alpha: 0.35)
+        : Colors.black.withValues(alpha: 0.08);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      width: 58,
+      height: 58,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient:
+            background ??
+            const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF66E28C),
+                AppColors.primary,
+                AppColors.primaryDark,
+              ],
+            ),
+        border: Border.all(
+          color: selected
+              ? AppColors.onPrimary.withValues(alpha: 0.85)
+              : AppColors.border,
+          width: 4,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: shadowColor,
+            blurRadius: selected ? 20 : 12,
+            offset: Offset(0, selected ? 10 : 4),
+          ),
+          if (selected)
+            BoxShadow(
+              color: AppColors.onPrimary.withValues(alpha: 0.80),
+              blurRadius: 12,
+              offset: const Offset(0, -2),
+            ),
+        ],
+      ),
+      child: Icon(icon, color: iconColor, size: selected ? 30 : 28),
     );
   }
 }
@@ -66,55 +203,67 @@ class _NavItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.selected,
+    required this.isCenter,
     required this.onTap,
   });
 
   final IconData icon;
   final String label;
   final bool selected;
+  final bool isCenter;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final activeColor = AppColors.primaryDark;
+    final inactiveColor = AppColors.textSecondary;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        splashColor: AppColors.primary.withValues(alpha: 0.12),
-        highlightColor: AppColors.primary.withValues(alpha: 0.08),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+        borderRadius: BorderRadius.circular(28),
+        splashFactory: NoSplash.splashFactory,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        child: SizedBox(
+          height: 90,
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                decoration: BoxDecoration(
-                  color: selected ? AppColors.selectionFill : Colors.transparent,
-                  borderRadius: BorderRadius.circular(24),
+              if (isCenter)
+                _CenterAction(icon: Icons.eco_rounded, selected: selected)
+              else
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  width: 42,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? AppColors.primary.withValues(alpha: 0.12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 28,
+                    color: selected ? activeColor : inactiveColor,
+                  ),
                 ),
-                child: Icon(
-                  icon,
-                  size: 22,
-                  color: selected ? activeColor : AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 6),
+              SizedBox(height: isCenter ? 4 : 8),
               Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12.5,
                   height: 1,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: selected ? activeColor : AppColors.textPrimary,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  color: selected ? activeColor : inactiveColor,
                 ),
               ),
+              SizedBox(height: isCenter ? 6 : 10),
             ],
           ),
         ),

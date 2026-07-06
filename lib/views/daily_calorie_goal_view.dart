@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../controllers/nutrition_plan_controller.dart';
 import '../controllers/user_controller.dart';
-import '../core/macro_emojis.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/activity_level.dart';
+import '../models/goal_type.dart';
 import '../models/user_model.dart';
-import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
@@ -15,329 +15,238 @@ import '../widgets/responsive_page.dart';
 class DailyCalorieGoalView extends GetView<UserController> {
   const DailyCalorieGoalView({super.key});
 
-  Map<String, bool> get _editArgs => RouteArgs.isEditingFromProfile
-      ? RouteArgs.fromProfileMap
-      : RouteArgs.returnToDailyGoalMap;
-
-  void _showMacroInfo(BuildContext context, UserModel user) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Macro targets'),
-        content: SingleChildScrollView(
-          child: Text(
-            'Macros are the protein, carbohydrates, and fats that make up '
-            'your daily calories. The ranges shown follow common nutrition '
-            'guidelines.\n\n'
-            'Your current targets from ${user.dailyCalorieGoal} kcal:\n'
-            '• Protein: ${user.proteinGoalG}g (30%)\n'
-            '• Carbohydrates: ${user.carbsGoalG}g (40%)\n'
-            '• Fats: ${user.fatGoalG}g (30%)',
-            style: TextStyle(height: 1.45),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Got it'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showMaintenanceInfo(BuildContext context, UserModel user) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Maintenance calories'),
-        content: SingleChildScrollView(
-          child: Text(
-            'Maintenance calories (${user.maintenanceCalories} kcal) are the '
-            'estimated amount you need each day to maintain your current '
-            'weight. They are based on your age, height, weight, gender, '
-            'and activity level.\n\n'
-            'Your daily goal adjusts from this number depending on whether '
-            'you want to lose, gain, or maintain weight.',
-            style: TextStyle(height: 1.45),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Got it'),
-          ),
-        ],
-      ),
-    );
-  }
+  static const _pageBg = Color(0xFFF4F5F2);
+  static const _carbsColor = Color(0xFF5CB87A);
+  static const _proteinColor = Color(0xFF9B8FD9);
+  static const _fatColor = Color(0xFFF0A060);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Your Daily Goal'),
-        centerTitle: true,
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-      ),
+      backgroundColor: _pageBg,
       body: GetBuilder<UserController>(
         builder: (_) {
-          final u = controller.user;
+          final user = controller.user;
           final r = context.responsive;
-          final calculated = u.calculatedDailyCalorieGoal;
-          final goal = u.dailyCalorieGoal;
+          final planController = Get.find<NutritionPlanController>();
+          final goal = user.dailyCalorieGoal;
           final canDecrease = goal > UserController.minDailyCalories;
           final canIncrease = goal < UserController.maxDailyCalories;
+          final editing = RouteArgs.isEditingFromProfile;
 
-          return SetupScreenLayout(
-            scrollable: true,
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _HeroSection(r: r),
-                SizedBox(height: r.scale(20)),
-                _CalorieGoalPicker(
-                  goal: goal,
-                  canDecrease: canDecrease,
-                  canIncrease: canIncrease,
-                  onDecrease: () =>
-                      controller.adjustCalorieGoal(-UserController.calorieStep),
-                  onIncrease: () =>
-                      controller.adjustCalorieGoal(UserController.calorieStep),
-                ),
-                SizedBox(height: r.scale(14)),
-                _RecommendationBanner(
-                  calories: calculated,
-                  showReset: u.hasManualCalorieAdjustment,
-                  onReset: controller.resetCalorieAdjustment,
-                ),
-                SizedBox(height: r.scale(16)),
-                _ProfileSummaryRow(
-                  user: u,
-                  onGoalWeightTap: RouteArgs.isEditingFromProfile
-                      ? () => Get.toNamed(
-                            AppRoutes.goalWeight,
-                            arguments: _editArgs,
-                          )
-                      : null,
-                  onActivityLevelTap: () => Get.toNamed(
-                    AppRoutes.activityLevel,
-                    arguments: _editArgs,
-                  ),
-                  onMaintenanceTap: () => _showMaintenanceInfo(context, u),
-                ),
-                SizedBox(height: r.scale(24)),
-                Row(
+          return Obx(() {
+            if (planController.isLoading.value) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            return SafeArea(
+              child: SetupScreenLayout(
+                scrollable: true,
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    const _BackButton(),
+                    SizedBox(height: r.scale(20)),
+                    if (planController.errorMessage.value != null) ...[
+                      _PlanErrorBanner(
+                        message: planController.errorMessage.value!,
+                        onRetry: planController.loadPlan,
+                      ),
+                      SizedBox(height: r.scale(16)),
+                    ],
+                    const _HeaderStar(),
+                    SizedBox(height: r.scale(18)),
+                    _PlanTitle(firstName: user.firstName),
+                    SizedBox(height: r.scale(8)),
                     Text(
-                      'Macro targets',
+                      'A personalized plan designed around your goals and lifestyle.',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: r.scale(16),
+                        fontSize: r.scale(14, tablet: 15),
+                        color: AppColors.textSecondary,
+                        height: 1.45,
+                      ),
+                    ),
+                    SizedBox(height: r.scale(28)),
+                    _DailyCaloriesCard(
+                      goal: goal,
+                      goalLabel: user.goal?.title ?? 'Maintain Weight',
+                      showAdjusters: editing,
+                      canDecrease: canDecrease,
+                      canIncrease: canIncrease,
+                      onDecrease: () => controller.adjustCalorieGoal(
+                        -UserController.calorieStep,
+                      ),
+                      onIncrease: () => controller.adjustCalorieGoal(
+                        UserController.calorieStep,
+                      ),
+                    ),
+                    SizedBox(height: r.scale(28)),
+                    Text(
+                      'MACRONUTRIENTS',
+                      style: TextStyle(
+                        fontSize: r.scale(11),
                         fontWeight: FontWeight.w600,
+                        letterSpacing: 1.1,
+                        color: AppColors.textSecondary,
                       ),
                     ),
-                    const Spacer(),
-                    InkWell(
-                      onTap: () => _showMacroInfo(context, u),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 2,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Learn more',
-                              style: TextStyle(
-                                fontSize: r.scale(13),
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.info_outline_rounded,
-                              size: r.scale(16),
-                              color: AppColors.primary,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: r.scale(12)),
-                Row(
-                  children: [
-                    _MacroRangeCard(
-                      label: 'Protein',
-                      emoji: MacroEmojis.protein,
-                      grams: u.proteinGoalG,
-                      rangeLabel: '20–30%',
-                      percent: _macroPercent(u, MacroKind.protein),
-                      rangeMin: 20,
-                      rangeMax: 30,
-                      color: const Color(0xFFE8A317),
-                    ),
-                    const SizedBox(width: 10),
-                    _MacroRangeCard(
+                    SizedBox(height: r.scale(14)),
+                    _MacroNutrientRow(
+                      icon: Icons.eco_rounded,
                       label: 'Carbohydrates',
-                      emoji: MacroEmojis.carbs,
-                      grams: u.carbsGoalG,
+                      grams: user.carbsGoalG,
                       rangeLabel: '45–65%',
-                      percent: _macroPercent(u, MacroKind.carbs),
-                      rangeMin: 45,
-                      rangeMax: 65,
-                      color: AppColors.primary,
+                      color: _carbsColor,
+                      progress: _macroProgress(user, user.carbsGoalG, 4),
                     ),
-                    const SizedBox(width: 10),
-                    _MacroRangeCard(
+                    SizedBox(height: r.scale(14)),
+                    _MacroNutrientRow(
+                      icon: Icons.fitness_center_rounded,
+                      label: 'Protein',
+                      grams: user.proteinGoalG,
+                      rangeLabel: '20–30%',
+                      color: _proteinColor,
+                      progress: _macroProgress(user, user.proteinGoalG, 4),
+                    ),
+                    SizedBox(height: r.scale(14)),
+                    _MacroNutrientRow(
+                      icon: Icons.water_drop_outlined,
                       label: 'Fats',
-                      emoji: MacroEmojis.fat,
-                      grams: u.fatGoalG,
+                      grams: user.fatGoalG,
                       rangeLabel: '20–35%',
-                      percent: _macroPercent(u, MacroKind.fat),
-                      rangeMin: 20,
-                      rangeMax: 35,
-                      color: const Color(0xFF5AC46A),
+                      color: _fatColor,
+                      progress: _macroProgress(user, user.fatGoalG, 9),
+                    ),
+                    SizedBox(height: r.scale(24)),
+                    _OptimizationBox(
+                      goalLabel: user.goal?.summaryLabel ?? 'Maintenance',
+                      activityLabel: _activityLabel(user.activityLevel),
                     ),
                   ],
                 ),
-              ],
-            ),
-            action: PrimaryButton(
-              label: RouteArgs.isEditingFromProfile ? 'Save' : 'Start Tracking',
-              onPressed: () {
-                if (RouteArgs.isEditingFromProfile) {
-                  controller.notifyGoalConsumers();
-                  Get.back();
-                } else {
-                  controller.completeOnboarding();
-                }
-              },
-            ),
-          );
+                action: PrimaryButton(
+                  label: editing ? 'Save' : 'Start Tracking',
+                  onPressed: () async {
+                    if (editing) {
+                      controller.notifyGoalConsumers();
+                      Get.back();
+                      return;
+                    }
+                    await controller.finishOnboardingSetup();
+                  },
+                ),
+              ),
+            );
+          });
         },
       ),
     );
   }
 
-  static int _macroPercent(UserModel u, MacroKind kind) {
-    final calories = u.dailyCalorieGoal;
+  static double _macroProgress(UserModel user, int grams, int calPerGram) {
+    final calories = user.dailyCalorieGoal;
     if (calories <= 0) return 0;
-    return switch (kind) {
-      MacroKind.protein => (u.proteinGoalG * 4 / calories * 100).round(),
-      MacroKind.carbs => (u.carbsGoalG * 4 / calories * 100).round(),
-      MacroKind.fat => (u.fatGoalG * 9 / calories * 100).round(),
+    return (grams * calPerGram / calories).clamp(0.0, 1.0);
+  }
+
+  static String _activityLabel(ActivityLevel level) {
+    return switch (level) {
+      ActivityLevel.sedentary => 'Sedentary',
+      ActivityLevel.lightlyActive => 'Light',
+      ActivityLevel.moderatelyActive => 'Moderate',
+      ActivityLevel.veryActive => 'Very Active',
     };
   }
 }
 
-enum MacroKind { protein, carbs, fat }
-
-class _HeroSection extends StatelessWidget {
-  const _HeroSection({required this.r});
-
-  final Responsive r;
+class _BackButton extends StatelessWidget {
+  const _BackButton();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              RichText(
-                text: TextSpan(
-                  style: TextStyle(
-                    fontSize: r.scale(24, tablet: 26),
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                    height: 1.25,
-                  ),
-                  children: const [
-                    TextSpan(text: 'Set your daily '),
-                    TextSpan(
-                      text: 'calorie',
-                      style: TextStyle(color: AppColors.primary),
-                    ),
-                    TextSpan(text: ' goal'),
-                  ],
-                ),
-              ),
-              SizedBox(height: r.scale(8)),
-              Text(
-                'Adjust up or down from the recommended amount.',
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  height: 1.45,
-                ),
-              ),
-            ],
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: Colors.white,
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: Get.back,
+          customBorder: const CircleBorder(),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Icon(
+              Icons.chevron_left_rounded,
+              color: AppColors.textPrimary,
+            ),
           ),
         ),
-        SizedBox(width: r.scale(8)),
-        const _HeroIllustration(),
-      ],
+      ),
     );
   }
 }
 
-class _HeroIllustration extends StatelessWidget {
-  const _HeroIllustration();
+class _HeaderStar extends StatelessWidget {
+  const _HeaderStar();
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final size = r.scale(88, tablet: 96);
 
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        clipBehavior: Clip.none,
+    return Center(
+      child: Container(
+        width: r.scale(52),
+        height: r.scale(52),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: DailyCalorieGoalView._carbsColor.withValues(alpha: 0.12),
+          boxShadow: [
+            BoxShadow(
+              color: DailyCalorieGoalView._carbsColor.withValues(alpha: 0.25),
+              blurRadius: 24,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Icon(
+          Icons.auto_awesome_rounded,
+          size: r.scale(24),
+          color: DailyCalorieGoalView._carbsColor,
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanTitle extends StatelessWidget {
+  const _PlanTitle({required this.firstName});
+
+  final String firstName;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return RichText(
+      textAlign: TextAlign.center,
+      text: TextSpan(
+        style: TextStyle(
+          fontSize: r.scale(26, tablet: 28),
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+          height: 1.25,
+          letterSpacing: -0.5,
+        ),
         children: [
-          Positioned(
-            top: 4,
-            right: 0,
-            child: Icon(
-              Icons.eco_rounded,
-              size: r.scale(28),
-              color: AppColors.primary.withValues(alpha: 0.35),
-            ),
-          ),
-          Positioned(
-            top: 18,
-            left: 2,
-            child: Icon(
-              Icons.spa_rounded,
-              size: r.scale(22),
-              color: AppColors.primary.withValues(alpha: 0.5),
-            ),
-          ),
-          Positioned(
-            bottom: 6,
-            right: 8,
-            child: Container(
-              width: r.scale(52),
-              height: r.scale(52),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.local_fire_department_rounded,
-                size: r.scale(28),
-                color: AppColors.primary,
-              ),
-            ),
+          const TextSpan(text: 'Your nutrition plan is ready,\n'),
+          TextSpan(
+            text: '$firstName.',
+            style: TextStyle(color: DailyCalorieGoalView._carbsColor),
           ),
         ],
       ),
@@ -345,9 +254,11 @@ class _HeroIllustration extends StatelessWidget {
   }
 }
 
-class _CalorieGoalPicker extends StatelessWidget {
-  const _CalorieGoalPicker({
+class _DailyCaloriesCard extends StatelessWidget {
+  const _DailyCaloriesCard({
     required this.goal,
+    required this.goalLabel,
+    required this.showAdjusters,
     required this.canDecrease,
     required this.canIncrease,
     required this.onDecrease,
@@ -355,6 +266,8 @@ class _CalorieGoalPicker extends StatelessWidget {
   });
 
   final int goal;
+  final String goalLabel;
+  final bool showAdjusters;
   final bool canDecrease;
   final bool canIncrease;
   final VoidCallback onDecrease;
@@ -365,89 +278,153 @@ class _CalorieGoalPicker extends StatelessWidget {
     final r = context.responsive;
 
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: r.scale(16),
-        vertical: r.scale(24),
-      ),
+      padding: EdgeInsets.all(r.scale(20)),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Column(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            'DAILY GOAL',
-            style: TextStyle(
-              fontSize: r.scale(11),
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.1,
-              color: AppColors.textSecondary.withValues(alpha: 0.85),
-            ),
-          ),
-          SizedBox(height: r.scale(16)),
-          Row(
-            children: [
-              _StepButton(
-                icon: Icons.remove_rounded,
-                onPressed: canDecrease ? onDecrease : null,
-              ),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(
-                      '$goal',
-                      style: TextStyle(
-                        fontSize: r.scale(44, tablet: 48),
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                        height: 1,
-                        letterSpacing: -1,
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: DailyCalorieGoalView._carbsColor,
+                        shape: BoxShape.circle,
                       ),
                     ),
-                    SizedBox(width: r.scale(6)),
+                    SizedBox(width: r.scale(8)),
                     Text(
-                      'kcal / day',
+                      'Daily Calories',
                       style: TextStyle(
                         fontSize: r.scale(14),
+                        fontWeight: FontWeight.w600,
                         color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
                 ),
-              ),
-              _StepButton(
-                icon: Icons.add_rounded,
-                onPressed: canIncrease ? onIncrease : null,
-              ),
-            ],
+                SizedBox(height: r.scale(14)),
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontSize: r.scale(36, tablet: 40),
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                      height: 1,
+                      letterSpacing: -1.5,
+                    ),
+                    children: [
+                      TextSpan(text: '$goal '),
+                      TextSpan(
+                        text: 'kcal',
+                        style: TextStyle(
+                          fontSize: r.scale(18),
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: r.scale(14)),
+                Text(
+                  goalLabel,
+                  style: TextStyle(
+                    fontSize: r.scale(13),
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (showAdjusters) ...[
+                  SizedBox(height: r.scale(14)),
+                  Row(
+                    children: [
+                      _MiniAdjustButton(
+                        icon: Icons.remove_rounded,
+                        onPressed: canDecrease ? onDecrease : null,
+                      ),
+                      SizedBox(width: r.scale(8)),
+                      _MiniAdjustButton(
+                        icon: Icons.add_rounded,
+                        onPressed: canIncrease ? onIncrease : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
-          SizedBox(height: r.scale(16)),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
+          SizedBox(width: r.scale(12)),
+          _DecorativeDiscs(size: r.scale(92, tablet: 100)),
+        ],
+      ),
+    );
+  }
+}
+
+class _DecorativeDiscs extends StatelessWidget {
+  const _DecorativeDiscs({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            top: size * 0.06,
+            right: size * 0.04,
+            child: _GlassDisc(
+              diameter: size * 0.48,
+              color: DailyCalorieGoalView._carbsColor,
             ),
-            child: Text(
-              '±${UserController.calorieStep} kcal per tap',
-              style: TextStyle(
-                fontSize: r.scale(11),
-                fontWeight: FontWeight.w600,
-                color: AppColors.primaryDark,
-              ),
+          ),
+          Positioned(
+            left: 0,
+            bottom: size * 0.14,
+            child: _GlassDisc(
+              diameter: size * 0.42,
+              color: DailyCalorieGoalView._proteinColor,
             ),
+          ),
+          Positioned(
+            right: size * 0.18,
+            bottom: size * 0.02,
+            child: _GlassDisc(
+              diameter: size * 0.34,
+              color: DailyCalorieGoalView._fatColor,
+            ),
+          ),
+          Positioned(
+            top: size * 0.22,
+            left: size * 0.28,
+            child: _SparkDot(diameter: size * 0.07),
+          ),
+          Positioned(
+            bottom: size * 0.34,
+            right: size * 0.02,
+            child: _SparkDot(diameter: size * 0.055),
           ),
         ],
       ),
@@ -455,36 +432,92 @@ class _CalorieGoalPicker extends StatelessWidget {
   }
 }
 
-class _StepButton extends StatelessWidget {
-  const _StepButton({
-    required this.icon,
-    required this.onPressed,
-  });
+class _GlassDisc extends StatelessWidget {
+  const _GlassDisc({required this.diameter, required this.color});
+
+  final double diameter;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: diameter,
+      height: diameter,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withValues(alpha: 0.55),
+            color.withValues(alpha: 0.28),
+          ],
+        ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.65),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.28),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SparkDot extends StatelessWidget {
+  const _SparkDot({required this.diameter});
+
+  final double diameter;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: diameter,
+      height: diameter,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: DailyCalorieGoalView._carbsColor.withValues(alpha: 0.25),
+            blurRadius: 6,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniAdjustButton extends StatelessWidget {
+  const _MiniAdjustButton({required this.icon, required this.onPressed});
 
   final IconData icon;
   final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final r = context.responsive;
-
     return Material(
-      color: AppColors.surface,
-      shape: const CircleBorder(),
+      color: DailyCalorieGoalView._pageBg,
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onPressed,
-        customBorder: const CircleBorder(),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
-          width: r.scale(48),
-          height: r.scale(48),
+          width: 34,
+          height: 34,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: AppColors.border),
           ),
           child: Icon(
             icon,
-            size: 22,
+            size: 18,
             color: onPressed == null
                 ? AppColors.textSecondary.withValues(alpha: 0.35)
                 : AppColors.textPrimary,
@@ -495,16 +528,110 @@ class _StepButton extends StatelessWidget {
   }
 }
 
-class _RecommendationBanner extends StatelessWidget {
-  const _RecommendationBanner({
-    required this.calories,
-    required this.showReset,
-    required this.onReset,
+class _MacroNutrientRow extends StatelessWidget {
+  const _MacroNutrientRow({
+    required this.icon,
+    required this.label,
+    required this.grams,
+    required this.rangeLabel,
+    required this.color,
+    required this.progress,
   });
 
-  final int calories;
-  final bool showReset;
-  final VoidCallback onReset;
+  final IconData icon;
+  final String label;
+  final int grams;
+  final String rangeLabel;
+  final Color color;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: r.scale(40),
+          height: r.scale(40),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.14),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: r.scale(20), color: color),
+        ),
+        SizedBox(width: r.scale(12)),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: r.scale(14),
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              SizedBox(height: r.scale(8)),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: r.scale(4),
+                  backgroundColor: AppColors.border,
+                  color: color,
+                ),
+              ),
+              SizedBox(height: r.scale(8)),
+              Row(
+                children: [
+                  Text(
+                    '${grams}g',
+                    style: TextStyle(
+                      fontSize: r.scale(14),
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  SizedBox(width: r.scale(8)),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: r.scale(10),
+                      vertical: r.scale(4),
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      rangeLabel,
+                      style: TextStyle(
+                        fontSize: r.scale(11),
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OptimizationBox extends StatelessWidget {
+  const _OptimizationBox({
+    required this.goalLabel,
+    required this.activityLabel,
+  });
+
+  final String goalLabel;
+  final String activityLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -512,318 +639,109 @@ class _RecommendationBanner extends StatelessWidget {
 
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: r.scale(14),
-        vertical: r.scale(12),
+        horizontal: r.scale(16),
+        vertical: r.scale(16),
       ),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.white.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.star_rounded,
-              size: 18,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RichText(
-                  text: TextSpan(
-                    style: TextStyle(
-                      fontSize: r.scale(14),
-                      color: AppColors.textPrimary,
-                      height: 1.35,
-                    ),
-                    children: [
-                      const TextSpan(text: 'Recommended for you: '),
-                      TextSpan(
-                        text: '$calories kcal',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    size: r.scale(18),
+                    color: DailyCalorieGoalView._carbsColor,
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Based on your profile and activity level.',
-                  style: TextStyle(
-                    fontSize: r.scale(12),
-                    color: AppColors.textSecondary,
-                    height: 1.35,
-                  ),
-                ),
-                if (showReset) ...[
-                  const SizedBox(height: 6),
-                  GestureDetector(
-                    onTap: onReset,
-                    child: const Text(
-                      'Reset to recommended',
+                  SizedBox(width: r.scale(10)),
+                  Expanded(
+                    child: Text(
+                      'This plan is optimized for your $goalLabel goal.',
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
+                        fontSize: r.scale(12),
+                        color: AppColors.textSecondary,
+                        height: 1.4,
                       ),
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
+            Container(
+              width: 1,
+              margin: EdgeInsets.symmetric(horizontal: r.scale(12)),
+              color: AppColors.border,
+            ),
+            Expanded(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Activity level',
+                    style: TextStyle(
+                      fontSize: r.scale(11),
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  SizedBox(height: r.scale(4)),
+                  Text(
+                    activityLabel,
+                    style: TextStyle(
+                      fontSize: r.scale(14),
+                      fontWeight: FontWeight.w700,
+                      color: DailyCalorieGoalView._carbsColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _ProfileSummaryRow extends StatelessWidget {
-  const _ProfileSummaryRow({
-    required this.user,
-    required this.onGoalWeightTap,
-    required this.onActivityLevelTap,
-    required this.onMaintenanceTap,
-  });
+class _PlanErrorBanner extends StatelessWidget {
+  const _PlanErrorBanner({required this.message, required this.onRetry});
 
-  final UserModel user;
-  final VoidCallback? onGoalWeightTap;
-  final VoidCallback onActivityLevelTap;
-  final VoidCallback onMaintenanceTap;
+  final String message;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
 
     return Container(
+      padding: EdgeInsets.all(r.scale(12)),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
       ),
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            Expanded(
-              child: _ProfileSummaryCell(
-                icon: Icons.monitor_weight_outlined,
-                label: 'Goal Weight',
-                value:
-                    '${user.weightKg} kg → ${user.goalWeightKg.toStringAsFixed(1)} kg',
-                onTap: onGoalWeightTap,
-              ),
-            ),
-            VerticalDivider(
-              width: 1,
-              thickness: 1,
-              color: AppColors.border,
-              indent: r.scale(14),
-              endIndent: r.scale(14),
-            ),
-            Expanded(
-              child: _ProfileSummaryCell(
-                icon: Icons.directions_run_rounded,
-                label: 'Activity Level',
-                value: user.activityLevel.title,
-                onTap: onActivityLevelTap,
-              ),
-            ),
-            VerticalDivider(
-              width: 1,
-              thickness: 1,
-              color: AppColors.border,
-              indent: r.scale(14),
-              endIndent: r.scale(14),
-            ),
-            Expanded(
-              child: _ProfileSummaryCell(
-                icon: Icons.local_fire_department_rounded,
-                label: 'Maintenance\nCalories',
-                value: '${user.maintenanceCalories} kcal',
-                onTap: onMaintenanceTap,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileSummaryCell extends StatelessWidget {
-  const _ProfileSummaryCell({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Opacity(
-          opacity: onTap == null ? 0.85 : 1,
-          child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: r.scale(6),
-            vertical: r.scale(14),
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 18, color: AppColors.primary),
-              ),
-              SizedBox(height: r.scale(8)),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: r.scale(10),
-                  color: AppColors.textSecondary,
-                  height: 1.2,
-                ),
-              ),
-              SizedBox(height: r.scale(4)),
-              Text(
-                value,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: r.scale(11),
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                  height: 1.25,
-                ),
-              ),
-            ],
-          ),
-        ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MacroRangeCard extends StatelessWidget {
-  const _MacroRangeCard({
-    required this.label,
-    required this.emoji,
-    required this.grams,
-    required this.rangeLabel,
-    required this.percent,
-    required this.rangeMin,
-    required this.rangeMax,
-    required this.color,
-  });
-
-  final String label;
-  final String emoji;
-  final int grams;
-  final String rangeLabel;
-  final int percent;
-  final int rangeMin;
-  final int rangeMax;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    final rangeSpan = (rangeMax - rangeMin).clamp(1, 100);
-    final fill = ((percent - rangeMin) / rangeSpan).clamp(0.0, 1.0);
-
-    return Expanded(
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: r.scale(8),
-          vertical: r.scale(14),
-        ),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Text(emoji, style: TextStyle(fontSize: r.scale(22))),
-            SizedBox(height: r.scale(6)),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              message,
               style: TextStyle(
-                fontSize: r.scale(11),
-                fontWeight: FontWeight.w600,
+                fontSize: r.scale(12),
                 color: AppColors.textPrimary,
-                height: 1.2,
-              ),
-            ),
-            SizedBox(height: r.scale(4)),
-            Text(
-              rangeLabel,
-              style: TextStyle(
-                fontSize: r.scale(11),
                 fontWeight: FontWeight.w600,
-                color: color,
               ),
             ),
-            SizedBox(height: r.scale(4)),
-            Text(
-              '${grams}g',
-              style: TextStyle(
-                fontSize: r.scale(13),
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            SizedBox(height: r.scale(8)),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: fill,
-                minHeight: 5,
-                backgroundColor: color.withValues(alpha: 0.15),
-                color: color,
-              ),
-            ),
-          ],
-        ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
       ),
     );
   }

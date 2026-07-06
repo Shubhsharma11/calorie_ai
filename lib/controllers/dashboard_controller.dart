@@ -4,10 +4,10 @@ import '../models/daily_nutrition.dart';
 import '../models/nutrition_trend_metric.dart';
 import 'food_controller.dart';
 import 'streak_controller.dart';
+import 'tracker_controller.dart';
 import 'user_controller.dart';
 
 class DashboardController extends GetxController {
-  final RxInt exerciseCalories = 0.obs;
   final Rx<NutritionTrendMetric> weeklyMetric =
       NutritionTrendMetric.calories.obs;
 
@@ -15,12 +15,20 @@ class DashboardController extends GetxController {
 
   FoodController get _food => Get.find<FoodController>();
 
+  int get exerciseCalories => Get.isRegistered<TrackerController>()
+      ? Get.find<TrackerController>().todayCaloriesBurned
+      : 0;
+
   List<DailyNutrition> get weeklyNutrition => _food.last7Days;
 
   int get foodCalories => _food.totalCaloriesEaten;
 
   int get caloriesLeft =>
-      (calorieGoal - foodCalories + exerciseCalories.value).clamp(0, 99999);
+      (calorieGoal - foodCalories).clamp(0, 99999);
+
+  /// Food budget remaining after subtracting burned calories (eat-back model).
+  int get netCaloriesRemaining =>
+      (calorieGoal - foodCalories + exerciseCalories).clamp(0, 99999);
 
   double get progress =>
       calorieGoal > 0 ? foodCalories / calorieGoal : 0;
@@ -64,7 +72,7 @@ class DashboardController extends GetxController {
       ? Get.find<StreakController>().isAtRisk
       : false;
 
-  int get totalConsumed => foodCalories + exerciseCalories.value;
+  int get totalConsumed => foodCalories;
 
   void setWeeklyMetric(NutritionTrendMetric metric) =>
       weeklyMetric.value = metric;

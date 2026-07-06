@@ -12,6 +12,17 @@ extension GoalTypeLabel on GoalType {
     }
   }
 
+  String get apiValue {
+    switch (this) {
+      case GoalType.loseWeight:
+        return 'loseWeight';
+      case GoalType.gainWeight:
+        return 'gainWeight';
+      case GoalType.maintainWeight:
+        return 'maintainWeight';
+    }
+  }
+
   String get summaryLabel {
     switch (this) {
       case GoalType.loseWeight:

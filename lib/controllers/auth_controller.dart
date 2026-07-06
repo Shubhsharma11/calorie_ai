@@ -1,10 +1,18 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../routes/app_routes.dart';
+import '../services/auth_api_service.dart';
 import 'user_controller.dart';
 
 class AuthController extends GetxController {
+  AuthController({AuthApiService? authApi})
+    : _authApi = authApi ?? AuthApiService();
+
+  final AuthApiService _authApi;
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final nameController = TextEditingController();
@@ -26,12 +34,118 @@ class AuthController extends GetxController {
     Get.offAllNamed(AppRoutes.personalDetails);
   }
 
-  void loginWithGoogle() => login();
+  Future<void> loginWithGoogle() async {
+    try {
+      debugPrint('AuthController: starting Google sign-in');
+      final googleUser = await GoogleSignIn.instance.authenticate();
+      debugPrint('AuthController: Google sign-in returned ${googleUser.email}');
+      final googleAuth = googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      debugPrint('AuthController: Google ID token: $idToken');
+      if (idToken == null || idToken.isEmpty) {
+        throw const AuthApiException('Google ID token was not returned.');
+      }
+
+      debugPrint('AuthController: sending Google ID token to backend');
+      final backendResponse = await _authApi.loginWithGoogleIdToken(idToken);
+      debugPrint('AuthController: backend Google login completed');
+
+      final accessToken = _readBackendString(backendResponse, 'accessToken');
+      final refreshToken = _readBackendString(backendResponse, 'refreshToken');
+      if (accessToken.isEmpty) {
+        throw const AuthApiException(
+          'Backend login did not return an access token.',
+        );
+      }
+      final accessTokenClaims = _decodeJwtClaims(accessToken);
+
+      final user = Get.find<UserController>();
+      await user.saveGoogleLoginDetails(
+        userId: _claimString(accessTokenClaims, 'sub'),
+        provider: _claimString(accessTokenClaims, 'provider') ?? 'google',
+        email: _claimString(accessTokenClaims, 'email') ?? googleUser.email,
+        name: googleUser.displayName ?? user.user.name,
+        accessToken: accessToken,
+        refreshToken: refreshToken.isEmpty ? null : refreshToken,
+        backendResponse: backendResponse,
+      );
+      debugPrint(
+        'AuthController: access token saved length=${accessToken.length}',
+      );
+
+      if (UserController.readEmailVerified(backendResponse)) {
+        await user.markOnboardingComplete();
+        Get.offAllNamed(AppRoutes.main);
+      } else {
+        Get.offAllNamed(AppRoutes.personalDetails);
+      }
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) return;
+      _showAuthError(e.description ?? 'Google sign-in failed.');
+    } on AuthApiException catch (e) {
+      _showAuthError(e.message);
+    } catch (e) {
+      _showAuthError('Unable to sign in with Google: $e');
+    }
+  }
+
+  void _showAuthError(String message) {
+    Get.snackbar(
+      'Login failed',
+      message,
+      snackPosition: SnackPosition.BOTTOM,
+      margin: const EdgeInsets.all(16),
+    );
+  }
+
+  String _readBackendString(Map<String, dynamic> response, String key) {
+    final value = response[key];
+    if (value is String) return value;
+
+    final tokens = response['tokens'];
+    if (tokens is Map<String, dynamic>) {
+      final tokenValue = tokens[key];
+      if (tokenValue is String) return tokenValue;
+    }
+
+    final data = response['data'];
+    if (data is Map<String, dynamic>) {
+      final nestedValue = data[key];
+      if (nestedValue is String) return nestedValue;
+
+      final nestedTokens = data['tokens'];
+      if (nestedTokens is Map<String, dynamic>) {
+        final tokenValue = nestedTokens[key];
+        if (tokenValue is String) return tokenValue;
+      }
+    }
+
+    return '';
+  }
+
+  Map<String, dynamic> _decodeJwtClaims(String token) {
+    final parts = token.split('.');
+    if (parts.length < 2) return {};
+
+    try {
+      final payload = utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+      final decoded = jsonDecode(payload);
+      return decoded is Map<String, dynamic> ? decoded : {};
+    } on FormatException {
+      return {};
+    }
+  }
+
+  String? _claimString(Map<String, dynamic> claims, String key) {
+    final value = claims[key];
+    if (value is String && value.isNotEmpty) return value;
+    return null;
+  }
 
   @override
   void onClose() {
     emailController.dispose();
-    passwordController.dispose(); 
+    passwordController.dispose();
     nameController.dispose();
     super.onClose();
   }

@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../widgets/daily_log/repeat_yesterday_bottom_sheet.dart';
+import '../widgets/daily_log/repeat_yesterday_card.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
+import '../controllers/user_controller.dart';
+import '../core/app_snackbar.dart';
 import '../core/dashboard_actions.dart';
 import '../core/responsive.dart';
-import '../models/meal_entry.dart';
 import '../models/meal_type.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
-import '../widgets/food_emoji_avatar.dart';
+import '../widgets/daily_log/daily_log_meal_section.dart';
+import '../widgets/daily_log/daily_log_quick_banner.dart';
 import '../widgets/responsive_page.dart';
 
 class DailyLogView extends GetView<FoodController> {
@@ -26,159 +30,364 @@ class DailyLogView extends GetView<FoodController> {
       final eaten = controller.selectedDateCalories;
       final goal = dash.calorieGoal;
       final progress = goal > 0 ? (eaten / goal).clamp(0.0, 1.0) : 0.0;
+      final overGoal = goal > 0 && eaten > goal;
+      final nutrition = controller.nutritionForDate(logDate);
+      final user = Get.find<UserController>().user;
       final dateLabel = formatLogDateLabel(logDate);
+      final suggestion = controller.breakfastSuggestion;
+final showRepeat = controller.canRepeatYesterday &&
+    controller.showRepeatYesterdayCard.value;
+      final mealGap = r.scale(16);
 
       return ResponsivePage(
-        scrollable: false,
-        child: Column(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Daily Log',
-                        style: TextStyle(
-                          fontSize: r.scale(24, tablet: 26, desktop: 28),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: () => DashboardActions.openCalendar(context),
-                      icon: Icon(Icons.calendar_today_rounded, size: 18),
-                      label: Text(dateLabel),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: r.scale(12)),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: r.scale(10, tablet: 12),
-                    backgroundColor: AppColors.surface,
-                    color: AppColors.primary,
-                  ),
-                ),
-                SizedBox(height: r.scale(8)),
-                Text(
-                  '$eaten / $goal kcal · $dateLabel',
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-              ],
+        child: RefreshIndicator(
+          onRefresh: controller.refreshMealsFromApi,
+          color: AppColors.primary,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.paddingOf(context).bottom + 24,
             ),
-            SizedBox(height: r.scale(8)),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.only(
-                  top: r.scale(8),
-                  bottom: MediaQuery.paddingOf(context).bottom + 8,
-                ),
+            children: [
+              Row(
                 children: [
-                  for (final meal in MealType.all) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                meal,
-                                style: TextStyle(
-                                  fontSize: r.scale(17, tablet: 18),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                '${controller.caloriesForMealOnSelectedDate(meal)} kcal',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () {
-                            controller.setSelectedMeal(meal);
-                            Get.toNamed(AppRoutes.addFood);
-                          },
-                          icon: Icon(
-                            Icons.add,
-                            size: 18,
+                  Expanded(
+                    child: Text(
+                      'Daily Log',
+                      style: TextStyle(
+                        fontSize: r.scale(26, tablet: 28),
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => DashboardActions.openCalendar(context),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: r.scale(12),
+                        vertical: r.scale(6),
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.calendar_today_rounded,
+                            size: 16,
                             color: AppColors.primary,
                           ),
-                          label: Text(
-                            'Add',
-                            style: TextStyle(color: AppColors.primary),
+                          SizedBox(width: r.scale(6)),
+                          Text(
+                            dateLabel,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                              fontSize: r.scale(13),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: r.scale(8)),
-                    ...controller.mealsForSelectedDate(meal)
-                        .map((e) => _LogEntryTile(entry: e)),
-                    if (controller.mealsForSelectedDate(meal).isEmpty)
-                      Padding(
-                        padding: EdgeInsets.only(bottom: r.scale(12)),
-                        child: Text(
-                          'No items yet',
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
+                        ],
                       ),
-                    SizedBox(height: r.scale(16)),
-                  ],
+                    ),
+                  ),
                 ],
               ),
-            ),
-          ],
+              SizedBox(height: r.scale(20)),
+              _CalorieSummaryCard(
+                eaten: eaten,
+                goal: goal,
+                progress: progress,
+                overGoal: overGoal,
+                proteinG: nutrition.protein.round(),
+                carbsG: nutrition.carbs.round(),
+                fatG: nutrition.fat.round(),
+                proteinGoalG: user.proteinGoalG,
+                carbsGoalG: user.carbsGoalG,
+                fatGoalG: user.fatGoalG,
+              ),
+              if (showRepeat || suggestion != null) ...[
+                SizedBox(height: r.scale(14)),
+                // _QuickActions(
+                //   showRepeat: showRepeat,
+                //   yesterdayCount: controller.yesterdayMealCount,
+                //   onRepeat: () {
+                //     final count = controller.copyYesterdayToDate();
+                //     if (count == 0) {
+                //       AppSnackbar.info('No meals logged yesterday.');
+                //       return;
+                //     }
+                //     AppSnackbar.success(
+                //       '$count meals copied.',
+                //       title: 'Done',
+                //     );
+                //   },
+                // ),
+                controller.hasRepeatedYesterdayMeals
+                    ? SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await controller.cancelRepeatedYesterdayMeals();
+
+                            AppSnackbar.success(
+                              'Repeated meals removed.',
+                              title: 'Done',
+                            );
+                          },
+                          icon: const Icon(Icons.close),
+                          label: const Text('Cancel'),
+                        ),
+                      )
+                    : RepeatYesterdayCard(
+  mealCount: controller.yesterdayMealCount,
+  calories: 51294, // Temporary value
+  onRepeat: () {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const RepeatYesterdayBottomSheet(),
+    );
+  },
+ onDismiss: () async {
+  await controller.dismissRepeatYesterdayCard();
+},
+),
+              ],
+              if (suggestion != null)
+                DailyLogQuickBanner(suggestion: suggestion),
+              SizedBox(height: mealGap),
+              for (var i = 0; i < MealType.all.length; i++) ...[
+                DailyLogMealBlock(
+                  meal: MealType.all[i],
+                  onEditEntry: (entry) =>
+                      Get.toNamed(AppRoutes.editMeal, arguments: entry),
+                ),
+                if (i < MealType.all.length - 1) SizedBox(height: mealGap),
+              ],
+            ],
+          ),
         ),
       );
     });
   }
 }
 
-class _LogEntryTile extends GetView<FoodController> {
-  const _LogEntryTile({required this.entry});
+class _CalorieSummaryCard extends StatelessWidget {
+  const _CalorieSummaryCard({
+    required this.eaten,
+    required this.goal,
+    required this.progress,
+    required this.overGoal,
+    required this.proteinG,
+    required this.carbsG,
+    required this.fatG,
+    required this.proteinGoalG,
+    required this.carbsGoalG,
+    required this.fatGoalG,
+  });
 
-  final MealEntry entry;
+  final int eaten;
+  final int goal;
+  final double progress;
+  final bool overGoal;
+  final int proteinG;
+  final int carbsG;
+  final int fatG;
+  final int proteinGoalG;
+  final int carbsGoalG;
+  final int fatGoalG;
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: ValueKey(entry.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        margin: const EdgeInsets.only(bottom: 4),
-        decoration: BoxDecoration(
-          color: AppColors.error.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(Icons.delete_outline, color: AppColors.error),
+    final r = context.responsive;
+    final remaining = (goal - eaten).clamp(0, goal);
+    final overBy = eaten - goal;
+    final statusColor = overGoal ? AppColors.warning : AppColors.primary;
+    final statusLabel = overGoal
+        ? '+$overBy over'
+        : goal > 0
+        ? '$remaining left'
+        : null;
+
+    return Container(
+      padding: EdgeInsets.all(r.scale(18)),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
       ),
-      onDismissed: (_) => controller.removeEntry(entry),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(vertical: 2),
-        onTap: () => Get.toNamed(AppRoutes.editMeal, arguments: entry),
-        leading: FoodEmojiAvatar(emoji: entry.food.emoji, size: 44),
-        title: Text(entry.food.name),
-        subtitle: Text('${entry.grams}g · ${entry.meal}'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('${entry.calories} kcal'),
-            const SizedBox(width: 4),
-            Icon(Icons.chevron_right, size: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$eaten',
+                style: TextStyle(
+                  fontSize: r.scale(36, tablet: 40),
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                  letterSpacing: -1,
+                  color: statusColor,
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.only(left: r.scale(4), bottom: r.scale(6)),
+                child: Text(
+                  '/ $goal kcal',
+                  style: TextStyle(
+                    fontSize: r.scale(15),
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              if (statusLabel != null)
+                Text(
+                  statusLabel,
+                  style: TextStyle(
+                    fontSize: r.scale(13),
+                    fontWeight: FontWeight.w600,
+                    color: overGoal
+                        ? AppColors.warning
+                        : AppColors.textSecondary,
+                  ),
+                ),
+            ],
+          ),
+          SizedBox(height: r.scale(14)),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: overGoal ? 1.0 : progress,
+              minHeight: 6,
+              backgroundColor: AppColors.border,
+              color: statusColor,
+            ),
+          ),
+          if (proteinGoalG > 0 || carbsGoalG > 0 || fatGoalG > 0) ...[
+            SizedBox(height: r.scale(14)),
+            Row(
+              children: [
+                _MacroStat(
+                  label: 'Protein',
+                  current: proteinG,
+                  goal: proteinGoalG,
+                  color: const Color(0xFF5AC8FA),
+                ),
+                _MacroStat(
+                  label: 'Carbs',
+                  current: carbsG,
+                  goal: carbsGoalG,
+                  color: AppColors.warning,
+                ),
+                _MacroStat(
+                  label: 'Fat',
+                  current: fatG,
+                  goal: fatGoalG,
+                  color: const Color(0xFFFF2D55),
+                ),
+              ],
+            ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MacroStat extends StatelessWidget {
+  const _MacroStat({
+    required this.label,
+    required this.current,
+    required this.goal,
+    required this.color,
+  });
+
+  final String label;
+  final int current;
+  final int goal;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: r.scale(11),
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: r.scale(2)),
+          RichText(
+            text: TextSpan(
+              style: TextStyle(
+                fontSize: r.scale(13),
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+              children: [
+                TextSpan(
+                  text: '${current}g',
+                  style: TextStyle(color: color),
+                ),
+                TextSpan(
+                  text: ' / ${goal}g',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({
+    required this.showRepeat,
+    required this.yesterdayCount,
+    required this.onRepeat,
+  });
+
+  final bool showRepeat;
+  final int yesterdayCount;
+  final VoidCallback onRepeat;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    if (!showRepeat) return const SizedBox.shrink();
+
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onRepeat,
+        icon: Icon(Icons.replay_rounded, size: 18),
+        label: Text('Repeat yesterday · $yesterdayCount meals'),
+        style: OutlinedButton.styleFrom(
+          padding: EdgeInsets.symmetric(vertical: r.scale(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
     );

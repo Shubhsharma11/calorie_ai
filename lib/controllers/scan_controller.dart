@@ -1,27 +1,19 @@
-import 'dart:typed_data';
-
 import 'package:get/get.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../models/food_item.dart';
 import '../routes/app_routes.dart';
 import '../services/food_api_service.dart';
 
-enum ScanMode { camera, barcode }
-
 class ScanController extends GetxController {
   ScanController({FoodApiService? api}) : _api = api ?? FoodApiService();
 
   final FoodApiService _api;
-  final ImagePicker _picker = ImagePicker();
 
-  final Rx<ScanMode> mode = ScanMode.camera.obs;
   final RxBool isScanning = false.obs;
   final RxString barcodeInput = ''.obs;
   final RxString scanError = ''.obs;
   final Rxn<FoodItem> scanResult = Rxn<FoodItem>();
-  final Rxn<Uint8List> capturedImageBytes = Rxn<Uint8List>();
   final RxBool barcodeScanPaused = false.obs;
 
   MobileScannerController? barcodeScannerController;
@@ -29,15 +21,7 @@ class ScanController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    ever(mode, _onModeChanged);
-  }
-
-  void _onModeChanged(ScanMode value) {
-    if (value == ScanMode.barcode) {
-      _ensureBarcodeScanner();
-    } else {
-      _disposeBarcodeScanner();
-    }
+    _ensureBarcodeScanner();
   }
 
   void _ensureBarcodeScanner() {
@@ -51,62 +35,6 @@ class ScanController extends GetxController {
   void _disposeBarcodeScanner() {
     barcodeScannerController?.dispose();
     barcodeScannerController = null;
-  }
-
-  void setMode(ScanMode value) => mode.value = value;
-
-  Future<void> captureFromCamera() async {
-    scanError.value = '';
-    try {
-      final file = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-        maxWidth: 1920,
-      );
-      if (file == null) return;
-      await _handlePickedImage(file);
-    } catch (e) {
-      scanError.value = 'Could not open camera. Check permissions.';
-    }
-  }
-
-  Future<void> pickFromGallery() async {
-    scanError.value = '';
-    try {
-      final file = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-        maxWidth: 1920,
-      );
-      if (file == null) return;
-      await _handlePickedImage(file);
-    } catch (e) {
-      scanError.value = 'Could not open gallery. Check permissions.';
-    }
-  }
-
-  Future<void> _handlePickedImage(XFile file) async {
-    capturedImageBytes.value = await file.readAsBytes();
-    await _analyzePhoto();
-  }
-
-  /// Placeholder AI analysis — swap with a vision/ML API when ready.
-  Future<void> _analyzePhoto() async {
-    isScanning.value = true;
-    scanResult.value = null;
-    scanError.value = '';
-
-    await Future.delayed(const Duration(seconds: 2));
-
-    scanResult.value = const FoodItem(
-      name: 'Grilled Chicken Salad',
-      caloriesPer100g: 120,
-      protein: 12,
-      carbs: 6,
-      fat: 5,
-      emoji: '🥗',
-    );
-    isScanning.value = false;
   }
 
   void onBarcodeDetected(BarcodeCapture capture) {
@@ -159,12 +87,9 @@ class ScanController extends GetxController {
   void clearResult() {
     scanResult.value = null;
     scanError.value = '';
-    capturedImageBytes.value = null;
     barcodeScanPaused.value = false;
     barcodeScannerController?.start();
   }
-
-  bool get hasCapturedImage => capturedImageBytes.value != null;
 
   @override
   void onClose() {

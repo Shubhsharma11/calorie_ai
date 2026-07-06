@@ -3,9 +3,12 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../controllers/user_controller.dart';
+import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/goal_type.dart';
+import '../models/onboarding_request_model.dart';
+import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/responsive_page.dart';
@@ -23,6 +26,7 @@ class _GoalWeightViewState extends State<GoalWeightView> {
   late double _goalWeight;
   late bool _isManual;
   late DateTime _targetDate;
+  late ProfileSyncSnapshot _baseline;
 
   static const double _weightMinKg = 40;
   static const double _weightMaxKg = 200;
@@ -34,6 +38,7 @@ class _GoalWeightViewState extends State<GoalWeightView> {
     _isManual = u.isGoalWeightManual;
     _goalWeight = u.goalWeightKg.clamp(_weightMinKg, _weightMaxKg);
     _targetDate = u.targetDate;
+    _baseline = _user.captureProfileSyncSnapshot();
 
     if (u.goal == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -127,7 +132,7 @@ class _GoalWeightViewState extends State<GoalWeightView> {
     );
   }
 
-  void _save() {
+  Future<void> _save() async {
     final u = _user.user;
     final currentKg = u.weightKg.toDouble();
 
@@ -140,9 +145,7 @@ class _GoalWeightViewState extends State<GoalWeightView> {
         GoalType.gainWeight =>
           'For weight gain, set a target above your current weight.',
       };
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      AppSnackbar.error(message, title: 'Invalid target');
       return;
     }
 
@@ -159,7 +162,27 @@ class _GoalWeightViewState extends State<GoalWeightView> {
     _user.syncWeightFromProfile();
 
     if (RouteArgs.isEditingFromProfile || RouteArgs.shouldReturnToDailyGoal) {
+      var didSaveProfile = false;
+      if (RouteArgs.isEditingFromProfile && u.goal != null) {
+        final patch = OnboardingPatchModel.goalProfileDiff(u, _baseline);
+        if (patch.isEmpty) {
+          AppSnackbar.info('No changes to save.', title: 'Nothing changed');
+          return;
+        }
+
+        final error = await _user.patchOnboarding(patch);
+        if (!mounted) return;
+        if (error != null) {
+          AppSnackbar.error(error, title: 'Save failed');
+          return;
+        }
+        _baseline = _user.captureProfileSyncSnapshot();
+        didSaveProfile = true;
+      }
       Get.back();
+      if (didSaveProfile) {
+        AppSnackbar.success('Goal weight updated.');
+      }
     } else {
       Get.toNamed(AppRoutes.activityLevel);
     }

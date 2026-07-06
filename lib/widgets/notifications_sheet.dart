@@ -63,18 +63,34 @@ class _NotificationsSheetBody extends StatelessWidget {
                     icon: Icons.restaurant_rounded,
                     title: 'Meal Reminders',
                     subtitle: pushOn && settings.mealReminders.value
-                        ? 'Breakfast, lunch & dinner alerts on'
+                        ? settings.mealReminderSummary
                         : 'Off',
                     active: pushOn && settings.mealReminders.value,
+                    enabled: pushOn,
+                    onTap: () => settings.toggleMealReminders(
+                      !settings.mealReminders.value,
+                    ),
+                    trailing: Switch(
+                      value: pushOn && settings.mealReminders.value,
+                      onChanged: pushOn ? settings.toggleMealReminders : null,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   _NotificationRow(
                     icon: Icons.water_drop_rounded,
                     title: 'Water Reminders',
                     subtitle: pushOn && settings.waterReminders.value
-                        ? 'Hydration alerts every 2 hours'
+                        ? settings.waterIntervalSummary
                         : 'Off',
                     active: pushOn && settings.waterReminders.value,
+                    enabled: pushOn,
+                    onTap: () => settings.toggleWaterReminders(
+                      !settings.waterReminders.value,
+                    ),
+                    trailing: Switch(
+                      value: pushOn && settings.waterReminders.value,
+                      onChanged: pushOn ? settings.toggleWaterReminders : null,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   _NotificationRow(
@@ -84,6 +100,14 @@ class _NotificationsSheetBody extends StatelessWidget {
                         ? 'Sunday nutrition summary'
                         : 'Off',
                     active: pushOn && settings.weeklyReport.value,
+                    enabled: pushOn,
+                    onTap: () => settings.toggleWeeklyReport(
+                      !settings.weeklyReport.value,
+                    ),
+                    trailing: Switch(
+                      value: pushOn && settings.weeklyReport.value,
+                      onChanged: pushOn ? settings.toggleWeeklyReport : null,
+                    ),
                   ),
                   if (tracker != null) ...[
                     const SizedBox(height: 10),
@@ -97,6 +121,14 @@ class _NotificationsSheetBody extends StatelessWidget {
                             : '${tracker.waterGlasses} / ${TrackerController.waterGoal} glasses logged',
                         active: !waterDone,
                         accentColor: const Color(0xFF007AFF),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Get.toNamed(AppRoutes.waterTracker);
+                        },
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppColors.textSecondary,
+                        ),
                       );
                     }),
                   ],
@@ -138,6 +170,9 @@ class _NotificationRow extends StatelessWidget {
     required this.subtitle,
     required this.active,
     this.accentColor,
+    this.enabled = true,
+    this.onTap,
+    this.trailing,
   });
 
   final IconData icon;
@@ -145,57 +180,75 @@ class _NotificationRow extends StatelessWidget {
   final String subtitle;
   final bool active;
   final Color? accentColor;
+  final bool enabled;
+  final VoidCallback? onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     final color = accentColor ?? AppColors.primary;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(fontWeight: FontWeight.w600),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: enabled ? 0.12 : 0.05),
+                  shape: BoxShape.circle,
                 ),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
+                child: Icon(
+                  icon,
+                  color: enabled ? color : AppColors.textSecondary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: enabled
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (trailing != null)
+                trailing!
+              else if (active)
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.error,
+                    shape: BoxShape.circle,
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
-          if (active)
-            Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: AppColors.error,
-                shape: BoxShape.circle,
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

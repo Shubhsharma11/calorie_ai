@@ -10,9 +10,7 @@ import '../theme/app_colors.dart';
 class LoginView extends GetView<AuthController> {
   const LoginView({super.key});
 
-  static const _logoAsset = 'assets/image/login 1.png';
-  static const _heroAsset = 'assets/image/login2.png';
-  static const _facebookAsset = 'assets/image/facebook.svg';
+  static const _logoAsset = 'assets/image/login.png';
   static const _googleAsset = 'assets/image/google.svg';
   static const _appleAsset = 'assets/image/apple.svg';
 
@@ -72,43 +70,61 @@ class LoginView extends GetView<AuthController> {
     final horizontal = r.scale(24, tablet: 32);
     final compact = r.height < 720;
     final logoSize = r.scale(compact ? 52 : 58, tablet: 64);
-    final heroSize = r.scale(compact ? 150 : 170, tablet: 190);
     final buttonHeight = r.scale(compact ? 48 : 52, tablet: 54);
     final buttonGap = r.scale(compact ? 8 : 10);
     final sectionGap = r.scale(compact ? 18 : 22);
+    final topPadding = r.scale(compact ? 36 : 44);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
+        bottom: true,
+        top: false,
         child: Stack(
           clipBehavior: Clip.none,
           children: [
             Positioned(
-              top: r.scale(-8),
-              right: r.scale(-36, tablet: -24),
+              top: r.scale(-20),
+              right: r.scale(-42, tablet: -28),
               child: IgnorePointer(
-                child: Image.asset(
-                  _heroAsset,
-                  width: heroSize,
-                  height: heroSize,
-                  fit: BoxFit.contain,
+                child: SizedBox(
+                  width: r.scale(190, tablet: 180),
+                  height: r.scale(190, tablet: 180),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: CircleAvatar(
+                          backgroundColor: AppColors.primary.withValues(
+                            alpha:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? 0.13
+                                : 0.07,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: r.scale(46, tablet: 32),
+                        bottom: r.scale(26, tablet: 28),
+                        child: _CalorieWheel(size: r.scale(68, tablet: 79)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
             Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  child: SingleChildScrollView(
+                  child: Padding(
                     padding: EdgeInsets.fromLTRB(
                       horizontal,
-                      r.scale(compact ? 28 : 36),
+                      topPadding,
                       horizontal,
-                      r.scale(16),
+                      r.scale(12),
                     ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Align(
                           alignment: Alignment.topLeft,
@@ -117,60 +133,71 @@ class LoginView extends GetView<AuthController> {
                             compact: compact,
                           ),
                         ),
-                        SizedBox(height: r.scale(compact ? 44 : 52)),
-                        Text(
-                          'Welcome back!',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: r.scale(
-                              compact ? 26 : 28,
-                              tablet: 32,
+                        Expanded(
+                          child: Center(
+                            child: SingleChildScrollView(
+                              padding: EdgeInsets.symmetric(
+                                vertical: r.scale(18),
+                              ),
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: r.scale(420, tablet: 460),
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Text(
+                                      'Welcome back',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: r.scale(
+                                          compact ? 30 : 34,
+                                          tablet: 36,
+                                        ),
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.textPrimary,
+                                        height: 1.12,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                    SizedBox(height: r.scale(10)),
+                                    Text(
+                                      'Login to continue your health journey',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: r.scale(14, tablet: 15),
+                                        color: AppColors.textSecondary,
+                                        height: 1.4,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    SizedBox(height: sectionGap),
+                                    _SocialLoginButton(
+                                      height: buttonHeight,
+                                      label: 'Continue with Google',
+                                      icon: _SocialIcon(
+                                        asset: _googleAsset,
+                                        size: r.scale(compact ? 24 : 26),
+                                      ),
+                                      onPressed: controller.loginWithGoogle,
+                                    ),
+                                    SizedBox(height: buttonGap),
+                                    _SocialLoginButton(
+                                      height: buttonHeight,
+                                      label: 'Continue with Apple',
+                                      icon: _SocialIcon(
+                                        asset: _appleAsset,
+                                        size: r.scale(compact ? 24 : 26),
+                                      ),
+                                      onPressed: _continue,
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                            height: 1.15,
-                            letterSpacing: -0.3,
                           ),
-                        ),
-                        SizedBox(height: r.scale(compact ? 8 : 10 )),
-                        Text(
-                          'Login to continue your health journey',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: r.scale(compact ? 14 : 15),
-                            color: AppColors.textSecondary,
-                            height: 1.35,
-                          ),
-                        ),
-                        SizedBox(height: sectionGap),
-                        _SocialLoginButton(
-                          height: buttonHeight,
-                          label: 'Continue with Facebook',
-                          icon: _SocialIcon(
-                            asset: _facebookAsset,
-                            size: r.scale(compact ? 24 : 26),
-                          ),
-                          onPressed: _continue,
-                        ),
-                        SizedBox(height: buttonGap),
-                        _SocialLoginButton(
-                          height: buttonHeight,
-                          label: 'Continue with Google',
-                          icon: _SocialIcon(
-                            asset: _googleAsset,
-                            size: r.scale(compact ? 24 : 26),
-                          ),
-                          onPressed: _continue,
-                        ),
-                        SizedBox(height: buttonGap),
-                        _SocialLoginButton(
-                          height: buttonHeight,
-                          label: 'Continue with Apple',
-                          icon: _SocialIcon(
-                            asset: _appleAsset,
-                            size: r.scale(compact ? 24 : 26),
-                          ),
-                          onPressed: _continue,
                         ),
                       ],
                     ),
@@ -199,10 +226,7 @@ class LoginView extends GetView<AuthController> {
 }
 
 class _BrandHeader extends StatelessWidget {
-  const _BrandHeader({
-    required this.logoSize,
-    this.compact = false,
-  });
+  const _BrandHeader({required this.logoSize, this.compact = false});
 
   final double logoSize;
   final bool compact;
@@ -218,9 +242,9 @@ class _BrandHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(height: r.scale(compact ? 16 : 20)),
+          SizedBox(height: r.scale(compact ? 24 : 28)),
           _AppLogo(size: logoSize),
-          SizedBox(height: r.scale(compact ? 10 : 12)),
+          SizedBox(height: r.scale(compact ? 14 : 16)),
           RichText(
             text: TextSpan(
               style: TextStyle(
@@ -254,7 +278,7 @@ class _BrandHeader extends StatelessWidget {
   }
 }
 
-/// Crops the black padding around [login 1.png] so only the white icon tile shows.
+/// App logo from [login.png] — green mark on transparent background.
 class _AppLogo extends StatelessWidget {
   const _AppLogo({required this.size});
 
@@ -262,30 +286,15 @@ class _AppLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(size * 0.28),
-        border: Border.all(
-          color: AppColors.border.withValues(alpha: 0.7),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: OverflowBox(
-        maxWidth: size * 1.55,
-        maxHeight: size * 1.55,
+      child: Center(
         child: Image.asset(
           LoginView._logoAsset,
-          fit: BoxFit.cover,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
         ),
       ),
     );
@@ -320,9 +329,7 @@ class _SocialLoginButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: AppColors.border.withValues(alpha: 0.9),
-            ),
+            border: Border.all(color: AppColors.border.withValues(alpha: 0.9)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.05),
@@ -359,10 +366,7 @@ class _SocialLoginButton extends StatelessWidget {
 }
 
 class _SocialIcon extends StatelessWidget {
-  const _SocialIcon({
-    required this.asset,
-    this.size = 26,
-  });
+  const _SocialIcon({required this.asset, this.size = 26});
 
   final String asset;
   final double size;
@@ -372,9 +376,61 @@ class _SocialIcon extends StatelessWidget {
     return SizedBox(
       width: size,
       height: size,
-      child: SvgPicture.asset(
-        asset,
-        fit: BoxFit.contain,
+      child: SvgPicture.asset(asset, fit: BoxFit.contain),
+    );
+  }
+}
+
+class _CalorieWheel extends StatelessWidget {
+  const _CalorieWheel({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ringWidth = size * 0.08;
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: size,
+            height: size,
+            child: CircularProgressIndicator(
+              value: 0.78,
+              strokeWidth: ringWidth,
+              strokeCap: StrokeCap.round,
+              color: AppColors.primary,
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '2546',
+                style: TextStyle(
+                  fontSize: size * 0.2,
+                  height: 1,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              SizedBox(height: size * 0.03),
+              Text(
+                'kcal',
+                style: TextStyle(
+                  fontSize: size * 0.11,
+                  height: 1,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

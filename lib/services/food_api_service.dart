@@ -1,13 +1,20 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
-
 import '../data/indian_foods_data.dart';
 import '../models/food_item.dart';
+import 'api_client.dart';
+import 'api_endpoints.dart';
 
 /// Food search uses a curated Indian foods database.
 /// Barcode lookup still uses Open Food Facts for packaged products.
 class FoodApiService {
+  FoodApiService({ApiClient? apiClient})
+    : _apiClient = apiClient ?? ApiClient();
+
+  final ApiClient _apiClient;
+
+  List<FoodItem> get popularFoods => popularIndianFoods;
+
   Future<List<FoodItem>> searchFoods(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return [];
@@ -34,11 +41,10 @@ class FoodApiService {
   }
 
   Future<FoodItem?> lookupBarcode(String barcode) async {
-    final url = Uri.parse(
-      'https://world.openfoodfacts.org/api/v2/product/$barcode.json',
+    final response = await _apiClient.get(
+      ApiEndpoints.openFoodFactsProduct(barcode),
+      baseUrl: ApiEndpoints.openFoodFactsBaseUrl,
     );
-
-    final response = await http.get(url);
     if (response.statusCode != 200) return null;
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -55,8 +61,7 @@ class FoodApiService {
 
     return FoodItem(
       name: (item['product_name'] as String?)?.trim() ?? 'Unknown',
-      caloriesPer100g:
-          (nutriments['energy-kcal_100g'] as num?)?.round() ?? 0,
+      caloriesPer100g: (nutriments['energy-kcal_100g'] as num?)?.round() ?? 0,
       protein: (nutriments['proteins_100g'] as num?)?.toDouble() ?? 0,
       carbs: (nutriments['carbohydrates_100g'] as num?)?.toDouble() ?? 0,
       fat: (nutriments['fat_100g'] as num?)?.toDouble() ?? 0,

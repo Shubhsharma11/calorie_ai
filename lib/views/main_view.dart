@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/main_controller.dart';
+import '../core/app_page_transitions.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
 import '../widgets/floating_bottom_nav_bar.dart';
@@ -13,6 +14,8 @@ import 'scan_view.dart';
 
 class MainView extends GetView<MainController> {
   const MainView({super.key});
+
+  static const _profileTabIndex = 4;
 
   static const _tabs = [
     (icon: Icons.home, label: 'Home'),
@@ -39,36 +42,81 @@ class MainView extends GetView<MainController> {
 
       if (r.isWide) {
         return Scaffold(
-          body: Row(
-            children: [
-              NavigationRail(
-                selectedIndex: tab,
-                onDestinationSelected: controller.changeTab,
-                labelType: r.isDesktop
-                    ? NavigationRailLabelType.all
-                    : NavigationRailLabelType.selected,
-                backgroundColor: AppColors.background,
-                indicatorColor: AppColors.primary.withValues(alpha: 0.2),
-                selectedIconTheme: const IconThemeData(
-                  color: AppColors.primary,
+          body: SafeArea(
+            child: Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: tab,
+                  onDestinationSelected: controller.changeTab,
+                  labelType: r.isDesktop
+                      ? NavigationRailLabelType.all
+                      : NavigationRailLabelType.selected,
+                  backgroundColor: AppColors.background,
+                  indicatorColor: AppColors.primary.withValues(alpha: 0.2),
+                  selectedIconTheme: const IconThemeData(
+                    color: AppColors.primary,
+                  ),
+                  destinations: [
+                    for (final t in _tabs)
+                      NavigationRailDestination(
+                        icon: Icon(t.icon),
+                        label: Text(t.label),
+                      ),
+                  ],
                 ),
-                destinations: [
-                  for (final t in _tabs)
-                    NavigationRailDestination(
-                      icon: Icon(t.icon),
-                      label: Text(t.label),
+                const VerticalDivider(width: 1, thickness: 1),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: AppPageTransitions.duration,
+                    switchInCurve: AppPageTransitions.curve,
+                    switchOutCurve: AppPageTransitions.reverseCurve,
+                    transitionBuilder: AppPageTransitions.tabTransition,
+                    layoutBuilder: (currentChild, previousChildren) {
+                      return Stack(
+                        alignment: Alignment.topCenter,
+                        children: [
+                          ...previousChildren,
+                          ?currentChild,
+                        ],
+                      );
+                    },
+                    child: KeyedSubtree(
+                      key: ValueKey<int>(tab),
+                      child: pages[tab],
                     ),
-                ],
-              ),
-              const VerticalDivider(width: 1, thickness: 1),
-              Expanded(child: pages[tab]),
-            ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       }
 
       return Scaffold(
-        body: pages[tab],
+        body: AnimatedSwitcher(
+          duration: AppPageTransitions.duration,
+          switchInCurve: AppPageTransitions.curve,
+          switchOutCurve: AppPageTransitions.reverseCurve,
+          transitionBuilder: AppPageTransitions.tabTransition,
+          layoutBuilder: (currentChild, previousChildren) {
+            return Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                ...previousChildren,
+                ?currentChild,
+              ],
+            );
+          },
+          child: KeyedSubtree(
+            key: ValueKey<int>(tab),
+            child: tab == _profileTabIndex
+                ? pages[tab]
+                : SafeArea(
+                    bottom: false,
+                    child: pages[tab],
+                  ),
+          ),
+        ),
         bottomNavigationBar: FloatingBottomNavBar(
           selectedIndex: tab,
           onTap: controller.changeTab,

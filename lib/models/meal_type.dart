@@ -4,5 +4,7 @@ abstract final class MealType {
   static const breakfast = 'Breakfast';
   static const lunch = 'Lunch';
   static const dinner = 'Dinner';
+
   static const snacks = 'Snacks';
+  
 }

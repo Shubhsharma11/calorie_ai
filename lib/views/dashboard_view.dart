@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
+import '../controllers/nutrition_plan_controller.dart';
 import '../controllers/main_controller.dart';
 import '../controllers/settings_controller.dart';
 import '../controllers/streak_controller.dart';
@@ -11,8 +12,8 @@ import '../controllers/user_controller.dart';
 import '../core/dashboard_actions.dart';
 import '../core/macro_emojis.dart';
 import '../core/responsive.dart';
-import '../routes/app_routes.dart';
 import '../models/nutrition_trend_metric.dart';
+import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/goal_progress_banner.dart';
@@ -27,6 +28,13 @@ class DashboardView extends GetView<DashboardController> {
 
   @override
   Widget build(BuildContext context) {
+    if (!Get.isRegistered<DashboardController>()) {
+      Get.put(DashboardController(), permanent: true);
+    }
+    if (!Get.isRegistered<FoodController>()) {
+      Get.put(FoodController(), permanent: true);
+    }
+
     final user = Get.find<UserController>().user;
     final food = Get.find<FoodController>();
     final r = context.responsive;
@@ -40,16 +48,25 @@ class DashboardView extends GetView<DashboardController> {
         settings.waterReminders.value;
       }
       if (Get.isRegistered<TrackerController>()) {
-        Get.find<TrackerController>().waterGlasses;
+        final tracker = Get.find<TrackerController>();
+        tracker.waterGlasses;
+        tracker.activityRevision.value;
       }
       if (Get.isRegistered<StreakController>()) {
         Get.find<StreakController>().revision.value;
       }
+      if (Get.isRegistered<NutritionPlanController>()) {
+        final planController = Get.find<NutritionPlanController>();
+        planController.isLoading.value;
+        planController.plan.value;
+      }
+      Get.find<UserController>().calorieGoalRevision.value;
 
       final left = controller.caloriesLeft;
       final goal = controller.calorieGoal;
       final eaten = controller.foodCalories;
-      final consumed = controller.totalConsumed;
+      final burned = controller.exerciseCalories;
+      final netRemaining = controller.netCaloriesRemaining;
       final progress = controller.progress.clamp(0.0, 1.0);
       final ringSize = r.scale(220, tablet: 240, desktop: 260);
       final streak = controller.loggingStreak;
@@ -60,7 +77,7 @@ class DashboardView extends GetView<DashboardController> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             DashboardHeader(
-              userName: user.name,
+              firstName: user.firstName,
               showNotificationBadge: DashboardActions.hasNotificationBadge,
               onSearch: DashboardActions.openFoodSearch,
               onCalendar: () => DashboardActions.openCalendar(context),
@@ -73,10 +90,26 @@ class DashboardView extends GetView<DashboardController> {
               onTap: () => Get.toNamed(AppRoutes.streak),
             ),
             SizedBox(height: r.scale(20)),
-            _CalorieRing(
-              caloriesLeft: left,
-              progress: progress,
-              size: ringSize,
+            Column(
+              children: [
+                _CalorieRing(
+                  caloriesLeft: left,
+                  progress: progress,
+                  size: ringSize,
+                ),
+                if (burned > 0) ...[
+                  SizedBox(height: r.scale(10)),
+                  Text(
+                    'Net incl. activity: $netRemaining kcal',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: r.scale(13),
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
             ),
             SizedBox(height: r.scale(20)),
             MacroNutritionCard(
@@ -111,22 +144,23 @@ class DashboardView extends GetView<DashboardController> {
             Row(
               children: [
                 _StatCard(
-                  label: 'Consumed',
-                  value: '$consumed kcal',
+                  label: 'Calories Burn',
+                  value: burned,
                   icon: Icons.local_fire_department_rounded,
-                  iconColor: AppColors.primary,
+                  iconColor: const Color(0xFFFF9500),
+                  onTap: () => Get.toNamed(AppRoutes.caloriesBurn),
                 ),
                 SizedBox(width: r.scale(10)),
                 _StatCard(
                   label: 'Goal',
-                  value: '$goal kcal',
+                  value: goal,
                   icon: Icons.flag_rounded,
                   iconColor: AppColors.primary,
                 ),
                 SizedBox(width: r.scale(10)),
                 _StatCard(
                   label: 'Food',
-                  value: '$eaten kcal',
+                  value: eaten,
                   icon: Icons.restaurant_rounded,
                   iconColor: const Color(0xFF8B5CF6),
                 ),
@@ -227,58 +261,87 @@ class _StatCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.iconColor,
+    this.onTap,
   });
 
   final String label;
-  final String value;
+  final int value;
   final IconData icon;
   final Color iconColor;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
 
-    return Expanded(
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          vertical: r.scale(14),
-          horizontal: r.scale(8),
-        ),
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: iconColor, size: r.scale(22)),
-            SizedBox(height: r.scale(8)),
-            Text(
-              value,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: r.scale(15, tablet: 16),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
+    final card = Container(
+      padding: EdgeInsets.symmetric(
+        vertical: r.scale(16),
+        horizontal: r.scale(10),
       ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: iconColor, size: r.scale(24)),
+          SizedBox(height: r.scale(10)),
+          RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              style: TextStyle(
+                fontSize: r.scale(18, tablet: 19),
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+                height: 1.2,
+              ),
+              children: [
+                TextSpan(text: '$value '),
+                TextSpan(
+                  text: 'kcal',
+                  style: TextStyle(
+                    fontSize: r.scale(14, tablet: 15),
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: r.scale(6)),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: r.scale(12),
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Expanded(
+      child: onTap == null
+          ? card
+          : Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(16),
+                child: card,
+              ),
+            ),
     );
   }
 }
@@ -326,12 +389,15 @@ class _SecondarySection extends StatelessWidget {
           )
         else
           Column(
-            children: food.todayMeals.take(3).map(
-              (e) => _MealPreview(
-                meal: e.meal,
-                hint: '${e.food.name} · ${e.calories} kcal',
-              ),
-            ).toList(),
+            children: food.todayMeals
+                .take(3)
+                .map(
+                  (e) => _MealPreview(
+                    meal: e.meal,
+                    hint: '${e.food.name} · ${e.calories} kcal',
+                  ),
+                )
+                .toList(),
           ),
         SizedBox(height: r.scale(12)),
         Wrap(
@@ -349,10 +415,7 @@ class _SecondarySection extends StatelessWidget {
             TextButton.icon(
               onPressed: () => Get.find<MainController>().changeTab(2),
               icon: Icon(Icons.camera_alt, color: AppColors.primary),
-              label: Text(
-                'Scan',
-                style: TextStyle(color: AppColors.primary),
-              ),
+              label: Text('Scan', style: TextStyle(color: AppColors.primary)),
             ),
           ],
         ),
@@ -387,10 +450,7 @@ class _MealPreview extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(meal, style: TextStyle(fontWeight: FontWeight.w600)),
-                Text(
-                  hint,
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
+                Text(hint, style: TextStyle(color: AppColors.textSecondary)),
               ],
             ),
           ),

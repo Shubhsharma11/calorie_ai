@@ -8,7 +8,7 @@ import '../theme/app_colors.dart';
 class RotatingMotivationText extends StatefulWidget {
   const RotatingMotivationText({
     super.key,
-    this.interval = const Duration(seconds: 4),
+    this.interval = const Duration(seconds: 6),
     this.style,
     this.messages = defaultMessages,
   });
@@ -62,24 +62,51 @@ class _RotatingMotivationTextState extends State<RotatingMotivationText> {
           height: 1.3,
         );
 
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 400),
-      switchInCurve: Curves.easeOut,
-      switchOutCurve: Curves.easeIn,
-      transitionBuilder: (child, animation) => FadeTransition(
-        opacity: animation,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 0.15),
-            end: Offset.zero,
-          ).animate(animation),
-          child: child,
+    final lineHeight = (style.fontSize ?? 14) * (style.height ?? 1.3);
+    const maxLines = 2;
+    final fixedHeight = lineHeight * maxLines;
+
+    return SizedBox(
+      height: fixedHeight,
+      width: double.infinity,
+      child: ClipRect(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 480),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          layoutBuilder: (currentChild, previousChildren) {
+            return Stack(
+              alignment: Alignment.topLeft,
+              clipBehavior: Clip.hardEdge,
+              children: [
+                ...previousChildren,
+                ?currentChild,
+              ],
+            );
+          },
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.2),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            );
+          },
+          child: Align(
+            key: ValueKey<int>(_index),
+            alignment: Alignment.topLeft,
+            child: Text(
+              widget.messages[_index],
+              style: style,
+              maxLines: maxLines,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ),
-      ),
-      child: Text(
-        widget.messages[_index],
-        key: ValueKey<int>(_index),
-        style: style,
       ),
     );
   }

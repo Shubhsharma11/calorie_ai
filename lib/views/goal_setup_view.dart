@@ -3,20 +3,37 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
 import '../controllers/user_controller.dart';
+import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/goal_type.dart';
+import '../models/onboarding_request_model.dart';
+import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/responsive_page.dart';
 
-class GoalSetupView extends GetView<UserController> {
+class GoalSetupView extends StatefulWidget {
   const GoalSetupView({super.key});
 
   static const _targetAsset = 'assets/image/target.svg';
   static const _loseWeightAsset = 'assets/image/right-down.svg';
   static const _gainWeightAsset = 'assets/image/upgain.svg';
   static const _maintainWeightAsset = 'assets/image/balance.svg';
+
+  @override
+  State<GoalSetupView> createState() => _GoalSetupViewState();
+}
+
+class _GoalSetupViewState extends State<GoalSetupView> {
+  final UserController controller = Get.find<UserController>();
+  late final ProfileSyncSnapshot _baseline;
+
+  @override
+  void initState() {
+    super.initState();
+    _baseline = controller.captureProfileSyncSnapshot();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,11 +43,6 @@ class GoalSetupView extends GetView<UserController> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-      ),
       body: GetBuilder<UserController>(
         builder: (_) {
           final selected = controller.user.goal;
@@ -40,8 +52,10 @@ class GoalSetupView extends GetView<UserController> {
             content: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const _BackButton(),
+                SizedBox(height: r.scale(compact ? 4 : 8)),
                 _HeroSection(r: r, compact: compact),
-                SizedBox(height: r.scale(24)),
+                SizedBox(height: r.scale(compact ? 16 : 20)),
                 ...GoalType.values.map(
                   (g) => Padding(
                     padding: EdgeInsets.only(bottom: r.scale(12)),
@@ -60,28 +74,76 @@ class GoalSetupView extends GetView<UserController> {
               child: ElevatedButton(
                 onPressed: selected == null
                     ? null
-                    : () {
+                    : () async {
+                        final goal = selected;
                         if (fromProfile) {
+                          final patch =
+                              OnboardingPatchModel.goalDiff(goal, _baseline);
+                          if (patch.isEmpty) {
+                            AppSnackbar.info(
+                              'No changes to save.',
+                              title: 'Nothing changed',
+                            );
+                            return;
+                          }
+
+                          final error =
+                              await controller.patchOnboarding(patch);
+                          if (error != null) {
+                            AppSnackbar.error(error, title: 'Save failed');
+                            return;
+                          }
                           Get.back();
+                          AppSnackbar.success('Goal updated.');
                         } else {
                           controller.useRecommendedGoalWeight();
                           Get.toNamed(AppRoutes.activityLevel);
                         }
                       },
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(fromProfile ? 'Save' : 'Next'),
-                    if (!fromProfile) ...[
-                      const SizedBox(width: 6),
-                      Icon(Icons.arrow_forward_rounded, size: 20),
-                    ],
-                  ],
-                ),
+                child: Text(fromProfile ? 'Save' : 'Next'),
               ),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _BackButton extends StatelessWidget {
+  const _BackButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: AppColors.card,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: Get.back,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.shadowColor,
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.arrow_back_rounded,
+              size: 20,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -98,56 +160,60 @@ class _HeroSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              RichText(
-                text: TextSpan(
-                  style: TextStyle(
-                    fontSize: r.scale(compact ? 26 : 28, tablet: 30),
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                    height: 1.2,
-                    letterSpacing: -0.3,
-                  ),
-                  children: const [
-                    TextSpan(text: 'What\'s your '),
-                    TextSpan(
-                      text: 'goal?',
-                      style: TextStyle(color: AppColors.primary),
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: r.scale(2),
+        vertical: r.scale(compact ? 0 : 2),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontSize: r.scale(compact ? 25 : 28, tablet: 31),
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                      height: 1.16,
+                      letterSpacing: -0.5,
                     ),
-                  ],
+                    children: const [
+                      TextSpan(text: 'What\'s your '),
+                      TextSpan(
+                        text: 'goal?',
+                        style: TextStyle(color: AppColors.primary),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              SizedBox(height: r.scale(compact ? 6 : 8)),
-              Text(
-                'Choose what you want to work toward.',
-                style: TextStyle(
-                  fontSize: r.scale(compact ? 13 : 14, tablet: 15),
-                  color: AppColors.textSecondary,
-                  height: 1.4,
+                SizedBox(height: r.scale(compact ? 6 : 8)),
+                Text(
+                  'Choose what you want to work toward.',
+                  style: TextStyle(
+                    fontSize: r.scale(compact ? 13 : 14, tablet: 15),
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        SizedBox(width: r.scale(4)),
-        Transform.translate(
-          offset: Offset(-r.scale(12, tablet: 14), -r.scale(8, tablet: 10)),
-          child: SizedBox(
-            width: r.scale(88, tablet: 96),
-            height: r.scale(88, tablet: 96),
+          SizedBox(width: r.scale(8)),
+          SizedBox(
+            width: r.scale(compact ? 88 : 96, tablet: 104),
+            height: r.scale(compact ? 88 : 96, tablet: 104),
             child: SvgPicture.asset(
               GoalSetupView._targetAsset,
               fit: BoxFit.contain,
+              alignment: Alignment.center,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

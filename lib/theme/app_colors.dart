@@ -15,6 +15,7 @@ abstract final class AppColors {
   static const onPrimary = Color(0xFFFFFFFF);
   static const error = Color(0xFFFF3B30);
   static const errorDark = Color(0xFFFF453A);
+  static const warning = Color(0xFFFF9500);
   static const selectionText = primary;
 
   // Light palette

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/food_controller.dart';
+import '../core/app_snackbar.dart';
 import '../models/food_item.dart';
 import '../models/meal_type.dart';
 import '../routes/app_routes.dart';
@@ -32,7 +33,36 @@ class FoodDetailsView extends GetView<FoodController> {
     final food = args;
 
     return Scaffold(
-      appBar: AppBar(title: Text(food.name)),
+      appBar: AppBar(
+        title: Text(food.name),
+        actions: [
+          Obx(() {
+            final isFavorite = controller.isFavoriteFood(
+              food,
+              controller.selectedMeal.value,
+            );
+            return IconButton(
+              onPressed: () async {
+                await controller.toggleFavoriteFood(
+                  food: food,
+                  grams: controller.selectedGrams.value,
+                  meal: controller.selectedMeal.value,
+                );
+                AppSnackbar.success(
+                  isFavorite
+                      ? 'Removed from quick meals.'
+                      : 'Added to quick meals.',
+                  title: isFavorite ? 'Removed' : 'Saved',
+                );
+              },
+              icon: Icon(
+                isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
+                color: isFavorite ? const Color(0xFFFFB800) : null,
+              ),
+            );
+          }),
+        ],
+      ),
       body: ResponsivePage(
         scrollable: true,
         child: Column(

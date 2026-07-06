@@ -191,18 +191,6 @@ class _HelpSupportViewState extends State<HelpSupportView> {
             ),
             SizedBox(height: r.scale(10)),
             _ContactCard(
-              icon: Icons.chat_bubble_outline_rounded,
-              title: 'Live Chat',
-              subtitle: 'Mon – Fri, 9 AM – 6 PM IST',
-              detail: 'Chat with our support team in real time',
-              actionLabel: 'Start Chat',
-              onAction: () => _showMessage(
-                context,
-                'Live chat will be available in a future update.',
-              ),
-            ),
-            SizedBox(height: r.scale(10)),
-            _ContactCard(
               icon: Icons.bug_report_outlined,
               title: 'Report a Problem',
               subtitle: 'Found a bug or issue?',

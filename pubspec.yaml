@@ -17,13 +17,49 @@ dependencies:
   mobile_scanner: ^7.0.0
   shared_preferences: ^2.5.5
   flutter_svg: ^2.3.0
+  firebase_core: ^4.11.0
+  firebase_auth: ^6.5.4
+  firebase_messaging: ^16.4.1
+  flutter_local_notifications: ^19.4.0
+  google_sign_in: ^7.2.0
+  pedometer: ^4.2.0
+  permission_handler: ^12.0.3
+  health: ^13.3.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icon/app_icon.png
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/icon/app_icon_foreground.png
+  remove_alpha_ios: true
+  background_color_ios: "#FFFFFF"
+  min_sdk_android: 26
 
 flutter:
   uses-material-design: true
   assets:
     - assets/image/
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/font/Manrope-ExtraLight.ttf
+          weight: 200
+        - asset: assets/font/Manrope-Light.ttf
+          weight: 300
+        - asset: assets/font/Manrope-Regular.ttf
+          weight: 400
+        - asset: assets/font/Manrope-Medium.ttf
+          weight: 500
+        - asset: assets/font/Manrope-SemiBold.ttf
+          weight: 600
+        - asset: assets/font/Manrope-Bold.ttf
+          weight: 700
+        - asset: assets/font/Manrope-ExtraBold.ttf
+          weight: 800

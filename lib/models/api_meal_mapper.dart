@@ -1,0 +1,278 @@
+import 'food_item.dart';
+import 'meal_entry.dart';
+import 'meal_type.dart';
+
+/// Maps backend meal payloads to [MealEntry].
+abstract final class ApiMealMapper {
+  static List<MealEntry> entriesFromResponse(
+    Map<String, dynamic> json, {
+    DateTime? fallbackDate,
+  }) {
+    final rawData = json['data'];
+    if (rawData is List) {
+      return _entriesFromMealMaps(rawData, fallbackDate: fallbackDate);
+    }
+
+    final data = _unwrapData(json);
+    final responseDate = _readDate(data['date']) ?? fallbackDate;
+    final meals = _readMealMaps(data);
+
+    return _entriesFromMealMaps(meals, fallbackDate: responseDate);
+  }
+
+  static List<MealEntry> _entriesFromMealMaps(
+    Iterable<dynamic> meals, {
+    DateTime? fallbackDate,
+  }) {
+    return meals
+        .whereType<Map>()
+        .map(
+          (meal) => entryFromApiJson(
+            Map<String, dynamic>.from(meal),
+            fallbackDate: fallbackDate,
+          ),
+        )
+        .whereType<MealEntry>()
+        .toList();
+  }
+
+  static Map<String, dynamic> toCreateRequestBody(MealEntry entry) {
+    return {
+      'name': entry.food.name,
+      'calories': entry.calories,
+      'protein': _roundMacro(entry.protein),
+      'carbs': _roundMacro(entry.carbs),
+      'fat': _roundMacro(entry.fat),
+      'mealTime': entry.meal.toLowerCase(),
+      'quantity': entry.grams,
+    };
+  }
+
+  static MealEntry mergeCreateResponse(
+    Map<String, dynamic> json, {
+    required MealEntry source,
+  }) {
+    final data = _unwrapData(json);
+    final parsed = entryFromApiJson(data, fallbackDate: source.date);
+    if (parsed != null) {
+      return parsed.copyWith(
+        food: parsed.food.name == 'Food' ? source.food : parsed.food,
+        grams: parsed.grams > 0 ? parsed.grams : source.grams,
+        meal: parsed.meal,
+        date: source.date,
+      );
+    }
+
+    final id = data['id']?.toString();
+    if (id != null && id.isNotEmpty) {
+      return source.copyWith(id: id);
+    }
+
+    return source;
+  }
+
+  static MealEntry? entryFromApiJson(
+    Map<String, dynamic> json, {
+    DateTime? fallbackDate,
+  }) {
+    final mealType = _normalizeMealType(
+      json['meal'] ??
+          json['mealType'] ??
+          json['meal_type'] ??
+          json['mealTime'] ??
+          json['meal_time'] ??
+          json['type'],
+    );
+    if (mealType == null) return null;
+
+    final grams =
+        _readInt(json, const ['grams', 'quantity', 'servingGrams']) ?? 0;
+    if (grams <= 0) return null;
+
+    final foodMap = _firstMap(json, const ['food', 'foodItem', 'food_item']);
+    final food = foodMap != null
+        ? _foodFromApiJson(foodMap)
+        : _foodFromFlatMealJson(json, grams: grams);
+    if (food == null) return null;
+
+    final date = _readDate(json['date']) ??
+        _readDate(json['loggedAt']) ??
+        _readDate(json['logged_at']) ??
+        _readDate(json['createdAt']) ??
+        _readDate(json['created_at']) ??
+        _readDate(json['updatedAt']) ??
+        _readDate(json['updated_at']) ??
+        fallbackDate ??
+        DateTime.now();
+
+    return MealEntry(
+      id: json['id']?.toString(),
+      date: date,
+      food: food,
+      grams: grams,
+      meal: mealType,
+    );
+  }
+
+  /// Builds a [FoodItem] from flat meal payloads returned by `GET /api/v1/meals`.
+  static FoodItem? _foodFromFlatMealJson(
+    Map<String, dynamic> json, {
+    required int grams,
+  }) {
+    final name = _readString(json, const [
+      'name',
+      'foodName',
+      'food_name',
+      'title',
+      'label',
+    ]);
+    if (name == null) return null;
+
+    final portionCalories =
+        _readInt(json, const ['calories', 'totalCalories', 'kcal']);
+    var caloriesPer100g = _readInt(json, const [
+          'caloriesPer100g',
+          'calories_per_100g',
+          'caloriesPer100G',
+          'kcalPer100g',
+        ]) ??
+        0;
+
+    if (caloriesPer100g == 0 && portionCalories != null && grams > 0) {
+      caloriesPer100g = (portionCalories * 100 / grams).round();
+    }
+
+    var protein =
+        _readDouble(json, const ['protein', 'proteinG', 'protein_g']) ?? 0;
+    var carbs = _readDouble(json, const ['carbs', 'carbsG', 'carbs_g']) ?? 0;
+    var fat = _readDouble(json, const ['fat', 'fatG', 'fat_g']) ?? 0;
+
+    // Flat API meals store macros for the logged portion, not per 100g.
+    if (grams > 0) {
+      protein = protein * 100 / grams;
+      carbs = carbs * 100 / grams;
+      fat = fat * 100 / grams;
+    }
+
+    return FoodItem(
+      name: name,
+      caloriesPer100g: caloriesPer100g,
+      protein: protein,
+      carbs: carbs,
+      fat: fat,
+      emoji: _readString(json, const ['emoji', 'icon']) ?? '🍽️',
+    );
+  }
+
+  static FoodItem _foodFromApiJson(Map<String, dynamic> json) {
+    return FoodItem(
+      name: _readString(json, const ['name', 'foodName', 'food_name']) ?? 'Food',
+      caloriesPer100g: _readInt(json, const [
+            'caloriesPer100g',
+            'calories_per_100g',
+            'caloriesPer100G',
+            'kcalPer100g',
+          ]) ??
+          0,
+      protein:
+          _readDouble(json, const ['protein', 'proteinG', 'protein_g']) ?? 0,
+      carbs: _readDouble(json, const ['carbs', 'carbsG', 'carbs_g']) ?? 0,
+      fat: _readDouble(json, const ['fat', 'fatG', 'fat_g']) ?? 0,
+      emoji: _readString(json, const ['emoji', 'icon']) ?? '🍽️',
+    );
+  }
+
+  static num _roundMacro(double value) {
+    final rounded = value.roundToDouble();
+    return rounded == rounded.roundToDouble() ? rounded.round() : rounded;
+  }
+
+  static String? _normalizeMealType(dynamic raw) {
+    if (raw is! String || raw.trim().isEmpty) return null;
+    final value = raw.trim();
+    for (final meal in MealType.all) {
+      if (meal.toLowerCase() == value.toLowerCase()) return meal;
+    }
+    return switch (value.toLowerCase()) {
+      'breakfast' => MealType.breakfast,
+      'lunch' => MealType.lunch,
+      'dinner' => MealType.dinner,
+      'snack' || 'snacks' => MealType.snacks,
+      _ => null,
+    };
+  }
+
+  static Map<String, dynamic> _unwrapData(Map<String, dynamic> json) {
+    final data = json['data'];
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return json;
+  }
+
+  static List<Map<String, dynamic>> _readMealMaps(Map<String, dynamic> data) {
+    final meals = data['meals'] ?? data['items'] ?? data['entries'];
+    if (meals is List) {
+      return meals
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+
+    if (data.containsKey('food') ||
+        data.containsKey('meal') ||
+        data.containsKey('mealTime') ||
+        data.containsKey('name')) {
+      return [data];
+    }
+
+    return [];
+  }
+
+  static Map<String, dynamic>? _firstMap(
+    Map<String, dynamic> map,
+    List<String> keys,
+  ) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return Map<String, dynamic>.from(value);
+    }
+    return null;
+  }
+
+  static String? _readString(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+
+  static int? _readInt(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is int) return value;
+      if (value is num) return value.round();
+      if (value is String) return int.tryParse(value);
+    }
+    return null;
+  }
+
+  static double? _readDouble(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is double) return value;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+    }
+    return null;
+  }
+
+  static DateTime? _readDate(dynamic value) {
+    if (value is String && value.isNotEmpty) {
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) return MealEntry.normalizeDate(parsed);
+    }
+    return null;
+  }
+}

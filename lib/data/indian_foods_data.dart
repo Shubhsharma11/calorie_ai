@@ -88,3 +88,19 @@ const List<FoodItem> indianFoods = [
   FoodItem(name: 'Papad', caloriesPer100g: 371, protein: 26, carbs: 60, fat: 3, emoji: '🫓'),
   FoodItem(name: 'Chutney (mint)', caloriesPer100g: 55, protein: 2.0, carbs: 8, fat: 1.5, emoji: '🌿'),
 ];
+
+/// Commonly logged Indian foods shown on the Add Food browse screen.
+const List<FoodItem> popularIndianFoods = [
+  FoodItem(name: 'Roti / Chapati', caloriesPer100g: 297, protein: 9.0, carbs: 52, fat: 6.0, emoji: '🫓'),
+  FoodItem(name: 'Basmati Rice (cooked)', caloriesPer100g: 130, protein: 2.7, carbs: 28, fat: 0.3, emoji: '🍚'),
+  FoodItem(name: 'Dal Tadka', caloriesPer100g: 105, protein: 7.5, carbs: 14, fat: 2.5, emoji: '🍲'),
+  FoodItem(name: 'Idli', caloriesPer100g: 106, protein: 3.5, carbs: 22, fat: 0.5, emoji: '🥞'),
+  FoodItem(name: 'Masala Dosa', caloriesPer100g: 195, protein: 5.0, carbs: 30, fat: 6.0, emoji: '🥞'),
+  FoodItem(name: 'Paneer Butter Masala', caloriesPer100g: 220, protein: 9.0, carbs: 10, fat: 17, emoji: '🧀'),
+  FoodItem(name: 'Chicken Curry', caloriesPer100g: 165, protein: 16, carbs: 5, fat: 9.5, emoji: '🍗'),
+  FoodItem(name: 'Butter Chicken', caloriesPer100g: 195, protein: 15, carbs: 7, fat: 12, emoji: '🍗'),
+  FoodItem(name: 'Boiled Egg', caloriesPer100g: 155, protein: 13, carbs: 1.1, fat: 11, emoji: '🥚'),
+  FoodItem(name: 'Poha', caloriesPer100g: 130, protein: 3.5, carbs: 24, fat: 3.0, emoji: '🍲'),
+  FoodItem(name: 'Banana (raw)', caloriesPer100g: 89, protein: 1.1, carbs: 23, fat: 0.3, emoji: '🍌'),
+  FoodItem(name: 'Curd / Dahi', caloriesPer100g: 60, protein: 3.5, carbs: 5, fat: 3.0, emoji: '🥣'),
+];

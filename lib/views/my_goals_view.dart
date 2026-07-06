@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
+import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/goal_type.dart';
@@ -53,13 +54,18 @@ class MyGoalsView extends GetView<UserController> {
       body: GetBuilder<UserController>(
         builder: (_) {
           final user = controller.user;
-          final currentWeight = Get.isRegistered<TrackerController>()
-              ? Get.find<TrackerController>().currentWeight.value
-              : user.weightKg.toDouble();
-          final progress = weightGoalProgress(user, currentWeight);
           final goal = user.dailyCalorieGoal;
 
-          return ResponsivePage(
+          return Obx(() {
+            if (Get.isRegistered<TrackerController>()) {
+              Get.find<TrackerController>().weightRevision.value;
+            }
+            final currentWeight = Get.isRegistered<TrackerController>()
+                ? Get.find<TrackerController>().currentWeight.value
+                : user.weightKg.toDouble();
+            final progress = weightGoalProgress(user, currentWeight);
+
+            return ResponsivePage(
             scrollable: true,
             child: Align(
               alignment: Alignment.topCenter,
@@ -97,7 +103,27 @@ class MyGoalsView extends GetView<UserController> {
                     ProfileGoalField(
                       label: 'Target Date',
                       value: targetDateLabel(user),
-                      onTap: () => controller.pickTargetDate(context),
+                      onTap: () async {
+                        final baseline =
+                            controller.captureProfileSyncSnapshot();
+                        final result = await controller.pickTargetDate(
+                          context,
+                          syncBaseline: baseline,
+                        );
+
+                        switch (result.status) {
+                          case PickTargetDateStatus.saved:
+                            AppSnackbar.success('Target date updated.');
+                          case PickTargetDateStatus.failed:
+                            AppSnackbar.error(
+                              result.error ?? 'Unable to save changes.',
+                              title: 'Save failed',
+                            );
+                          case PickTargetDateStatus.unchanged:
+                          case PickTargetDateStatus.cancelled:
+                            break;
+                        }
+                      },
                     ),
                     SizedBox(height: r.scale(12)),
                     ProfileGoalField(
@@ -121,6 +147,7 @@ class MyGoalsView extends GetView<UserController> {
               ),
             ),
           );
+          });
         },
       ),
     );

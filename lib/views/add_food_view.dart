@@ -2,167 +2,70 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/food_controller.dart';
-import '../controllers/main_controller.dart';
 import '../core/responsive.dart';
 import '../models/food_item.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/food_emoji_avatar.dart';
+import '../widgets/log_history_sheet.dart';
 import '../widgets/responsive_page.dart';
 
-class AddFoodView extends GetView<FoodController> {
+class AddFoodView extends StatefulWidget {
   const AddFoodView({super.key});
+
+  @override
+  State<AddFoodView> createState() => _AddFoodViewState();
+}
+
+class _AddFoodViewState extends State<AddFoodView> {
+  late final FoodController _food = Get.find<FoodController>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _food.refreshQuickItemsFromApi();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Food Search')),
+      appBar: AppBar(title: const Text('Add Food')),
       body: ResponsivePage(
         scrollable: false,
         maxWidth: r.isWide ? 900 : null,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Obx(
-              () => Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Adding to: ${controller.selectedMeal.value}',
-                  style: TextStyle(
-                    fontSize: r.scale(13, tablet: 14),
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
-                  ),
+              () => Text(
+                'Adding to ${_food.selectedMeal.value}',
+                style: TextStyle(
+                  fontSize: r.scale(13, tablet: 14),
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
                 ),
               ),
             ),
             SizedBox(height: r.scale(8)),
-            ResponsiveLayout(
-              mobile: _SearchBar(
-                onScan: () {
-                  Get.back();
-                  if (Get.isRegistered<MainController>()) {
-                    Get.find<MainController>().changeTab(2);
-                  }
-                },
-              ),
-              tablet: Row(
-                children: [
-                  const Expanded(child: _SearchBar()),
-                  const SizedBox(width: 16),
-                  SizedBox(
-                    width: 160,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Get.back();
-                        if (Get.isRegistered<MainController>()) {
-                          Get.find<MainController>().changeTab(2);
-                        }
-                      },
-                      icon: Icon(Icons.qr_code_scanner),
-                      label: const Text('Scan'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Obx(() {
-              if (controller.recentFoods.isEmpty) {
-                return const SizedBox.shrink();
-              }
-
-              return Padding(
-                padding: EdgeInsets.only(top: r.scale(12)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'Recent Searches',
-                          style: TextStyle(
-                            fontSize: r.scale(15, tablet: 16),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: controller.clearRecentFoods,
-                          child: const Text('Clear'),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: r.scale(8)),
-                    ...controller.recentFoods.map(
-                      (food) => _RecentFoodTile(
-                        food: food,
-                        onTap: () {
-                          controller.recordRecentFood(food);
-                          Get.toNamed(
-                            AppRoutes.foodDetails,
-                            arguments: food,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-            SizedBox(height: r.scale(8)),
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: r.scale(8)),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Obx(() {
-                  if (controller.isSearching.value) {
-                    return const Text('Searching...');
-                  }
-                  return Text(
-                    'Results',
-                    style: TextStyle(
-                      fontSize: r.scale(18, tablet: 19),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  );
-                }),
-              ),
-            ),
+            const _SearchBar(),
+            SizedBox(height: r.scale(12)),
             Expanded(
               child: Obx(() {
-                final foods = controller.filteredFoods;
+                final query = _food.searchQuery.value.trim();
+                final isSearching = _food.isSearching.value;
 
-                if (controller.isSearching.value) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (foods.isEmpty) {
-                  return Center(
-                    child: Text(
-                      controller.searchQuery.value.isEmpty
-                          ? 'Search for a food to add to your log'
-                          : 'No foods found. Try another search.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.textSecondary),
-                    ),
+                if (query.isNotEmpty) {
+                  return _SearchResultsList(
+                    isSearching: isSearching,
+                    foods: _food.filteredFoods,
                   );
                 }
 
-                return ListView.separated(
-                  itemCount: foods.length,
-                  separatorBuilder: (_, index) => Divider(height: 1),
-                  itemBuilder: (_, i) => _FoodRow(
-                    food: foods[i],
-                    onTap: () {
-                      controller.recordRecentFood(foods[i]);
-                      Get.toNamed(
-                        AppRoutes.foodDetails,
-                        arguments: foods[i],
-                      );
-                    },
-                  ),
-                );
+                return _QuickItemsList(selectedMeal: _food.selectedMeal.value);
               }),
             ),
           ],
@@ -172,34 +75,197 @@ class AddFoodView extends GetView<FoodController> {
   }
 }
 
-class _RecentFoodTile extends StatelessWidget {
-  const _RecentFoodTile({required this.food, required this.onTap});
+class _QuickItemsList extends GetView<FoodController> {
+  const _QuickItemsList({required this.selectedMeal});
 
-  final FoodItem food;
-  final VoidCallback onTap;
+  final String selectedMeal;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      contentPadding: EdgeInsets.zero,
-      leading: FoodEmojiAvatar(emoji: food.emoji, size: 40),
-      title: Text(food.name),
-      trailing: Text(
-        '${food.caloriesPer100g} kcal',
-        style: TextStyle(
-          color: AppColors.primary,
-          fontWeight: FontWeight.w600,
+    final r = context.responsive;
+
+    return Obx(() {
+      final revision = controller.entriesRevision.value;
+      final isLoading = controller.isLoadingMealsApi.value;
+      final apiError = controller.mealsApiErrorMessage.value;
+      controller.apiMeals.length;
+      final items = controller.recentQuickMeals;
+
+      return ListView(
+        key: ValueKey(revision),
+        children: [
+          Text(
+            'Quick items',
+            style: TextStyle(
+              fontSize: r.scale(18, tablet: 19),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          SizedBox(height: r.scale(4)),
+          Text(
+            'Your last 5 meals from history',
+            style: TextStyle(
+              fontSize: r.scale(12, tablet: 13),
+              color: AppColors.textSecondary,
+            ),
+          ),
+          SizedBox(height: r.scale(10)),
+          if (isLoading && items.isEmpty)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: r.scale(24)),
+              child: const Center(child: CircularProgressIndicator()),
+            )
+          else if (items.isEmpty)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: r.scale(16)),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.bolt_rounded,
+                    size: r.scale(28),
+                    color: AppColors.textSecondary,
+                  ),
+                  SizedBox(width: r.scale(12)),
+                  Expanded(
+                    child: Text(
+                      apiError ??
+                          'Log a meal and your recent foods will appear here.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: r.scale(13),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...List.generate(items.length, (index) {
+              final item = items[index];
+              final isFavorite = controller.isFavorite(item);
+              final isLast = index == items.length - 1;
+
+              return Column(
+                children: [
+                  ListTile(
+                    onTap: () => showLogHistorySheet(
+                      context,
+                      item: item,
+                      initialMeal: selectedMeal,
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: r.scale(4),
+                    ),
+                    leading: FoodEmojiAvatar(
+                      emoji: item.food.emoji,
+                      size: 44,
+                    ),
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.food.name,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: r.scale(15),
+                            ),
+                          ),
+                        ),
+                        if (isFavorite)
+                          Icon(
+                            Icons.star_rounded,
+                            size: 18,
+                            color: const Color(0xFFFFB800),
+                          ),
+                      ],
+                    ),
+                    subtitle: Text('${item.grams}g · ${item.meal}'),
+                    trailing: Text(
+                      '${item.calories} kcal',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: r.scale(14),
+                      ),
+                    ),
+                  ),
+                  if (!isLast)
+                    Divider(height: 1, color: AppColors.border),
+                ],
+              );
+            }),
+        ],
+      );
+    });
+  }
+}
+
+class _SearchResultsList extends StatelessWidget {
+  const _SearchResultsList({
+    required this.isSearching,
+    required this.foods,
+  });
+
+  final bool isSearching;
+  final List<FoodItem> foods;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    if (isSearching) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Search results',
+          style: TextStyle(
+            fontSize: r.scale(18, tablet: 19),
+            fontWeight: FontWeight.w700,
+          ),
         ),
-      ),
+        SizedBox(height: r.scale(10)),
+        Expanded(
+          child: foods.isEmpty
+              ? Center(
+                  child: Text(
+                    'No foods found. Try another search.',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                )
+              : ListView.separated(
+                  itemCount: foods.length,
+                  separatorBuilder: (_, index) => const Divider(height: 1),
+                  itemBuilder: (_, i) => ListTile(
+                    onTap: () => Get.toNamed(
+                      AppRoutes.foodDetails,
+                      arguments: foods[i],
+                    ),
+                    leading: FoodEmojiAvatar(
+                      emoji: foods[i].emoji,
+                      size: 48,
+                    ),
+                    title: Text(foods[i].name),
+                    trailing: Text(
+                      '${foods[i].caloriesPer100g} kcal',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }
 
 class _SearchBar extends StatefulWidget {
-  const _SearchBar({this.onScan});
-
-  final VoidCallback? onScan;
+  const _SearchBar();
 
   @override
   State<_SearchBar> createState() => _SearchBarState();
@@ -225,50 +291,24 @@ class _SearchBarState extends State<_SearchBar> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: _textController,
-            decoration: const InputDecoration(
-              hintText: 'Search food...',
-              prefixIcon: Icon(Icons.search),
-            ),
-            onChanged: _controller.onSearchChanged,
-          ),
+    return Obx(() {
+      return TextField(
+        controller: _textController,
+        decoration: InputDecoration(
+          hintText: 'Search for a new food...',
+          prefixIcon: Icon(Icons.search),
+          suffixIcon: _controller.searchQuery.value.isNotEmpty
+              ? IconButton(
+                  onPressed: () {
+                    _textController.clear();
+                    _controller.onSearchChanged('');
+                  },
+                  icon: Icon(Icons.close_rounded),
+                )
+              : null,
         ),
-        if (widget.onScan != null) ...[
-          const SizedBox(width: 12),
-          OutlinedButton.icon(
-            onPressed: widget.onScan,
-            icon: Icon(Icons.qr_code_scanner),
-            label: const Text('Scan'),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _FoodRow extends StatelessWidget {
-  const _FoodRow({required this.food, required this.onTap});
-
-  final FoodItem food;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      leading: FoodEmojiAvatar(emoji: food.emoji, size: 48),
-      title: Text(food.name),
-      trailing: Text(
-        '${food.caloriesPer100g} kcal',
-        style: TextStyle(
-          color: AppColors.primary,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
+        onChanged: _controller.onSearchChanged,
+      );
+    });
   }
 }

@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -20,45 +18,18 @@ class ScanView extends GetView<ScanController> {
     final r = context.responsive;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan Food')),
+      appBar: AppBar(title: const Text('Scan Barcode')),
       body: ResponsivePage(
         scrollable: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Obx(() {
-              final mode = controller.mode.value;
-              return SegmentedButton<ScanMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: ScanMode.camera,
-                    label: Text('AI Scan'),
-                    icon: Icon(Icons.camera_alt_outlined),
-                  ),
-                  ButtonSegment(
-                    value: ScanMode.barcode,
-                    label: Text('Barcode'),
-                    icon: Icon(Icons.qr_code_scanner),
-                  ),
-                ],
-                selected: {mode},
-                onSelectionChanged: (s) => controller.setMode(s.first),
-              );
-            }),
-            SizedBox(height: r.scale(16)),
-            Expanded(
-              child: Obx(() {
-                if (controller.mode.value == ScanMode.camera) {
-                  return const _CameraScanPanel();
-                }
-                return const _BarcodeScanPanel();
-              }),
-            ),
+            Expanded(child: const _BarcodeScanPanel()),
             Obx(() {
               final error = controller.scanError.value;
               if (error.isEmpty) return const SizedBox.shrink();
               return Padding(
-                padding: const EdgeInsets.only(top: 12),
+                padding: EdgeInsets.only(top: r.scale(12)),
                 child: Text(
                   error,
                   textAlign: TextAlign.center,
@@ -78,108 +49,6 @@ class ScanView extends GetView<ScanController> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _CameraScanPanel extends GetView<ScanController> {
-  const _CameraScanPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      final scanning = controller.isScanning.value;
-      final imageBytes = controller.capturedImageBytes.value;
-
-      return Column(
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                width: double.infinity,
-                color: Colors.black87,
-                child: _buildPreview(imageBytes, scanning),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: scanning ? null : controller.pickFromGallery,
-                  icon: Icon(Icons.photo_library_outlined),
-                  label: const Text('Gallery'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: scanning ? null : controller.captureFromCamera,
-                  icon: Icon(Icons.camera_alt),
-                  label: Text(scanning ? 'Analyzing...' : 'Take Photo'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      );
-    });
-  }
-
-  Widget _buildPreview(Uint8List? imageBytes, bool scanning) {
-    if (scanning) {
-      return const Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(color: Colors.white),
-          SizedBox(height: 16),
-          Text(
-            'Analyzing food...',
-            style: TextStyle(color: Colors.white70),
-          ),
-        ],
-      );
-    }
-
-    if (imageBytes != null) {
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.memory(
-            imageBytes,
-            fit: BoxFit.cover,
-            gaplessPlayback: true,
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.black54,
-              child: const Text(
-                'Photo captured — tap Take Photo to retake',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 13),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return const Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.camera_alt, size: 64, color: Colors.white54),
-        SizedBox(height: 16),
-        Text(
-          'Take a photo or pick from gallery',
-          style: TextStyle(color: Colors.white70),
-        ),
-      ],
     );
   }
 }
@@ -243,7 +112,6 @@ class _BarcodeScanPanel extends GetView<ScanController> {
                               ),
                             ),
                           ),
-                        // Viewfinder overlay
                         IgnorePointer(
                           child: Center(
                             child: Container(

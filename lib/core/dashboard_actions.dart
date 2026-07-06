@@ -8,7 +8,6 @@ import '../controllers/settings_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../models/meal_entry.dart';
 import '../routes/app_routes.dart';
-import '../widgets/notifications_sheet.dart';
 
 abstract final class DashboardActions {
   static void openFoodSearch() {
@@ -35,7 +34,7 @@ abstract final class DashboardActions {
   }
 
   static void openNotifications(BuildContext context) {
-    NotificationsSheet.show(context);
+    Get.toNamed(AppRoutes.notifications);
   }
 
   static bool get hasNotificationBadge {
@@ -47,7 +46,8 @@ abstract final class DashboardActions {
     final remindersOn =
         settings.mealReminders.value || settings.waterReminders.value;
 
-    final waterPending = Get.isRegistered<TrackerController>() &&
+    final waterPending =
+        Get.isRegistered<TrackerController>() &&
         !Get.find<TrackerController>().isWaterGoalComplete;
 
     return remindersOn || waterPending;

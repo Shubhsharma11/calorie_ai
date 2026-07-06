@@ -7,7 +7,9 @@ import '../controllers/user_controller.dart';
 class InitialBinding extends Bindings {
   @override
   void dependencies() {
-    Get.put(UserController(), permanent: true);
+    if (!Get.isRegistered<UserController>()) {
+      Get.put(UserController(), permanent: true);
+    }
     if (!Get.isRegistered<ThemeController>()) {
       Get.put(ThemeController(), permanent: true);
     }
