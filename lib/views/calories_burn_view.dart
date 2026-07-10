@@ -8,6 +8,7 @@ import '../models/exercise_entry.dart';
 import '../models/exercise_type.dart';
 import '../theme/app_colors.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
 
 class CaloriesBurnView extends GetView<TrackerController> {
@@ -20,7 +21,7 @@ class CaloriesBurnView extends GetView<TrackerController> {
     final r = context.responsive;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Calories Burn')),
+      appBar: const AppAppBar(title: 'Calories Burn'),
       body: ResponsivePage(
         scrollable: true,
         child: Obx(() {

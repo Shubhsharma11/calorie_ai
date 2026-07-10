@@ -363,7 +363,7 @@ class _StepIndicator extends StatelessWidget {
           color: AppColors.primary,
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.check_rounded, size: 16, color: Colors.white),
+        child: const Icon(Icons.check_rounded, size: 16, color: AppColors.onPrimary),
       ),
       _StepStatus.active => SizedBox(
         width: 28,

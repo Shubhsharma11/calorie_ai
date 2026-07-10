@@ -9,13 +9,14 @@ import '../models/activity_level.dart';
 import '../models/goal_type.dart';
 import '../models/user_model.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
 class DailyCalorieGoalView extends GetView<UserController> {
   const DailyCalorieGoalView({super.key});
 
-  static const _pageBg = Color(0xFFF4F5F2);
+  static Color get _pageBg => AppColors.background;
   static const _carbsColor = Color(0xFF5CB87A);
   static const _proteinColor = Color(0xFF9B8FD9);
   static const _fatColor = Color(0xFFF0A060);
@@ -24,6 +25,7 @@ class DailyCalorieGoalView extends GetView<UserController> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _pageBg,
+      appBar: const AppAppBar.backOnly(),
       body: GetBuilder<UserController>(
         builder: (_) {
           final user = controller.user;
@@ -39,14 +41,12 @@ class DailyCalorieGoalView extends GetView<UserController> {
               return const Center(child: CircularProgressIndicator());
             }
 
-            return SafeArea(
-              child: SetupScreenLayout(
+            return SetupScreenLayout(
                 scrollable: true,
                 content: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const _BackButton(),
-                    SizedBox(height: r.scale(20)),
+                    SizedBox(height: r.scale(8)),
                     if (planController.errorMessage.value != null) ...[
                       _PlanErrorBanner(
                         message: planController.errorMessage.value!,
@@ -136,8 +136,7 @@ class DailyCalorieGoalView extends GetView<UserController> {
                     await controller.finishOnboardingSetup();
                   },
                 ),
-              ),
-            );
+              );
           });
         },
       ),
@@ -157,37 +156,6 @@ class DailyCalorieGoalView extends GetView<UserController> {
       ActivityLevel.moderatelyActive => 'Moderate',
       ActivityLevel.veryActive => 'Very Active',
     };
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  const _BackButton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Material(
-        color: Colors.white,
-        shape: const CircleBorder(),
-        child: InkWell(
-          onTap: Get.back,
-          customBorder: const CircleBorder(),
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Icon(
-              Icons.chevron_left_rounded,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -280,11 +248,11 @@ class _DailyCaloriesCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(r.scale(20)),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: AppColors.shadowColor,
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -454,7 +422,7 @@ class _GlassDisc extends StatelessWidget {
           ],
         ),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.65),
+          color: AppColors.onPrimary.withValues(alpha: 0.65),
           width: 1.5,
         ),
         boxShadow: [
@@ -481,7 +449,7 @@ class _SparkDot extends StatelessWidget {
       height: diameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white,
+        color: AppColors.card,
         boxShadow: [
           BoxShadow(
             color: DailyCalorieGoalView._carbsColor.withValues(alpha: 0.25),
@@ -643,7 +611,7 @@ class _OptimizationBox extends StatelessWidget {
         vertical: r.scale(16),
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
+        color: AppColors.onPrimary.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
       ),

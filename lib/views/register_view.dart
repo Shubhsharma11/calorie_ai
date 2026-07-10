@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
@@ -15,7 +16,7 @@ class RegisterView extends GetView<AuthController> {
     final r = context.responsive;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign Up')),
+      appBar: const AppAppBar(title: 'Sign Up'),
       body: ResponsiveForm(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

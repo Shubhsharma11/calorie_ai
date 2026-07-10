@@ -118,7 +118,7 @@ class _NotificationsSheetBody extends StatelessWidget {
                         title: 'Water Goal Today',
                         subtitle: waterDone
                             ? 'You reached your daily goal!'
-                            : '${tracker.waterGlasses} / ${TrackerController.waterGoal} glasses logged',
+                            : '${tracker.waterMl} / ${TrackerController.waterGoalMl} ml logged',
                         active: !waterDone,
                         accentColor: const Color(0xFF007AFF),
                         onTap: () {

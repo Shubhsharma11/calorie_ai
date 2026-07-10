@@ -11,6 +11,7 @@ import '../models/goal_type.dart';
 import '../models/user_model.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/profile_ui.dart';
 import '../widgets/responsive_page.dart';
 
@@ -41,16 +42,12 @@ class MyGoalsView extends GetView<UserController> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Goal'),
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-      ),
+      backgroundColor: AppColors.backgroundOf(context),
+      appBar: const AppAppBar(title: 'Goal'),
       body: GetBuilder<UserController>(
         builder: (_) {
           final user = controller.user;

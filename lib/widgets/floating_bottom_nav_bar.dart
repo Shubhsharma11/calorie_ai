@@ -28,7 +28,11 @@ class FloatingBottomNavBar extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
-                child: CustomPaint(painter: _NavBarShapePainter()),
+                child: CustomPaint(
+                  painter: _NavBarShapePainter(
+                    isDark: AppColors.isDark(context),
+                  ),
+                ),
               ),
               Positioned(
                 left: 4,
@@ -65,23 +69,44 @@ class FloatingBottomNavBar extends StatelessWidget {
 }
 
 class _NavBarShapePainter extends CustomPainter {
+  _NavBarShapePainter({required this.isDark});
+
+  final bool isDark;
+
   @override
   void paint(Canvas canvas, Size size) {
     final path = _buildPath(size);
 
     canvas.drawShadow(
       path,
-      AppColors.primary.withValues(alpha: 0.22),
+      AppColors.primary.withValues(alpha: isDark ? 0.12 : 0.22),
       16,
       true,
     );
-    canvas.drawShadow(path, Colors.black.withValues(alpha: 0.12), 18, true);
+    canvas.drawShadow(
+      path,
+      Colors.black.withValues(alpha: isDark ? 0.28 : 0.12),
+      18,
+      true,
+    );
+
+    final fillColors = isDark
+        ? [
+            AppColors.darkCard,
+            AppColors.darkSurface,
+            AppColors.darkBackground,
+          ]
+        : const [
+            Color(0xFFF8FFF7),
+            Color(0xFFEFFFF4),
+            Color(0xFFEAF8F1),
+          ];
 
     final fill = Paint()
-      ..shader = const LinearGradient(
+      ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [Color(0xFFF8FFF7), Color(0xFFEFFFF4), Color(0xFFEAF8F1)],
+        colors: fillColors,
       ).createShader(Offset.zero & size);
     canvas.drawPath(path, fill);
 
@@ -89,14 +114,19 @@ class _NavBarShapePainter extends CustomPainter {
       ..shader = RadialGradient(
         center: Alignment.topCenter,
         radius: 0.9,
-        colors: [AppColors.primary.withValues(alpha: 0.11), Colors.transparent],
+        colors: [
+          AppColors.primary.withValues(alpha: isDark ? 0.06 : 0.11),
+          Colors.transparent,
+        ],
       ).createShader(Offset.zero & size);
     canvas.drawPath(path, glow);
 
     final border = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4
-      ..color = AppColors.onPrimary.withValues(alpha: 0.76);
+      ..color = isDark
+          ? AppColors.darkBorder.withValues(alpha: 0.85)
+          : AppColors.onPrimary.withValues(alpha: 0.76);
     canvas.drawPath(path, border);
   }
 
@@ -136,7 +166,8 @@ class _NavBarShapePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _NavBarShapePainter oldDelegate) =>
+      oldDelegate.isDark != isDark;
 }
 
 class _CenterAction extends StatelessWidget {
@@ -215,7 +246,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activeColor = AppColors.primaryDark;
+    final activeColor = AppColors.iconAccent;
     final inactiveColor = AppColors.textSecondary;
 
     return Material(

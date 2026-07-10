@@ -7,6 +7,7 @@ import '../controllers/theme_controller.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
 
+import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
 
 class SettingsView extends GetView<SettingsController> {
@@ -58,12 +59,44 @@ class SettingsView extends GetView<SettingsController> {
     await controller.setWaterReminderInterval(selected);
   }
 
+  Future<void> _pickWaterGoal(BuildContext context) async {
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            for (final ml in SettingsController.waterGoalMlOptions)
+              ListTile(
+                onTap: () => Navigator.of(context).pop(ml),
+                title: Text('$ml ml per day'),
+                subtitle: Text(
+                  '~${ml ~/ SettingsController.mlPerGlass} glasses',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: controller.waterGoalMl.value == ml
+                    ? const Icon(Icons.check_rounded, color: AppColors.primary)
+                    : null,
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null) return;
+    await controller.setWaterGoalMl(selected);
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: const AppAppBar(title: 'Settings'),
 
       body: Obx(() {
         final pushEnabled = controller.pushNotifications.value;
@@ -77,11 +110,10 @@ class SettingsView extends GetView<SettingsController> {
             children: [
               Text(
                 'App Preferences',
-
                 style: TextStyle(
                   fontSize: r.scale(22, tablet: 24),
-
                   fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
                 ),
               ),
 
@@ -271,6 +303,12 @@ class SettingsView extends GetView<SettingsController> {
                 title: 'General',
 
                 children: [
+                  _SettingsActionTile(
+                    icon: Icons.water_drop_outlined,
+                    title: 'Daily Water Goal',
+                    subtitle: controller.waterGoalSummary,
+                    onTap: () => _pickWaterGoal(context),
+                  ),
                   _SettingsSwitchTile(
                     icon: Icons.straighten_rounded,
 

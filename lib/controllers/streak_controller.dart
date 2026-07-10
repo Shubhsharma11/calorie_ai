@@ -9,7 +9,6 @@ import '../repositories/meal_streak_repository.dart';
 import '../services/local_storage_service.dart';
 import '../services/meal_streak_api_service.dart';
 import '../widgets/streak_milestone_dialog.dart';
-import 'food_controller.dart';
 import 'user_controller.dart';
 
 class StreakController extends GetxController {
@@ -31,8 +30,7 @@ class StreakController extends GetxController {
   MealStreakModel? _apiStreak;
   late final Future<void> _ready;
   bool _isFetchingApi = false;
-
-  FoodController get _food => Get.find<FoodController>();
+  bool _pendingRefresh = false;
 
   bool get usesApiStreak => _apiStreak != null;
 
@@ -43,9 +41,12 @@ class StreakController extends GetxController {
         storedLongest: storedLongestStreak.value,
       );
     }
-    return StreakCalculator.compute(
-      _food.entries,
-      storedLongest: storedLongestStreak.value,
+    return StreakStats(
+      currentStreak: 0,
+      longestStreak: storedLongestStreak.value,
+      hasLoggedToday: false,
+      isAtRisk: false,
+      recentDays: StreakCalculator.buildRecentDays(const {}),
     );
   }
 
@@ -81,7 +82,11 @@ class StreakController extends GetxController {
   }
 
   Future<void> refreshFromApi() async {
-    if (_isFetchingApi) return;
+    debugPrint('StreakController: refreshFromApi entered');
+    if (_isFetchingApi) {
+      _pendingRefresh = true;
+      return;
+    }
     if (!Get.isRegistered<UserController>()) return;
 
     final userController = Get.find<UserController>();
@@ -125,25 +130,25 @@ class StreakController extends GetxController {
       _isFetchingApi = false;
       isLoadingApi.value = false;
       revision.value++;
+      if (_pendingRefresh) {
+        _pendingRefresh = false;
+        unawaited(refreshFromApi());
+      }
     }
   }
 
   Future<void> onMealsChanged() async {
     await _ready;
 
-    final current = StreakCalculator.compute(
-      _food.entries,
-      storedLongest: storedLongestStreak.value,
-    );
+    if (!Get.isRegistered<UserController>()) return;
 
-    if (current.longestStreak > storedLongestStreak.value) {
-      storedLongestStreak.value = current.longestStreak;
-      await _storage.saveLongestStreak(current.longestStreak);
-    }
+    final user = Get.find<UserController>();
+    await user.localProfileReady;
+    await user.loadAuthSession();
 
-    revision.value++;
-    await _maybeCelebrateMilestone(current.currentStreak);
-    unawaited(refreshFromApi());
+    if (!user.isLoggedIn || user.accessToken.isEmpty) return;
+
+    await refreshFromApi();
   }
 
   Future<void> _maybeCelebrateMilestone(int streak) async {

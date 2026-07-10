@@ -53,6 +53,50 @@ void main() {
     expect(response.profileUpdated, isTrue);
   });
 
+  test('WeightApiService fetches weight history by period', () async {
+    late Uri capturedUri;
+
+    final client = MockClient((request) async {
+      capturedUri = request.url;
+      return http.Response(
+        jsonEncode({
+          'success': true,
+          'data': {
+            'entries': [
+              {
+                '_id': 'w-1',
+                'weight': 68,
+                'weightUnit': 'kg',
+                'weightKg': 68,
+                'recordedAt': '2026-06-29T12:00:00.000Z',
+              },
+            ],
+            'meta': {
+              'page': 1,
+              'limit': 30,
+              'total': 1,
+              'totalPages': 1,
+              'period': 'today',
+            },
+          },
+        }),
+        200,
+      );
+    });
+
+    final service = WeightApiService(apiClient: ApiClient(client: client));
+    final entries = await service.fetchWeights(
+      accessToken: 'token-123',
+      period: 'today',
+    );
+
+    expect(capturedUri.path, ApiEndpoints.weight);
+    expect(capturedUri.queryParameters, {'period': 'today'});
+    expect(entries, hasLength(1));
+    expect(entries.first.kg, 68);
+    expect(entries.first.id, 'w-1');
+  });
+
   test('WeightApiService fetches paginated weight history', () async {
     late Uri capturedUri;
 

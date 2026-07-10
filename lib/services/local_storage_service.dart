@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/custom_meal_preset.dart';
 import '../models/exercise_entry.dart';
 import '../models/health_concern.dart';
 import '../models/meal_entry.dart';
@@ -18,6 +19,7 @@ final String? userId;
   return 'meal_entries_v1_${userId ?? "guest"}';
 }
   static const _favoriteMealsKey = 'favorite_meals_v1';
+  static const _customMealsKey = 'custom_meals_v1';
   static const _dismissedBreakfastSuggestionKey =
       'dismissed_breakfast_suggestion_v1';
   static const _longestStreakKey = 'longest_streak';
@@ -70,6 +72,26 @@ await prefs.setString(_mealKey(), encoded);
     final prefs = await _storage;
     final encoded = jsonEncode(items.map((item) => item.toJson()).toList());
     await prefs.setString(_favoriteMealsKey, encoded);
+  }
+
+  Future<List<CustomMealPreset>> loadCustomMeals() async {
+    final prefs = await _storage;
+    final raw = prefs.getString(_customMealsKey);
+    if (raw == null || raw.isEmpty) return [];
+
+    final list = jsonDecode(raw) as List<dynamic>;
+    return list
+        .map(
+          (item) =>
+              CustomMealPreset.fromJson(item as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  Future<void> saveCustomMeals(List<CustomMealPreset> meals) async {
+    final prefs = await _storage;
+    final encoded = jsonEncode(meals.map((meal) => meal.toJson()).toList());
+    await prefs.setString(_customMealsKey, encoded);
   }
 
   Future<String?> loadDismissedBreakfastSuggestionDate() async {

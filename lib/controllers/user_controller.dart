@@ -17,12 +17,14 @@ import '../repositories/auth_repository.dart';
 import '../repositories/nutrition_plan_repository.dart';
 import '../repositories/onboarding_repository.dart';
 import '../routes/app_routes.dart';
+import '../core/app_snackbar.dart';
 import '../services/auth_api_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/notification_service.dart';
 import '../services/nutrition_plan_api_service.dart';
 import '../services/onboarding_api_service.dart';
 import 'dashboard_controller.dart';
+import 'main_controller.dart';
 import 'nutrition_plan_controller.dart';
 import 'tracker_controller.dart';
 
@@ -168,10 +170,7 @@ class UserController extends GetxController {
     }
 
     if (accessToken.isNotEmpty) {
-      return AccessTokenResolution(
-        token: accessToken,
-        source: 'session',
-      );
+      return AccessTokenResolution(token: accessToken, source: 'session');
     }
 
     final resolved = readBackendString(backendLoginResponse, 'accessToken');
@@ -187,10 +186,7 @@ class UserController extends GetxController {
 
     accessToken = resolved;
     update();
-    return AccessTokenResolution(
-      token: accessToken,
-      source: 'backendResponse',
-    );
+    return AccessTokenResolution(token: accessToken, source: 'backendResponse');
   }
 
   static String readBackendString(Map<String, dynamic> response, String key) {
@@ -437,9 +433,10 @@ class UserController extends GetxController {
     if (picked == null) return const PickTargetDateResult.cancelled();
 
     final newDate = DateTime(picked.year, picked.month, picked.day);
-    final changed = !(newDate.year == user.targetDate.year &&
-        newDate.month == user.targetDate.month &&
-        newDate.day == user.targetDate.day);
+    final changed =
+        !(newDate.year == user.targetDate.year &&
+            newDate.month == user.targetDate.month &&
+            newDate.day == user.targetDate.day);
     user.targetDate = newDate;
     update();
 
@@ -507,8 +504,7 @@ class UserController extends GetxController {
       user.nutritionPlanDailyCalories = target;
       unawaited(_persistNutritionTargets());
     } else {
-      user.manualCalorieAdjustment =
-          target - user.calculatedDailyCalorieGoal;
+      user.manualCalorieAdjustment = target - user.calculatedDailyCalorieGoal;
       unawaited(_persistCalorieAdjustment());
     }
 
@@ -576,9 +572,7 @@ class UserController extends GetxController {
   }
 
   Future<String?> submitOnboarding() {
-    return completeOnboardingWithProgress(
-      onProgress: (_, _) {},
-    );
+    return completeOnboardingWithProgress(onProgress: (_, _) {});
   }
 
   Future<String?> patchOnboarding(OnboardingPatchModel patch) async {
@@ -629,14 +623,10 @@ class UserController extends GetxController {
   }
 
   Future<String?> patchProfileIfChanged(ProfileSyncSnapshot baseline) {
-    return patchOnboarding(
-      OnboardingPatchModel.profileDiff(user, baseline),
-    );
+    return patchOnboarding(OnboardingPatchModel.profileDiff(user, baseline));
   }
 
-  Future<String?> patchPersonalDetailsIfChanged(
-    ProfileSyncSnapshot baseline,
-  ) {
+  Future<String?> patchPersonalDetailsIfChanged(ProfileSyncSnapshot baseline) {
     return patchOnboarding(
       OnboardingPatchModel.personalDetailsDiff(user, baseline),
     );
@@ -646,9 +636,7 @@ class UserController extends GetxController {
     GoalType goal,
     ProfileSyncSnapshot baseline,
   ) {
-    return patchOnboarding(
-      OnboardingPatchModel.goalDiff(goal, baseline),
-    );
+    return patchOnboarding(OnboardingPatchModel.goalDiff(goal, baseline));
   }
 
   Future<String?> patchGoalProfileIfChanged(ProfileSyncSnapshot baseline) {
@@ -742,6 +730,7 @@ class UserController extends GetxController {
   Future<void> finishOnboardingSetup() async {
     await _storage.saveOnboardingCompleted(completed: true);
     _notifyDashboard();
+    MainController.resetHomeTabIfRegistered();
     Get.offAllNamed(AppRoutes.main);
   }
 
@@ -834,7 +823,10 @@ class UserController extends GetxController {
     final gender = _readResponseString(personal, const ['gender']);
     if (gender != null) user.gender = gender;
 
-    final heightCm = _readResponseInt(personal, const ['heightCm', 'height_cm']);
+    final heightCm = _readResponseInt(personal, const [
+      'heightCm',
+      'height_cm',
+    ]);
     if (heightCm != null) user.heightCm = heightCm;
 
     final weight = _readResponseDouble(personal, const [
@@ -868,7 +860,10 @@ class UserController extends GetxController {
     if (goal is Map<String, dynamic>) yield goal;
   }
 
-  static String? _readResponseString(Map<String, dynamic> map, List<String> keys) {
+  static String? _readResponseString(
+    Map<String, dynamic> map,
+    List<String> keys,
+  ) {
     for (final key in keys) {
       final value = map[key];
       if (value is String && value.trim().isNotEmpty) return value.trim();
@@ -919,7 +914,10 @@ class UserController extends GetxController {
     return null;
   }
 
-  static double? _readResponseDouble(Map<String, dynamic> map, List<String> keys) {
+  static double? _readResponseDouble(
+    Map<String, dynamic> map,
+    List<String> keys,
+  ) {
     for (final key in keys) {
       final value = map[key];
       if (value is double) return value;
@@ -964,7 +962,9 @@ class UserController extends GetxController {
     );
 
     unawaited(
-      NotificationService.instance.syncTokenWithBackend(accessToken: accessToken),
+      NotificationService.instance.syncTokenWithBackend(
+        accessToken: accessToken,
+      ),
     );
   }
 
@@ -1011,11 +1011,9 @@ class UserController extends GetxController {
       if (accessToken.isEmpty) await loadAuthSession();
 
       if (accessToken.isEmpty) {
-        Get.snackbar(
-          'Delete failed',
+        AppSnackbar.error(
           'You are not signed in.',
-          snackPosition: SnackPosition.BOTTOM,
-          margin: const EdgeInsets.all(16),
+          title: 'Delete failed',
         );
         return false;
       }
@@ -1024,28 +1022,20 @@ class UserController extends GetxController {
       _clearInMemoryAuthState();
       user.resetToDefaults();
 
+      MainController.resetHomeTabIfRegistered();
       Get.offAllNamed(AppRoutes.login);
-      Get.snackbar(
-        'Account deleted',
+      AppSnackbar.success(
         'Your account and data have been permanently removed.',
-        snackPosition: SnackPosition.BOTTOM,
-        margin: const EdgeInsets.all(16),
+        title: 'Account deleted',
       );
       return true;
     } on AuthApiException catch (e) {
-      Get.snackbar(
-        'Delete failed',
-        e.message,
-        snackPosition: SnackPosition.BOTTOM,
-        margin: const EdgeInsets.all(16),
-      );
+      AppSnackbar.error(e.message, title: 'Delete failed');
       return false;
     } catch (e) {
-      Get.snackbar(
-        'Delete failed',
+      AppSnackbar.error(
         'Could not delete your account. Please try again.',
-        snackPosition: SnackPosition.BOTTOM,
-        margin: const EdgeInsets.all(16),
+        title: 'Delete failed',
       );
       return false;
     } finally {
@@ -1067,28 +1057,23 @@ class UserController extends GetxController {
       _clearInMemoryAuthState();
       user.resetToDefaults();
 
+      MainController.resetHomeTabIfRegistered();
       Get.offAllNamed(AppRoutes.login);
 
       if (result.backendRevoked) {
-        Get.snackbar(
-          'Logged out',
+        AppSnackbar.success(
           'You have been logged out successfully.',
-          snackPosition: SnackPosition.BOTTOM,
-          margin: const EdgeInsets.all(16),
+          title: 'Logged out',
         );
       } else if (result.hasBackendError) {
-        Get.snackbar(
-          'Logged out locally',
+        AppSnackbar.info(
           'Could not reach the server, but your session was cleared.',
-          snackPosition: SnackPosition.BOTTOM,
-          margin: const EdgeInsets.all(16),
+          title: 'Logged out locally',
         );
       } else {
-        Get.snackbar(
-          'Logged out',
+        AppSnackbar.success(
           'Your session was cleared.',
-          snackPosition: SnackPosition.BOTTOM,
-          margin: const EdgeInsets.all(16),
+          title: 'Logged out',
         );
       }
     } finally {
@@ -1114,12 +1099,12 @@ class PickTargetDateResult {
   const PickTargetDateResult._(this.status, [this.error]);
 
   const PickTargetDateResult.cancelled()
-      : this._(PickTargetDateStatus.cancelled);
+    : this._(PickTargetDateStatus.cancelled);
   const PickTargetDateResult.unchanged()
-      : this._(PickTargetDateStatus.unchanged);
+    : this._(PickTargetDateStatus.unchanged);
   const PickTargetDateResult.saved() : this._(PickTargetDateStatus.saved);
   const PickTargetDateResult.failed(String error)
-      : this._(PickTargetDateStatus.failed, error);
+    : this._(PickTargetDateStatus.failed, error);
 
   final PickTargetDateStatus status;
   final String? error;

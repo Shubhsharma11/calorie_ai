@@ -11,6 +11,7 @@ import '../models/onboarding_request_model.dart';
 import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
 
 class GoalSetupView extends StatefulWidget {
@@ -43,6 +44,7 @@ class _GoalSetupViewState extends State<GoalSetupView> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: const AppAppBar.backOnly(),
       body: GetBuilder<UserController>(
         builder: (_) {
           final selected = controller.user.goal;
@@ -52,7 +54,6 @@ class _GoalSetupViewState extends State<GoalSetupView> {
             content: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const _BackButton(),
                 SizedBox(height: r.scale(compact ? 4 : 8)),
                 _HeroSection(r: r, compact: compact),
                 SizedBox(height: r.scale(compact ? 16 : 20)),
@@ -105,45 +106,6 @@ class _GoalSetupViewState extends State<GoalSetupView> {
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  const _BackButton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Material(
-        color: AppColors.card,
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: Get.back,
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.border),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.shadowColor,
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Icon(
-              Icons.arrow_back_rounded,
-              size: 20,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -358,7 +320,7 @@ class _SelectionIndicator extends StatelessWidget {
         child: Icon(
           Icons.check_rounded,
           size: 16,
-          color: Colors.white,
+          color: AppColors.onPrimary,
         ),
       );
     }

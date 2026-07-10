@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
@@ -11,6 +12,10 @@ class MacroNutritionData {
     required this.progress,
     required this.color,
     required this.emoji,
+    this.lottieAsset,
+    this.lottieScale = 1.15,
+    this.lottieFit = BoxFit.contain,
+    this.lottieAlignment = Alignment.center,
   });
 
   final String label;
@@ -19,6 +24,10 @@ class MacroNutritionData {
   final double progress;
   final Color color;
   final String emoji;
+  final String? lottieAsset;
+  final double lottieScale;
+  final BoxFit lottieFit;
+  final Alignment lottieAlignment;
 }
 
 /// Unified macro card with three circular progress rings (Carbs, Fat, Protein).
@@ -40,14 +49,13 @@ class MacroNutritionCard extends StatelessWidget {
         horizontal: r.scale(12),
       ),
       decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -72,6 +80,8 @@ class _MacroColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = context.responsive;
     final ringSize = r.scale(64, tablet: 72, desktop: 80);
+    final strokeWidth = r.scale(6);
+    final innerSize = ringSize - strokeWidth * 2 - r.scale(4);
     final percent = (data.progress * 100).round().clamp(0, 999);
 
     return Column(
@@ -87,15 +97,38 @@ class _MacroColumn extends StatelessWidget {
                 height: ringSize,
                 child: CircularProgressIndicator(
                   value: data.progress.clamp(0.0, 1.0),
-                  strokeWidth: r.scale(6),
+                  strokeWidth: strokeWidth,
                   backgroundColor: AppColors.surface,
                   color: data.color,
                 ),
               ),
-              Text(
-                data.emoji,
-                style: TextStyle(fontSize: r.scale(24)),
-              ),
+              if (data.lottieAsset != null)
+                ClipOval(
+                  child: SizedBox(
+                    width: innerSize,
+                    height: innerSize,
+                    child: Transform.scale(
+                      scale: data.lottieScale,
+                      alignment: data.lottieAlignment,
+                      child: Lottie.asset(
+                        data.lottieAsset!,
+                        width: innerSize,
+                        height: innerSize,
+                        fit: data.lottieFit,
+                        repeat: true,
+                        errorBuilder: (_, __, ___) => Text(
+                          data.emoji,
+                          style: TextStyle(fontSize: r.scale(24)),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  data.emoji,
+                  style: TextStyle(fontSize: r.scale(24)),
+                ),
             ],
           ),
         ),

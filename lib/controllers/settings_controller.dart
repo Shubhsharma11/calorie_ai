@@ -17,6 +17,12 @@ class SettingsController extends GetxController {
   static const _lunchReminderKey = 'settings_lunch_reminder';
   static const _dinnerReminderKey = 'settings_dinner_reminder';
   static const _waterIntervalHoursKey = 'settings_water_interval_hours';
+  static const _waterGoalGlassesKey = 'settings_water_goal_glasses';
+  static const _waterGoalMlKey = 'settings_water_goal_ml';
+
+  static const int mlPerGlass = 250;
+  static const int defaultWaterGoalMl = 2000;
+  static const List<int> waterGoalMlOptions = [1500, 2000, 2500, 3000];
 
   final RxBool pushNotifications = true.obs;
   final RxBool mealReminders = true.obs;
@@ -37,6 +43,7 @@ class SettingsController extends GetxController {
     minute: 30,
   ).obs;
   final RxInt waterReminderIntervalHours = 2.obs;
+  final RxInt waterGoalMl = defaultWaterGoalMl.obs;
 
   @override
   void onInit() {
@@ -68,6 +75,19 @@ class SettingsController extends GetxController {
     );
     waterReminderIntervalHours.value =
         (prefs.getInt(_waterIntervalHoursKey) ?? 2).clamp(1, 4);
+    waterGoalMl.value = _resolveWaterGoalMl(prefs);
+  }
+
+  /// Reads the ml goal, migrating from the legacy glasses setting if needed.
+  int _resolveWaterGoalMl(SharedPreferences prefs) {
+    final storedMl = prefs.getInt(_waterGoalMlKey);
+    if (storedMl != null) return _normalizeWaterGoalMl(storedMl);
+
+    final legacyGlasses = prefs.getInt(_waterGoalGlassesKey);
+    if (legacyGlasses != null) {
+      return _normalizeWaterGoalMl(legacyGlasses * mlPerGlass);
+    }
+    return defaultWaterGoalMl;
   }
 
   Future<void> togglePushNotifications(bool value) async {
@@ -141,6 +161,18 @@ class SettingsController extends GetxController {
     );
   }
 
+  Future<void> setWaterGoalMl(int ml) async {
+    waterGoalMl.value = _normalizeWaterGoalMl(ml);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_waterGoalMlKey, waterGoalMl.value);
+  }
+
+  String get waterGoalSummary {
+    final ml = waterGoalMl.value;
+    final glasses = (ml / mlPerGlass).round();
+    return '$ml ml per day (~$glasses glasses)';
+  }
+
   String formatTime(BuildContext context, TimeOfDay time) {
     return time.format(context);
   }
@@ -155,6 +187,21 @@ class SettingsController extends GetxController {
   String get waterIntervalSummary {
     final hours = waterReminderIntervalHours.value;
     return hours == 1 ? 'Every hour' : 'Every $hours hours';
+  }
+
+  int _normalizeWaterGoalMl(int ml) {
+    if (waterGoalMlOptions.contains(ml)) return ml;
+    // Snap unknown values to the closest preset.
+    var closest = defaultWaterGoalMl;
+    var bestDistance = (ml - closest).abs();
+    for (final option in waterGoalMlOptions) {
+      final distance = (ml - option).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        closest = option;
+      }
+    }
+    return closest;
   }
 
   Future<void> _saveBool(String key, bool value) async {

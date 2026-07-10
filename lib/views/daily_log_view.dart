@@ -35,8 +35,12 @@ class DailyLogView extends GetView<FoodController> {
       final user = Get.find<UserController>().user;
       final dateLabel = formatLogDateLabel(logDate);
       final suggestion = controller.breakfastSuggestion;
-final showRepeat = controller.canRepeatYesterday &&
+      final lastMeals = controller.getLastLoggedMeals();
+      
+final showRepeat =
+    controller.canRepeatYesterday &&
     controller.showRepeatYesterdayCard.value;
+    
       final mealGap = r.scale(16);
 
       return ResponsivePage(
@@ -143,8 +147,9 @@ final showRepeat = controller.canRepeatYesterday &&
                         ),
                       )
                     : RepeatYesterdayCard(
-  mealCount: controller.yesterdayMealCount,
-  calories: 51294, // Temporary value
+  mealCount: controller.lastLoggedMealCount,
+  calories: controller.lastLoggedCalories,
+  dayLabel: controller.lastLoggedDayLabel,
   onRepeat: () {
     showModalBottomSheet(
       context: context,

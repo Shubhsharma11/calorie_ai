@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 
 import '../controllers/user_controller.dart';
 import '../core/app_snackbar.dart';
+import '../core/body_measurement_units.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/onboarding_request_model.dart';
@@ -24,10 +25,20 @@ class PersonalDetailsView extends StatefulWidget {
 class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   late final UserController _user = Get.find<UserController>();
   late final TextEditingController _ageCtrl;
-  late final TextEditingController _heightCtrl;
+  late final TextEditingController _heightCmCtrl;
+  late final TextEditingController _heightFeetCtrl;
+  late final TextEditingController _heightInchesCtrl;
   late final TextEditingController _weightCtrl;
   late String _gender;
-  late final ProfileSyncSnapshot _baseline;
+  late ProfileSyncSnapshot _baseline;
+
+  bool _heightUseCm = true;
+  bool _weightUseKg = true;
+
+  String? _ageError;
+  String? _genderError;
+  String? _heightError;
+  String? _weightError;
 
   static const _genders = ['Male', 'Female'];
   static const _ageIconAsset = 'assets/image/age.svg';
@@ -38,41 +49,214 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   @override
   void initState() {
     super.initState();
+    final fromProfile = RouteArgs.isEditingFromProfile;
     final u = _user.user;
-    _gender = u.gender;
-    _ageCtrl = TextEditingController(text: '${u.age}');
-    _heightCtrl = TextEditingController(text: '${u.heightCm}');
-    _weightCtrl = TextEditingController(text: '${u.weightKg}');
+
+    if (fromProfile) {
+      _gender = u.gender;
+      _ageCtrl = TextEditingController(text: '${u.age}');
+      _heightCmCtrl = TextEditingController(text: '${u.heightCm}');
+      final feetInches = BodyMeasurementUnits.feetInchesFromCm(u.heightCm);
+      _heightFeetCtrl = TextEditingController(text: '${feetInches.feet}');
+      _heightInchesCtrl = TextEditingController(text: '${feetInches.inches}');
+      _weightCtrl = TextEditingController(text: '${u.weightKg}');
+    } else {
+      _gender = '';
+      _ageCtrl = TextEditingController();
+      _heightCmCtrl = TextEditingController();
+      _heightFeetCtrl = TextEditingController();
+      _heightInchesCtrl = TextEditingController();
+      _weightCtrl = TextEditingController();
+    }
+
+    _ageCtrl.addListener(_clearAgeError);
+    _heightCmCtrl.addListener(_clearHeightError);
+    _heightFeetCtrl.addListener(_clearHeightError);
+    _heightInchesCtrl.addListener(_clearHeightError);
+    _weightCtrl.addListener(_clearWeightError);
+
     _baseline = _user.captureProfileSyncSnapshot();
+  }
+
+  void _clearAgeError() {
+    if (_ageError != null) setState(() => _ageError = null);
+  }
+
+  void _clearHeightError() {
+    if (_heightError != null) setState(() => _heightError = null);
+  }
+
+  void _clearWeightError() {
+    if (_weightError != null) setState(() => _weightError = null);
   }
 
   @override
   void dispose() {
     _ageCtrl.dispose();
-    _heightCtrl.dispose();
+    _heightCmCtrl.dispose();
+    _heightFeetCtrl.dispose();
+    _heightInchesCtrl.dispose();
     _weightCtrl.dispose();
     super.dispose();
   }
 
+  void _toggleHeightUnit(bool useCm) {
+    if (useCm == _heightUseCm) return;
+
+    if (useCm) {
+      final feet = int.tryParse(_heightFeetCtrl.text.trim());
+      final inches = int.tryParse(_heightInchesCtrl.text.trim());
+      if (feet != null &&
+          inches != null &&
+          _heightFeetCtrl.text.trim().isNotEmpty &&
+          _heightInchesCtrl.text.trim().isNotEmpty) {
+        _heightCmCtrl.text =
+            '${BodyMeasurementUnits.cmFromFeetInches(feet, inches)}';
+      } else {
+        _heightCmCtrl.clear();
+      }
+    } else {
+      final cm = int.tryParse(_heightCmCtrl.text.trim());
+      if (cm != null && _heightCmCtrl.text.trim().isNotEmpty) {
+        final converted = BodyMeasurementUnits.feetInchesFromCm(cm);
+        _heightFeetCtrl.text = '${converted.feet}';
+        _heightInchesCtrl.text = '${converted.inches}';
+      } else {
+        _heightFeetCtrl.clear();
+        _heightInchesCtrl.clear();
+      }
+    }
+
+    setState(() {
+      _heightUseCm = useCm;
+      _heightError = null;
+    });
+  }
+
+  void _toggleWeightUnit(bool useKg) {
+    if (useKg == _weightUseKg) return;
+
+    final text = _weightCtrl.text.trim();
+    if (text.isNotEmpty) {
+      final parsed = int.tryParse(text);
+      if (parsed != null) {
+        _weightCtrl.text = useKg
+            ? '${BodyMeasurementUnits.kgFromLbs(parsed.toDouble())}'
+            : '${BodyMeasurementUnits.lbsFromKg(parsed)}';
+      }
+    }
+
+    setState(() {
+      _weightUseKg = useKg;
+      _weightError = null;
+    });
+  }
+
+  int? _parseHeightCm() {
+    if (_heightUseCm) {
+      return int.tryParse(_heightCmCtrl.text.trim());
+    }
+
+    final feet = int.tryParse(_heightFeetCtrl.text.trim());
+    final inches = int.tryParse(_heightInchesCtrl.text.trim());
+    if (feet == null || inches == null) return null;
+    return BodyMeasurementUnits.cmFromFeetInches(feet, inches);
+  }
+
+  int? _parseWeightKg() {
+    final parsed = int.tryParse(_weightCtrl.text.trim());
+    if (parsed == null) return null;
+    return _weightUseKg
+        ? parsed
+        : BodyMeasurementUnits.kgFromLbs(parsed.toDouble());
+  }
+
+  bool _validateFields() {
+    final ageText = _ageCtrl.text.trim();
+
+    String? ageError;
+    String? genderError;
+    String? heightError;
+    String? weightError;
+
+    if (ageText.isEmpty) {
+      ageError = 'Enter your age';
+    } else {
+      final age = int.tryParse(ageText);
+      if (age == null || age < 1 || age > 100) {
+        ageError = 'Use an age between 1 and 100';
+      }
+    }
+
+    if (_gender.isEmpty) {
+      genderError = 'Select your gender';
+    }
+
+    if (_heightUseCm) {
+      final heightText = _heightCmCtrl.text.trim();
+      if (heightText.isEmpty) {
+        heightError = 'Enter your height';
+      } else {
+        final height = int.tryParse(heightText);
+        if (height == null || !BodyMeasurementUnits.isValidCm(height)) {
+          heightError = 'Use a height between 100 and 250 cm';
+        }
+      }
+    } else {
+      final feetText = _heightFeetCtrl.text.trim();
+      final inchesText = _heightInchesCtrl.text.trim();
+      if (feetText.isEmpty || inchesText.isEmpty) {
+        heightError = 'Enter your height in feet and inches';
+      } else {
+        final feet = int.tryParse(feetText);
+        final inches = int.tryParse(inchesText);
+        if (feet == null ||
+            inches == null ||
+            !BodyMeasurementUnits.isValidFeetInches(feet, inches)) {
+          heightError = 'Use a valid height (e.g. 5 ft 7 in)';
+        }
+      }
+    }
+
+    final weightText = _weightCtrl.text.trim();
+    if (weightText.isEmpty) {
+      weightError = 'Enter your weight';
+    } else {
+      final weight = int.tryParse(weightText);
+      if (weight == null) {
+        weightError = _weightUseKg
+            ? 'Use a weight between 30 and 300 kg'
+            : 'Use a weight between 66 and 661 lbs';
+      } else if (_weightUseKg) {
+        if (!BodyMeasurementUnits.isValidKg(weight)) {
+          weightError = 'Use a weight between 30 and 300 kg';
+        }
+      } else if (!BodyMeasurementUnits.isValidLbs(weight)) {
+        weightError = 'Use a weight between 66 and 661 lbs';
+      }
+    }
+
+    setState(() {
+      _ageError = ageError;
+      _genderError = genderError;
+      _heightError = heightError;
+      _weightError = weightError;
+    });
+
+    return ageError == null &&
+        genderError == null &&
+        heightError == null &&
+        weightError == null;
+  }
+
   Future<void> _save() async {
+    if (!_validateFields()) return;
+
+    final age = int.parse(_ageCtrl.text.trim());
+    final height = _parseHeightCm()!;
+    final weight = _parseWeightKg()!;
+
     final u = _user.user;
-    final age = int.tryParse(_ageCtrl.text);
-    final height = int.tryParse(_heightCtrl.text);
-    final weight = int.tryParse(_weightCtrl.text);
-
-    if (age == null || age < 1 || age > 100) {
-      _showError('Please enter a valid age between 1 and 100.');
-      return;
-    }
-    if (height == null || height < 100 || height > 250) {
-      _showError('Please enter a valid height between 100 and 250 cm.');
-      return;
-    }
-    if (weight == null || weight < 30 || weight > 300) {
-      _showError('Please enter a valid weight between 30 and 300 kg.');
-      return;
-    }
-
     u.age = age;
     u.gender = _gender;
     u.heightCm = height;
@@ -88,7 +272,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       final error = await _user.patchOnboarding(patch);
       if (!mounted) return;
       if (error != null) {
-        _showError(error);
+        AppSnackbar.error(error);
         return;
       }
 
@@ -102,10 +286,6 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       _user.syncWeightFromProfile();
       Get.toNamed(AppRoutes.goalSetup);
     }
-  }
-
-  void _showError(String message) {
-    AppSnackbar.error(message);
   }
 
   @override
@@ -128,10 +308,12 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
               iconWidget: SvgPicture.asset(_ageIconAsset, fit: BoxFit.contain),
               label: 'Age',
               subtitle: 'Enter your age',
+              errorText: _ageError,
               child: _NumberInput(
                 controller: _ageCtrl,
                 unit: 'years',
                 maxLength: 3,
+                hasError: _ageError != null,
               ),
             ),
             SizedBox(height: r.scale(12)),
@@ -142,10 +324,15 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
               ),
               label: 'Gender',
               subtitle: 'Select your gender',
+              errorText: _genderError,
               child: _GenderToggle(
                 value: _gender,
                 options: _genders,
-                onChanged: (g) => setState(() => _gender = g),
+                hasError: _genderError != null,
+                onChanged: (g) => setState(() {
+                  _gender = g;
+                  _genderError = null;
+                }),
               ),
             ),
             SizedBox(height: r.scale(12)),
@@ -156,10 +343,14 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
               ),
               label: 'Height',
               subtitle: 'Enter your height',
-              child: _NumberInput(
-                controller: _heightCtrl,
-                unit: 'cm',
-                maxLength: 3,
+              errorText: _heightError,
+              child: _HeightInput(
+                useCm: _heightUseCm,
+                cmController: _heightCmCtrl,
+                feetController: _heightFeetCtrl,
+                inchesController: _heightInchesCtrl,
+                hasError: _heightError != null,
+                onUnitTap: () => _toggleHeightUnit(!_heightUseCm),
               ),
             ),
             SizedBox(height: r.scale(12)),
@@ -170,10 +361,13 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
               ),
               label: 'Weight',
               subtitle: 'Enter your current weight',
+              errorText: _weightError,
               child: _NumberInput(
                 controller: _weightCtrl,
-                unit: 'kg',
+                unit: _weightUseKg ? 'kg' : 'lbs',
                 maxLength: 3,
+                hasError: _weightError != null,
+                onUnitTap: () => _toggleWeightUnit(!_weightUseKg),
               ),
             ),
           ],
@@ -308,6 +502,7 @@ class _DetailCard extends StatelessWidget {
     required this.label,
     required this.subtitle,
     required this.child,
+    this.errorText,
   }) : assert(icon != null || iconWidget != null);
 
   final IconData? icon;
@@ -315,10 +510,12 @@ class _DetailCard extends StatelessWidget {
   final String label;
   final String subtitle;
   final Widget child;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final hasError = errorText != null;
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -328,7 +525,11 @@ class _DetailCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+        border: Border.all(
+          color: hasError
+              ? AppColors.error.withValues(alpha: 0.45)
+              : AppColors.border.withValues(alpha: 0.7),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -338,20 +539,22 @@ class _DetailCard extends StatelessWidget {
         ],
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (iconWidget != null)
-            SizedBox(width: 40, height: 40, child: iconWidget)
-          else
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 20, color: AppColors.primary),
-            ),
+          Padding(
+            padding: EdgeInsets.only(top: r.scale(2)),
+            child: iconWidget != null
+                ? SizedBox(width: 40, height: 40, child: iconWidget)
+                : Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: 20, color: AppColors.primary),
+                  ),
+          ),
           SizedBox(width: r.scale(12)),
           Expanded(
             child: Column(
@@ -367,19 +570,126 @@ class _DetailCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  subtitle,
+                  hasError ? errorText! : subtitle,
                   style: TextStyle(
                     fontSize: r.scale(11, tablet: 12),
-                    color: AppColors.textSecondary,
+                    color: hasError ? AppColors.error : AppColors.textSecondary,
                     height: 1.3,
+                    fontWeight: hasError ? FontWeight.w500 : FontWeight.normal,
                   ),
                 ),
               ],
             ),
           ),
           SizedBox(width: r.scale(8)),
-          child,
+          Padding(
+            padding: EdgeInsets.only(top: r.scale(2)),
+            child: child,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _HeightInput extends StatelessWidget {
+  const _HeightInput({
+    required this.useCm,
+    required this.cmController,
+    required this.feetController,
+    required this.inchesController,
+    required this.hasError,
+    required this.onUnitTap,
+  });
+
+  final bool useCm;
+  final TextEditingController cmController;
+  final TextEditingController feetController;
+  final TextEditingController inchesController;
+  final bool hasError;
+  final VoidCallback onUnitTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    if (useCm) {
+      return _NumberInput(
+        controller: cmController,
+        unit: 'cm',
+        maxLength: 3,
+        hasError: hasError,
+        onUnitTap: onUnitTap,
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _NumberInput(
+          controller: feetController,
+          maxLength: 1,
+          hasError: hasError,
+          showUnitLabel: false,
+          width: r.scale(40),
+        ),
+        SizedBox(width: r.scale(4)),
+        _NumberInput(
+          controller: inchesController,
+          maxLength: 2,
+          hasError: hasError,
+          showUnitLabel: false,
+          width: r.scale(46),
+        ),
+        const SizedBox(width: 6),
+        _UnitLabel(
+          label: 'ft/in',
+          onTap: onUnitTap,
+        ),
+      ],
+    );
+  }
+}
+
+class _UnitLabel extends StatelessWidget {
+  const _UnitLabel({
+    required this.label,
+    this.onTap,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    final text = Text(
+      label,
+      style: TextStyle(
+        fontSize: r.scale(11, tablet: 12),
+        color: onTap != null ? AppColors.primary : AppColors.textSecondary,
+        fontWeight: onTap != null ? FontWeight.w600 : FontWeight.w500,
+      ),
+    );
+
+    if (onTap == null) return text;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: r.scale(10),
+          vertical: r.scale(10),
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: text,
       ),
     );
   }
@@ -388,72 +698,80 @@ class _DetailCard extends StatelessWidget {
 class _NumberInput extends StatelessWidget {
   const _NumberInput({
     required this.controller,
-    required this.unit,
     required this.maxLength,
+    this.unit = '',
+    this.hasError = false,
+    this.showUnitLabel = true,
+    this.width,
+    this.onUnitTap,
   });
 
   final TextEditingController controller;
   final String unit;
   final int maxLength;
+  final bool hasError;
+  final bool showUnitLabel;
+  final double? width;
+  final VoidCallback? onUnitTap;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
     const fieldRadius = 10.0;
+    final borderColor =
+        hasError ? AppColors.error.withValues(alpha: 0.65) : AppColors.border;
+    final fieldWidth = width ?? r.scale(52);
+
+    final field = SizedBox(
+      width: fieldWidth,
+      child: TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        maxLength: maxLength,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: r.scale(14, tablet: 15),
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+        ),
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: AppColors.surface,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 10,
+          ),
+          counterText: '',
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(fieldRadius),
+            borderSide: BorderSide(color: borderColor),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(fieldRadius),
+            borderSide: BorderSide(
+              color: hasError ? AppColors.error : AppColors.primary,
+              width: 1.5,
+            ),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(fieldRadius),
+            borderSide: BorderSide(color: borderColor),
+          ),
+        ),
+      ),
+    );
+
+    if (!showUnitLabel || unit.isEmpty) return field;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
-          width: r.scale(52),
-          child: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            maxLength: maxLength,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: r.scale(14, tablet: 15),
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.surface,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 10,
-              ),
-              counterText: '',
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(fieldRadius),
-                borderSide: BorderSide(color: AppColors.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(fieldRadius),
-                borderSide: const BorderSide(
-                  color: AppColors.primary,
-                  width: 1.5,
-                ),
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(fieldRadius),
-                borderSide: BorderSide(color: AppColors.border),
-              ),
-            ),
-          ),
-        ),
+        field,
         const SizedBox(width: 6),
-        Text(
-          unit,
-          style: TextStyle(
-            fontSize: r.scale(11, tablet: 12),
-            color: AppColors.textSecondary,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        _UnitLabel(label: unit, onTap: onUnitTap),
       ],
     );
   }
@@ -464,15 +782,20 @@ class _GenderToggle extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.hasError = false,
   });
 
   final String value;
   final List<String> options;
   final ValueChanged<String> onChanged;
+  final bool hasError;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final idleBorder = hasError
+        ? AppColors.error.withValues(alpha: 0.65)
+        : AppColors.border;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -494,7 +817,7 @@ class _GenderToggle extends StatelessWidget {
                   color: AppColors.background,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: selected ? AppColors.primary : AppColors.border,
+                    color: selected ? AppColors.primary : idleBorder,
                     width: selected ? 1.5 : 1,
                   ),
                 ),

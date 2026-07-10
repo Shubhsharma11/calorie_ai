@@ -25,9 +25,13 @@ class GoalProgressBanner extends StatelessWidget {
       goal: goal,
       progressPercent: progressPercent,
     );
+    final accentColor =
+        message.isOverGoal ? AppColors.warning : AppColors.primary;
+    final accentDark =
+        message.isOverGoal ? AppColors.warning : AppColors.primaryDark;
 
     return Material(
-      color: AppColors.primary.withValues(alpha: 0.12),
+      color: accentColor.withValues(alpha: 0.12),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -39,13 +43,13 @@ class GoalProgressBanner extends StatelessWidget {
               Container(
                 width: 44,
                 height: 44,
-                decoration: const BoxDecoration(
-                  color: AppColors.primaryDark,
+                decoration: BoxDecoration(
+                  color: accentDark,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   message.icon,
-                  color: Colors.white,
+                  color: AppColors.onPrimary,
                   size: 24,
                 ),
               ),
@@ -62,7 +66,7 @@ class GoalProgressBanner extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
-                          color: AppColors.primaryDark,
+                          color: accentDark,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -80,7 +84,7 @@ class GoalProgressBanner extends StatelessWidget {
               ),
               Icon(
                 Icons.chevron_right_rounded,
-                color: AppColors.primary,
+                color: accentColor,
                 size: 22,
               ),
             ],

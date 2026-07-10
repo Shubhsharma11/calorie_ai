@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../controllers/user_controller.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
 
 class AiNutritionPlanView extends StatelessWidget {
@@ -16,15 +17,23 @@ class AiNutritionPlanView extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: ResponsivePage(
-          scrollable: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const _PlanTopBar(),
-              SizedBox(height: r.scale(14)),
-              _PlanSummaryCard(
+      appBar: AppAppBar(
+        title: 'AI Nutrition Plan',
+        actions: [
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.ios_share_rounded),
+            tooltip: 'Share',
+          ),
+        ],
+      ),
+      body: ResponsivePage(
+        scrollable: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: r.scale(8)),
+            _PlanSummaryCard(
                 calories: user.dailyCalorieGoal,
                 protein: user.proteinGoalG,
                 carbs: user.carbsGoalG,
@@ -79,58 +88,8 @@ class AiNutritionPlanView extends StatelessWidget {
                   ),
                 ],
               ),
-              SizedBox(height: r.scale(12)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlanTopBar extends StatelessWidget {
-  const _PlanTopBar();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _RoundActionButton(icon: Icons.arrow_back_rounded, onTap: Get.back),
-        const Spacer(),
-        Text(
-          'AI Nutrition Plan',
-          style: TextStyle(
-            fontSize: context.responsive.scale(18, tablet: 20),
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const Spacer(),
-        _RoundActionButton(icon: Icons.ios_share_rounded, onTap: () {}),
-      ],
-    );
-  }
-}
-
-class _RoundActionButton extends StatelessWidget {
-  const _RoundActionButton({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(icon, size: 21, color: AppColors.textPrimary),
+            SizedBox(height: r.scale(12)),
+          ],
         ),
       ),
     );

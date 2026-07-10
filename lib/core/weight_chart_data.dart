@@ -48,6 +48,16 @@ enum WeightChartPeriod {
         WeightChartPeriod.year => null,
         WeightChartPeriod.custom => null,
       };
+
+  /// Query value for `GET /api/v1/weight?period=…` (null for custom ranges).
+  String? get apiPeriod => switch (this) {
+        WeightChartPeriod.today => 'today',
+        WeightChartPeriod.week => '1week',
+        WeightChartPeriod.twoWeeks => '2week',
+        WeightChartPeriod.month => '1month',
+        WeightChartPeriod.year => '1year',
+        WeightChartPeriod.custom => null,
+      };
 }
 
 class WeightChartCustomRange {

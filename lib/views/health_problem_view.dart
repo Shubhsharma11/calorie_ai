@@ -11,6 +11,7 @@ import '../models/onboarding_request_model.dart';
 import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
 
 class HealthProblemView extends StatefulWidget {
@@ -253,6 +254,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: const AppAppBar.backOnly(),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: () => FocusScope.of(context).unfocus(),
@@ -261,7 +263,6 @@ class _HealthProblemViewState extends State<HealthProblemView> {
           content: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const _BackButton(),
               SizedBox(height: r.scale(compact ? 8 : 14)),
               _HeroSection(r: r, compact: compact),
               SizedBox(height: r.scale(compact ? 18 : 24)),
@@ -624,7 +625,7 @@ class _SelectionIndicator extends StatelessWidget {
           color: AppColors.primary,
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.check_rounded, size: 16, color: Colors.white),
+        child: const Icon(Icons.check_rounded, size: 16, color: AppColors.onPrimary),
       );
     }
 
@@ -794,45 +795,6 @@ class _NoneOption extends StatelessWidget {
               SizedBox(width: r.scale(8)),
               _SelectionIndicator(selected: selected),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  const _BackButton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Material(
-        color: AppColors.card,
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: Get.back,
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.border),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.shadowColor,
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Icon(
-              Icons.arrow_back_rounded,
-              size: 20,
-              color: AppColors.textPrimary,
-            ),
           ),
         ),
       ),
@@ -1125,7 +1087,7 @@ class _CategoryCard extends StatelessWidget {
                     child: Icon(
                       Icons.check_rounded,
                       size: r.scale(11),
-                      color: Colors.white,
+                      color: AppColors.onPrimary,
                     ),
                   ),
                 ),

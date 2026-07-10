@@ -7,6 +7,7 @@ import '../models/food_item.dart';
 import '../models/meal_type.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/food_emoji_avatar.dart';
 import '../widgets/filter_chip_pill.dart';
 import '../widgets/primary_button.dart';
@@ -20,7 +21,7 @@ class FoodDetailsView extends GetView<FoodController> {
     final args = Get.arguments;
     if (args is! FoodItem) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Food')),
+        appBar: const AppAppBar(title: 'Food'),
         body: Center(
           child: TextButton(
             onPressed: () => Get.back(),
@@ -33,8 +34,8 @@ class FoodDetailsView extends GetView<FoodController> {
     final food = args;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(food.name),
+      appBar: AppAppBar(
+        title: food.name,
         actions: [
           Obx(() {
             final isFavorite = controller.isFavoriteFood(
@@ -163,14 +164,18 @@ class FoodDetailsView extends GetView<FoodController> {
             const SizedBox(height: 32),
             PrimaryButton(
               label: 'Add to Log',
-              onPressed: () {
-                controller.addToLog(food);
-                if (Get.previousRoute == AppRoutes.addFood) {
-                  Get.close(2);
-                } else {
-                  Get.back();
-                }
-              },
+             onPressed: () {
+  controller.addToLog(food);
+
+  // Switch the diary back to today's date.
+  controller.setSelectedLogDate(DateTime.now());
+
+  if (Get.previousRoute == AppRoutes.addFood) {
+    Get.close(2);
+  } else {
+    Get.back();
+  }
+},
             ),
             SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
           ],

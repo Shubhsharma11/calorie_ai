@@ -19,6 +19,7 @@ import '../views/daily_calorie_goal_view.dart';
 import '../views/daily_summary_view.dart';
 import '../views/health_problem_view.dart';
 import '../controllers/daily_summary_controller.dart';
+import '../views/create_meal_view.dart';
 import '../views/edit_meal_view.dart';
 import '../views/food_details_view.dart';
 import '../views/goal_setup_view.dart';
@@ -134,6 +135,11 @@ abstract final class AppPages {
       binding: HomeBinding(),
     ),
     AppPageTransitions.getPage(
+      name: AppRoutes.createMeal,
+      page: () => const CreateMealView(),
+      binding: HomeBinding(),
+    ),
+    AppPageTransitions.getPage(
       name: AppRoutes.foodDetails,
       page: () => const FoodDetailsView(),
       binding: HomeBinding(),
@@ -152,8 +158,11 @@ abstract final class AppPages {
       name: AppRoutes.waterTracker,
       page: () => const WaterTrackerView(),
       binding: BindingsBuilder(() {
+        if (!Get.isRegistered<SettingsController>()) {
+          Get.put(SettingsController(), permanent: true);
+        }
         if (!Get.isRegistered<TrackerController>()) {
-          Get.lazyPut(TrackerController.new);
+          Get.put(TrackerController(), permanent: true);
         }
       }),
     ),
@@ -176,7 +185,11 @@ abstract final class AppPages {
     AppPageTransitions.getPage(
       name: AppRoutes.settings,
       page: () => const SettingsView(),
-      binding: BindingsBuilder(() => Get.lazyPut(SettingsController.new)),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<SettingsController>()) {
+          Get.put(SettingsController(), permanent: true);
+        }
+      }),
     ),
     AppPageTransitions.getPage(
       name: AppRoutes.notifications,

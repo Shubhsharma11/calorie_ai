@@ -19,6 +19,7 @@ abstract final class AppRoutes {
   /// Alias for main (older home route name).
   static const home = main;
   static const addFood = '/add-food';
+  static const createMeal = '/create-meal';
   static const foodDetails = '/food-details';
   static const editMeal = '/edit-meal';
   static const progress = '/progress';

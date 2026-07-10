@@ -12,6 +12,7 @@ import '../models/onboarding_request_model.dart';
 import '../models/profile_sync_snapshot.dart';
 import '../models/user_model.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/primary_button.dart';
 
 class PersonalInformationView extends StatefulWidget {
@@ -27,7 +28,8 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
   late ProfileSyncSnapshot _baseline;
   bool _isSaving = false;
 
-  static const _valueBackground = Color(0xFFF5F7F6);
+  static Color _valueBackground(BuildContext context) =>
+      AppColors.surfaceOf(context);
 
   @override
   void initState() {
@@ -138,7 +140,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: AppColors.textPrimaryOf(context),
                   ),
                 ),
               ),
@@ -239,7 +241,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
                   style: TextStyle(
                     fontSize: r.scale(17, tablet: 18),
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: AppColors.textPrimaryOf(context),
                   ),
                 ),
                 SizedBox(height: r.scale(14)),
@@ -303,10 +305,12 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.backgroundOf(context),
+      appBar: const AppAppBar(title: 'Personal Information'),
       body: GetBuilder<UserController>(
         builder: (_) {
           final user = _userController.user;
@@ -319,14 +323,21 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
                 child: SingleChildScrollView(
                   padding: EdgeInsets.fromLTRB(
                     r.scale(20, tablet: 28),
-                    0,
+                    r.scale(12),
                     r.scale(20, tablet: 28),
                     r.scale(24),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _PersonalInfoHeader(r: r),
+                      Text(
+                        'Update your personal details',
+                        style: TextStyle(
+                          fontSize: r.scale(13, tablet: 14),
+                          color: AppColors.textSecondaryOf(context),
+                          height: 1.35,
+                        ),
+                      ),
                       SizedBox(height: r.scale(24)),
                       _SectionLabel(title: 'BASIC DETAILS'),
                       SizedBox(height: r.scale(10)),
@@ -407,60 +418,6 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
   }
 }
 
-class _PersonalInfoHeader extends StatelessWidget {
-  const _PersonalInfoHeader({required this.r});
-
-  final Responsive r;
-
-  @override
-  Widget build(BuildContext context) {
-    final topInset = MediaQuery.paddingOf(context).top;
-
-    return Padding(
-      padding: EdgeInsets.only(top: topInset + r.scale(8)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          IconButton(
-            onPressed: Get.back,
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-            color: AppColors.textPrimary,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-          ),
-          SizedBox(width: r.scale(4)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Personal Information',
-                  style: TextStyle(
-                    fontSize: r.scale(22, tablet: 24),
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                    letterSpacing: -0.3,
-                    height: 1.15,
-                  ),
-                ),
-                SizedBox(height: r.scale(4)),
-                Text(
-                  'Update your personal details',
-                  style: TextStyle(
-                    fontSize: r.scale(13, tablet: 14),
-                    color: AppColors.textSecondary,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel({required this.title});
 
@@ -486,7 +443,7 @@ class _SectionLabel extends StatelessWidget {
           style: TextStyle(
             fontSize: r.scale(12, tablet: 13),
             fontWeight: FontWeight.w700,
-            color: AppColors.textSecondary,
+            color: AppColors.textSecondaryOf(context),
             letterSpacing: 0.8,
           ),
         ),
@@ -518,7 +475,7 @@ class _InfoRow extends StatelessWidget {
     final displayValue = unit == null ? value : '$value $unit';
 
     return Material(
-      color: AppColors.card,
+      color: AppColors.cardOf(context),
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -553,7 +510,7 @@ class _InfoRow extends StatelessWidget {
                       style: TextStyle(
                         fontSize: r.scale(15, tablet: 16),
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: AppColors.textPrimaryOf(context),
                       ),
                     ),
                     SizedBox(height: r.scale(2)),
@@ -561,7 +518,7 @@ class _InfoRow extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: r.scale(12, tablet: 13),
-                        color: AppColors.textSecondary,
+                        color: AppColors.textSecondaryOf(context),
                         height: 1.3,
                       ),
                     ),
@@ -580,7 +537,7 @@ class _InfoRow extends StatelessWidget {
                     vertical: r.scale(9),
                   ),
                   decoration: BoxDecoration(
-                    color: _PersonalInformationViewState._valueBackground,
+                    color: _PersonalInformationViewState._valueBackground(context),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: AppColors.border.withValues(alpha: 0.65),
@@ -602,7 +559,7 @@ class _InfoRow extends StatelessWidget {
                           style: TextStyle(
                             fontSize: r.scale(13, tablet: 14),
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary.withValues(alpha: 0.82),
+                            color: AppColors.textPrimaryOf(context).withValues(alpha: 0.82),
                           ),
                         ),
                       ),
@@ -610,7 +567,7 @@ class _InfoRow extends StatelessWidget {
                       Icon(
                         Icons.chevron_right_rounded,
                         size: r.scale(18),
-                        color: AppColors.textSecondary.withValues(alpha: 0.75),
+                        color: AppColors.textSecondaryOf(context).withValues(alpha: 0.75),
                       ),
                     ],
                   ),
@@ -678,7 +635,7 @@ class _WhyWeNeedThisCard extends StatelessWidget {
                       'This helps us personalize your calorie goal and recommendations.',
                       style: TextStyle(
                         fontSize: r.scale(13, tablet: 14),
-                        color: AppColors.textSecondary,
+                        color: AppColors.textSecondaryOf(context),
                         height: 1.45,
                       ),
                     ),
@@ -720,7 +677,7 @@ class _ActivityOptionTile extends StatelessWidget {
     final r = context.responsive;
 
     return Material(
-      color: AppColors.card,
+      color: AppColors.cardOf(context),
       borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -750,7 +707,7 @@ class _ActivityOptionTile extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: selected
                             ? AppColors.primary
-                            : AppColors.textPrimary,
+                            : AppColors.textPrimaryOf(context),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -758,7 +715,7 @@ class _ActivityOptionTile extends StatelessWidget {
                       level.description,
                       style: TextStyle(
                         fontSize: r.scale(12),
-                        color: AppColors.textSecondary,
+                        color: AppColors.textSecondaryOf(context),
                         height: 1.3,
                       ),
                     ),
@@ -769,7 +726,7 @@ class _ActivityOptionTile extends StatelessWidget {
                 selected
                     ? Icons.radio_button_checked_rounded
                     : Icons.radio_button_off_rounded,
-                color: selected ? AppColors.primary : AppColors.textSecondary,
+                color: selected ? AppColors.primary : AppColors.textSecondaryOf(context),
                 size: r.scale(22),
               ),
             ],

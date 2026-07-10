@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
+import '../controllers/theme_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
@@ -14,122 +15,125 @@ import '../widgets/profile_avatar.dart';
 class ProfileView extends GetView<UserController> {
   const ProfileView({super.key});
 
-  static const _pageBackground = Color(0xFFF5F5F5);
-  static const _emailColor = Color(0xFF757575);
-  static const _iconBackground = Color(0xFFE8F5E9);
-  static const _iconColor = Color(0xFF2E7D32);
-
   @override
   Widget build(BuildContext context) {
-    final r = context.responsive;
-    final horizontalPadding = r.scale(20, tablet: 28, desktop: 32);
+    return Obx(() {
+      final _ = Get.find<ThemeController>().themeMode.value;
+      AppColors.syncFromContext(context);
 
-    return ColoredBox(
-      color: _pageBackground,
-      child: GetBuilder<UserController>(
-        builder: (ctrl) {
-          return SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _ProfileHeader(
-                  user: ctrl.user,
-                  onAvatarTap: () => ctrl.showProfilePhotoOptions(context),
-                ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    r.scale(18),
-                    horizontalPadding,
-                    r.scale(28),
+      final r = context.responsive;
+      final horizontalPadding = r.scale(20, tablet: 28, desktop: 32);
+
+      return ColoredBox(
+        color: AppColors.background,
+        child: GetBuilder<UserController>(
+          builder: (ctrl) {
+            return SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _ProfileHeader(
+                    user: ctrl.user,
+                    onAvatarTap: () => ctrl.showProfilePhotoOptions(context),
                   ),
-                  child: Column(
-                    children: [
-                      _ProfileMenuRow(
-                        icon: Icons.person_outline_rounded,
-                        title: 'Personal Information',
-                        onTap: () => Get.toNamed(AppRoutes.personalInformation),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.track_changes_rounded,
-                        title: 'My Goals',
-                        onTap: () => Get.toNamed(AppRoutes.myGoals),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.medical_information_outlined,
-                        title: 'Health Concerns',
-                        subtitle: _healthConcernsSummary(ctrl.user),
-                        onTap: () => Get.toNamed(
-                          AppRoutes.healthProblem,
-                          arguments: RouteArgs.fromProfileMap,
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPadding,
+                      r.scale(18),
+                      horizontalPadding,
+                      r.scale(28),
+                    ),
+                    child: Column(
+                      children: [
+                        _ProfileMenuRow(
+                          icon: Icons.person_outline_rounded,
+                          title: 'Personal Information',
+                          onTap: () =>
+                              Get.toNamed(AppRoutes.personalInformation),
                         ),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.headset_mic_outlined,
-                        title: 'Help & Support',
-                        onTap: () => Get.toNamed(AppRoutes.helpSupport),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.settings_outlined,
-                        title: 'Settings',
-                        onTap: () => Get.toNamed(AppRoutes.settings),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.description_outlined,
-                        title: 'Terms of Service',
-                        onTap: () => _showTerms(context),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.share_outlined,
-                        title: 'Share App',
-                        onTap: () => _shareApp(context),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.delete_outline_rounded,
-                        title: 'Delete Account',
-                        onTap: ctrl.isDeletingAccount || ctrl.isLoggingOut
-                            ? null
-                            : () => _confirmDeleteAccount(context, ctrl),
-                        showChevron: !ctrl.isDeletingAccount,
-                        trailing: ctrl.isDeletingAccount
-                            ? SizedBox(
-                                width: r.scale(20),
-                                height: r.scale(20),
-                                child: const CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : null,
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.logout_rounded,
-                        title: 'Logout',
-                        onTap: ctrl.isLoggingOut
-                            ? null
-                            : () => _confirmLogout(context, ctrl),
-                        showChevron: !ctrl.isLoggingOut,
-                        trailing: ctrl.isLoggingOut
-                            ? SizedBox(
-                                width: r.scale(20),
-                                height: r.scale(20),
-                                child: const CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: _iconColor,
-                                ),
-                              )
-                            : null,
-                      ),
-                      SizedBox(height: r.scale(10)),
-                      const _FollowUsFooter(),
-                    ],
+                        _ProfileMenuRow(
+                          icon: Icons.track_changes_rounded,
+                          title: 'My Goals',
+                          onTap: () => Get.toNamed(AppRoutes.myGoals),
+                        ),
+                        _ProfileMenuRow(
+                          icon: Icons.medical_information_outlined,
+                          title: 'Health Concerns',
+                          subtitle: _healthConcernsSummary(ctrl.user),
+                          onTap: () => Get.toNamed(
+                            AppRoutes.healthProblem,
+                            arguments: RouteArgs.fromProfileMap,
+                          ),
+                        ),
+                        _ProfileMenuRow(
+                          icon: Icons.headset_mic_outlined,
+                          title: 'Help & Support',
+                          onTap: () => Get.toNamed(AppRoutes.helpSupport),
+                        ),
+                        _ProfileMenuRow(
+                          icon: Icons.settings_outlined,
+                          title: 'Settings',
+                          onTap: () => Get.toNamed(AppRoutes.settings),
+                        ),
+                        _ProfileMenuRow(
+                          icon: Icons.description_outlined,
+                          title: 'Terms of Service',
+                          onTap: () => _showTerms(context),
+                        ),
+                        _ProfileMenuRow(
+                          icon: Icons.share_outlined,
+                          title: 'Share App',
+                          onTap: () => _shareApp(context),
+                        ),
+                        _ProfileMenuRow(
+                          icon: Icons.delete_outline_rounded,
+                          title: 'Delete Account',
+                          destructive: true,
+                          onTap: ctrl.isDeletingAccount || ctrl.isLoggingOut
+                              ? null
+                              : () => _confirmDeleteAccount(context, ctrl),
+                          showChevron: !ctrl.isDeletingAccount,
+                          trailing: ctrl.isDeletingAccount
+                              ? SizedBox(
+                                  width: r.scale(20),
+                                  height: r.scale(20),
+                                  child: const CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.error,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        _ProfileMenuRow(
+                          icon: Icons.logout_rounded,
+                          title: 'Logout',
+                          onTap: ctrl.isLoggingOut
+                              ? null
+                              : () => _confirmLogout(context, ctrl),
+                          showChevron: !ctrl.isLoggingOut,
+                          trailing: ctrl.isLoggingOut
+                              ? SizedBox(
+                                  width: r.scale(20),
+                                  height: r.scale(20),
+                                  child: const CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.primary,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        SizedBox(height: r.scale(10)),
+                        const _FollowUsFooter(),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    });
   }
 
   String _healthConcernsSummary(UserModel user) {
@@ -250,6 +254,7 @@ class _ProfileHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = context.responsive;
     final topInset = MediaQuery.paddingOf(context).top;
+    final isDark = AppColors.isDark(context);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -262,14 +267,19 @@ class _ProfileHeader extends StatelessWidget {
             r.scale(20, tablet: 28, desktop: 32),
             r.scale(24, tablet: 28),
           ),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFFE8F5E9),
-                Color(0xFFF5F5F5),
-              ],
+              colors: isDark
+                  ? [
+                      AppColors.darkHeaderWash,
+                      AppColors.background,
+                    ]
+                  : const [
+                      Color(0xFFE8F5E9),
+                      Color(0xFFF5F5F5),
+                    ],
             ),
           ),
           child: Column(
@@ -302,7 +312,7 @@ class _ProfileHeader extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: r.scale(13, tablet: 14),
-                  color: ProfileView._emailColor,
+                  color: AppColors.textSecondary,
                   fontWeight: FontWeight.w500,
                   height: 1.3,
                 ),
@@ -334,6 +344,7 @@ class _ProfileMenuRow extends StatelessWidget {
     this.subtitle,
     this.showChevron = true,
     this.trailing,
+    this.destructive = false,
   });
 
   final IconData icon;
@@ -342,15 +353,17 @@ class _ProfileMenuRow extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showChevron;
   final Widget? trailing;
+  final bool destructive;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final accent = destructive ? AppColors.error : AppColors.iconAccent;
 
     return Padding(
       padding: EdgeInsets.only(bottom: r.scale(10)),
       child: Material(
-        color: Colors.white,
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(14),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -362,9 +375,12 @@ class _ProfileMenuRow extends StatelessWidget {
             ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.border.withValues(alpha: 0.55),
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
+                  color: AppColors.shadowColor,
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -376,12 +392,12 @@ class _ProfileMenuRow extends StatelessWidget {
                   width: r.scale(42, tablet: 44),
                   height: r.scale(42, tablet: 44),
                   decoration: BoxDecoration(
-                    color: ProfileView._iconBackground,
+                    color: accent.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     icon,
-                    color: ProfileView._iconColor,
+                    color: accent,
                     size: r.scale(22),
                   ),
                 ),
@@ -395,7 +411,9 @@ class _ProfileMenuRow extends StatelessWidget {
                         style: TextStyle(
                           fontSize: r.scale(15, tablet: 16),
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                          color: destructive
+                              ? AppColors.error
+                              : AppColors.textPrimary,
                         ),
                       ),
                       if (subtitle != null) ...[
@@ -438,6 +456,7 @@ class _FollowUsFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final isDark = AppColors.isDark(context);
 
     return Container(
       width: double.infinity,
@@ -447,13 +466,18 @@ class _FollowUsFooter extends StatelessWidget {
         vertical: r.scale(24),
       ),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFFF3F7F4),
-            Color(0xFFEEF3EF),
-          ],
+          colors: isDark
+              ? [
+                  AppColors.darkSurface,
+                  AppColors.card,
+                ]
+              : const [
+                  Color(0xFFF3F7F4),
+                  Color(0xFFEEF3EF),
+                ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
@@ -484,7 +508,9 @@ class _FollowUsFooter extends StatelessWidget {
                   style: TextStyle(
                     fontSize: r.scale(15, tablet: 16),
                     fontWeight: FontWeight.w700,
-                    color: AppColors.primaryDark,
+                    color: isDark
+                        ? AppColors.textPrimary
+                        : AppColors.primaryDark,
                     letterSpacing: 0.2,
                   ),
                 ),
@@ -532,7 +558,7 @@ class _FollowUsFooter extends StatelessWidget {
                   ),
                   child: Icon(
                     Icons.camera_alt_rounded,
-                    color: Colors.white,
+                    color: AppColors.onPrimary,
                     size: r.scale(24),
                   ),
                 ),
@@ -551,7 +577,7 @@ class _FollowUsFooter extends StatelessWidget {
                   child: Text(
                     '𝕏',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.onPrimary,
                       fontSize: r.scale(22),
                       fontWeight: FontWeight.w700,
                       height: 1,
@@ -596,7 +622,7 @@ class _SocialBrandButton extends StatelessWidget {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.14),
+                color: AppColors.shadowColor,
                 blurRadius: r.scale(10),
                 offset: Offset(0, r.scale(4)),
               ),

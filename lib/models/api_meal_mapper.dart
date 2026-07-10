@@ -63,7 +63,7 @@ abstract final class ApiMealMapper {
       );
     }
 
-    final id = data['id']?.toString();
+    final id = _readId(data);
     if (id != null && id.isNotEmpty) {
       return source.copyWith(id: id);
     }
@@ -106,7 +106,7 @@ abstract final class ApiMealMapper {
         DateTime.now();
 
     return MealEntry(
-      id: json['id']?.toString(),
+      id: _readId(json),
       date: date,
       food: food,
       grams: grams,
@@ -272,6 +272,16 @@ abstract final class ApiMealMapper {
     if (value is String && value.isNotEmpty) {
       final parsed = DateTime.tryParse(value);
       if (parsed != null) return MealEntry.normalizeDate(parsed);
+    }
+    return null;
+  }
+
+  static String? _readId(Map<String, dynamic> json) {
+    for (final key in const ['id', '_id', 'mealId', 'meal_id']) {
+      final value = json[key];
+      if (value == null) continue;
+      final id = value.toString().trim();
+      if (id.isNotEmpty) return id;
     }
     return null;
   }

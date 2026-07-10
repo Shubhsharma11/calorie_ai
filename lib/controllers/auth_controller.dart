@@ -5,7 +5,9 @@ import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../routes/app_routes.dart';
+import '../core/app_snackbar.dart';
 import '../services/auth_api_service.dart';
+import 'main_controller.dart';
 import 'user_controller.dart';
 
 class AuthController extends GetxController {
@@ -16,6 +18,8 @@ class AuthController extends GetxController {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final nameController = TextEditingController();
+
+  final isSigningIn = false.obs;
 
   void login() {
     final user = Get.find<UserController>();
@@ -35,10 +39,16 @@ class AuthController extends GetxController {
   }
 
   Future<void> loginWithGoogle() async {
+    if (isSigningIn.value) return;
+
+    isSigningIn.value = true;
+
     try {
       debugPrint('AuthController: starting Google sign-in');
       final googleUser = await GoogleSignIn.instance.authenticate();
+
       debugPrint('AuthController: Google sign-in returned ${googleUser.email}');
+
       final googleAuth = googleUser.authentication;
       final idToken = googleAuth.idToken;
       debugPrint('AuthController: Google ID token: $idToken');
@@ -75,6 +85,7 @@ class AuthController extends GetxController {
 
       if (UserController.readEmailVerified(backendResponse)) {
         await user.markOnboardingComplete();
+        MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);
       } else {
         Get.offAllNamed(AppRoutes.personalDetails);
@@ -86,16 +97,13 @@ class AuthController extends GetxController {
       _showAuthError(e.message);
     } catch (e) {
       _showAuthError('Unable to sign in with Google: $e');
+    } finally {
+      isSigningIn.value = false;
     }
   }
 
   void _showAuthError(String message) {
-    Get.snackbar(
-      'Login failed',
-      message,
-      snackPosition: SnackPosition.BOTTOM,
-      margin: const EdgeInsets.all(16),
-    );
+    AppSnackbar.error(message, title: 'Login failed');
   }
 
   String _readBackendString(Map<String, dynamic> response, String key) {

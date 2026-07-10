@@ -28,13 +28,21 @@ class WeightApiService {
   Future<List<WeightEntry>> fetchWeights({
     required String accessToken,
     DateTime? date,
-    int page = 1,
-    int limit = 30,
+    String? period,
+    DateTime? fromDate,
+    DateTime? toDate,
+    int? page,
+    int? limit,
   }) async {
+    final usesPeriodQuery =
+        period != null || fromDate != null || toDate != null;
     final endpoint = ApiEndpoints.weightWithQuery(
       date: date,
-      page: date == null ? page : null,
-      limit: date == null ? limit : null,
+      period: period,
+      fromDate: fromDate,
+      toDate: toDate,
+      page: date == null && !usesPeriodQuery ? (page ?? 1) : null,
+      limit: date == null && !usesPeriodQuery ? (limit ?? 30) : null,
     );
     debugPrint(
       'WeightApiService: GET ${ApiEndpoints.url(endpoint)} '

@@ -22,12 +22,13 @@ class DailySummaryController extends GetxController {
   int get proteinEaten => _food.totalProtein.round();
   int get proteinGap => (proteinGoal - proteinEaten).clamp(0, proteinGoal);
 
+  int get waterMl => _tracker.waterMl;
   int get waterGlasses => _tracker.waterGlasses;
-  int get waterGoal => TrackerController.waterGoal;
-  int get waterRemaining =>
-      (waterGoal - waterGlasses).clamp(0, waterGoal);
+  int get waterGoalMl => TrackerController.waterGoalMl;
+  int get waterMlRemaining => _tracker.waterMlRemaining;
 
   bool get waterGoalCompleted => _tracker.isWaterGoalComplete;
+  int get waterMlOverGoal => _tracker.waterMlOverGoal;
   bool get allMealsLogged =>
       MealType.all.every((meal) => _food.mealsForToday(meal).isNotEmpty);
 
@@ -47,7 +48,11 @@ class DailySummaryController extends GetxController {
 
   int get healthScore {
     final caloriePart = (progressPercent * 0.5).round();
-    final waterPart = waterGoalCompleted ? 25 : (waterGlasses * 3);
+    final waterPart = waterGoalCompleted
+        ? 25
+        : waterGoalMl > 0
+            ? ((waterMl / waterGoalMl) * 25).round().clamp(0, 25)
+            : 0;
     final proteinPart = proteinGoal > 0
         ? ((proteinEaten / proteinGoal) * 25).round().clamp(0, 25)
         : 0;

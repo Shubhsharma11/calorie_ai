@@ -11,8 +11,13 @@ import '../routes/app_routes.dart';
 
 abstract final class DashboardActions {
   static void openFoodSearch() {
-    Get.toNamed(AppRoutes.addFood);
-  }
+  final food = Get.find<FoodController>();
+
+  // Always switch to today's diary before adding a new meal.
+  food.prepareForNewMeal();
+
+  Get.toNamed(AppRoutes.addFood);
+}
 
   static Future<void> openCalendar(BuildContext context) async {
     final food = Get.find<FoodController>();

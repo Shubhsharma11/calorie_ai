@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
-
 import '../core/api_errors.dart';
 import '../core/app_snackbar.dart';
 import '../core/meal_entry_merge.dart';
+import '../models/custom_meal_preset.dart';
 import '../models/daily_nutrition.dart';
 import '../models/food_item.dart';
 import '../models/meal_entry.dart';
@@ -15,10 +15,12 @@ import '../models/meal_suggestion.dart';
 import '../models/meal_summary.dart';
 import '../models/meal_type.dart';
 import '../models/saved_meal_item.dart';
+import '../repositories/custom_meals_repository.dart';
 import '../repositories/meals_repository.dart';
 import '../services/food_api_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/api_endpoints.dart';
+import '../services/custom_meals_api_service.dart';
 import '../services/meals_api_service.dart';
 import '../widgets/calorie_goal_success_dialog.dart';
 import 'dashboard_controller.dart';
@@ -30,13 +32,17 @@ class FoodController extends GetxController {
     FoodApiService? api,
     LocalStorageService? storage,
     MealsRepository? mealsRepository,
-  })  : _api = api ?? FoodApiService(),
-        _storage = storage ?? LocalStorageService(),
-        _mealsRepository = mealsRepository ?? MealsRepository();
+    CustomMealsRepository? customMealsRepository,
+  }) : _api = api ?? FoodApiService(),
+       _storage = storage ?? LocalStorageService(),
+       _mealsRepository = mealsRepository ?? MealsRepository(),
+       _customMealsRepository =
+           customMealsRepository ?? CustomMealsRepository();
 
   final FoodApiService _api;
   final LocalStorageService _storage;
   final MealsRepository _mealsRepository;
+  final CustomMealsRepository _customMealsRepository;
 
   static const int maxMealHistory = 15;
   static const int maxQuickMealsPerSection = 5;
@@ -56,43 +62,81 @@ class FoodController extends GetxController {
   final RxList<FoodItem> searchResults = <FoodItem>[].obs;
   final showRepeatYesterdayCard = true.obs;
   final RxList<SavedMealItem> favoriteMeals = <SavedMealItem>[].obs;
+  final RxList<CustomMealPreset> customMealPresets = <CustomMealPreset>[].obs;
   final RxMap<String, bool> expandedMeals = <String, bool>{}.obs;
   final RxList<MealEntry> repeatedYesterdayEntries = <MealEntry>[].obs;
   final RxSet<String> selectedYesterdayMeals = <String>{}.obs;
   final RxBool isSearching = false.obs;
   final RxBool isLoadingMealsApi = false.obs;
   final RxnString mealsApiErrorMessage = RxnString();
-  final Rx<DateTime> selectedLogDate =
-      MealEntry.normalizeDate(DateTime.now()).obs;  
+  final Rx<DateTime> selectedLogDate = MealEntry.normalizeDate(
+    DateTime.now(),
+  ).obs;
 
   Timer? _debounce;
   bool _calorieGoalCelebrationShown = false;
   Future<void>? _refreshMealsFuture;
   String? _dismissedBreakfastSuggestionDate;
-  static const String _repeatCardDismissKey =
-    'repeat_card_dismiss_date';
+  static const String _repeatCardDismissKey = 'repeat_card_dismiss_date';
 
   @override
-void onInit() {
-  super.onInit();
+  void onInit() {
+    super.onInit();
 
-  unawaited(_loadPersistedEntries());
-  unawaited(loadRepeatYesterdayCardState());
-}
+
+      debugPrint("🔥 FoodController onInit called");
+
+    unawaited(_loadPersistedEntries());
+    unawaited(loadRepeatYesterdayCardState());
+  }
 
   Future<void> _loadPersistedEntries() async {
-    final loaded = await _storage.loadMealEntries();
-      if (loaded.isNotEmpty) {
-        entries.assignAll(loaded);
-        entriesRevision.value++;
-        _notifyStreakController();
-    }
-
     favoriteMeals.assignAll(await _storage.loadFavoriteMeals());
+    customMealPresets.assignAll(await _storage.loadCustomMeals());
     _dismissedBreakfastSuggestionDate =
         await _storage.loadDismissedBreakfastSuggestionDate();
 
+    // Hydrate from disk first so home/diary render without waiting on network.
+    final cached = await _storage.loadMealEntries();
+    if (cached.isNotEmpty) {
+      entries.assignAll(cached);
+      entriesRevision.value++;
+    }
+
     unawaited(refreshMealsFromApi());
+    unawaited(refreshCustomMealsFromApi());
+  }
+
+  Future<void> refreshCustomMealsFromApi() async {
+    final accessToken = await _mealAccessToken();
+    if (accessToken == null) {
+      debugPrint(
+        'FoodController: skipping GET ${ApiEndpoints.mealsCustom} '
+        '(no access token)',
+      );
+      return;
+    }
+
+    try {
+      debugPrint(
+        'FoodController: calling GET custom meals API at '
+        '${ApiEndpoints.mealsCustomUrl}',
+      );
+      final fetched = await _customMealsRepository.fetchCustomMeals(
+        accessToken: accessToken,
+      );
+
+      debugPrint(
+        'FoodController: custom meals API returned ${fetched.length} templates',
+      );
+
+      customMealPresets.assignAll(fetched);
+      await _storage.saveCustomMeals(fetched);
+    } on CustomMealsApiException catch (error) {
+      debugPrint('FoodController: custom meals API fetch failed: $error');
+    } catch (error) {
+      debugPrint('FoodController: custom meals API fetch failed: $error');
+    }
   }
 
   /// Unique meals from past logs, most recent first.
@@ -112,21 +156,19 @@ void onInit() {
       meal: meal,
     );
   }
+int get lastLoggedMealCount => getLastLoggedMeals().length;
 
-  int mealCountOnDate(DateTime date) {
-    final day = MealEntry.normalizeDate(date);
-    return entries.where((entry) => entry.date == day).length;
-  }
+int get lastLoggedCalories {
+  return getLastLoggedMeals().fold(
+    0,
+    (sum, meal) => sum + meal.calories,
+  );
+}
 
-  int get yesterdayMealCount {
-    final yesterday =
-        selectedLogDate.value.subtract(const Duration(days: 1));
-    return mealCountOnDate(yesterday);
-  }
+bool get canRepeatYesterday => getLastLoggedMeals().isNotEmpty;
 
-  bool get canRepeatYesterday => yesterdayMealCount > 0;
-  bool get hasRepeatedYesterdayMeals =>
-    repeatedYesterdayEntries.isNotEmpty;
+
+  bool get hasRepeatedYesterdayMeals => repeatedYesterdayEntries.isNotEmpty;
 
   bool get isBreakfastSuggestionDismissed {
     final todayKey = MealEntry.dateToKey(DateTime.now());
@@ -139,13 +181,12 @@ void onInit() {
     if (mealsForSelectedDate(MealType.breakfast).isNotEmpty) return null;
     if (isBreakfastSuggestionDismissed) return null;
 
-    final yesterday =
-        selectedLogDate.value.subtract(const Duration(days: 1));
-    final yesterdayBreakfast =
-        mealsForDate(yesterday, MealType.breakfast);
+    final yesterday = selectedLogDate.value.subtract(const Duration(days: 1));
+    final yesterdayBreakfast = mealsForDate(yesterday, MealType.breakfast);
     if (yesterdayBreakfast.isNotEmpty) {
-      final items =
-          yesterdayBreakfast.map(SavedMealItem.fromMealEntry).toList();
+      final items = yesterdayBreakfast
+          .map(SavedMealItem.fromMealEntry)
+          .toList();
       return MealSuggestion(
         meal: MealType.breakfast,
         title: items.map((item) => item.food.name).join(' + '),
@@ -229,7 +270,9 @@ void onInit() {
   }
 
   bool isFavorite(SavedMealItem item) {
-    return favoriteMeals.any((favorite) => favorite.storageKey == item.storageKey);
+    return favoriteMeals.any(
+      (favorite) => favorite.storageKey == item.storageKey,
+    );
   }
 
   bool isFavoriteFood(FoodItem food, String meal) {
@@ -265,15 +308,106 @@ void onInit() {
     await _storage.saveFavoriteMeals(favoriteMeals.toList());
   }
 
+  Future<CustomMealPreset> saveCustomMealPreset(CustomMealPreset preset) async {
+    final index = customMealPresets.indexWhere((meal) => meal.id == preset.id);
+    if (index >= 0) {
+      customMealPresets[index] = preset;
+    } else {
+      customMealPresets.insert(0, preset);
+    }
+
+    for (final item in preset.items) {
+      if (!isFavorite(item)) {
+        favoriteMeals.insert(0, item);
+      }
+    }
+
+    await _storage.saveCustomMeals(customMealPresets.toList());
+    await _storage.saveFavoriteMeals(favoriteMeals.toList());
+
+    return _syncCustomMealPreset(preset);
+  }
+
+  Future<CustomMealPreset> _syncCustomMealPreset(
+    CustomMealPreset preset,
+  ) async {
+    final accessToken = await _mealAccessToken();
+    if (accessToken == null) {
+      debugPrint(
+        'FoodController: skipping POST ${ApiEndpoints.mealsCustom} '
+        '(no access token — sign in required)',
+      );
+      AppSnackbar.info(
+        '${preset.name} was saved on this device. Sign in to sync to the server.',
+        title: 'Saved locally',
+      );
+      return preset;
+    }
+
+    try {
+      debugPrint(
+        'FoodController: calling POST custom meals API at '
+        '${ApiEndpoints.mealsCustomUrl}',
+      );
+      final synced = await _customMealsRepository.createCustomMeal(
+        accessToken: accessToken,
+        preset: preset,
+      );
+
+      final index = customMealPresets.indexWhere((meal) => meal.id == preset.id);
+      if (index >= 0) {
+        customMealPresets[index] = synced;
+      } else {
+        customMealPresets.insert(0, synced);
+      }
+
+      await _storage.saveCustomMeals(customMealPresets.toList());
+      return synced;
+    } on CustomMealsApiException catch (error) {
+      debugPrint('FoodController: custom meal API failed: $error');
+      AppSnackbar.info(
+        '${preset.name} was saved on this device. '
+        'It could not sync to the server yet.',
+        title: 'Saved on device',
+      );
+      return preset;
+    } catch (error) {
+      debugPrint('FoodController: custom meal API failed: $error');
+      AppSnackbar.info(
+        '${preset.name} was saved on this device. '
+        'It could not sync to the server yet.',
+        title: 'Saved on device',
+      );
+      return preset;
+    }
+  }
+
+  Future<void> removeCustomMealPreset(String id) async {
+    customMealPresets.removeWhere((meal) => meal.id == id);
+    await _storage.saveCustomMeals(customMealPresets.toList());
+  }
+
+  void logCustomMealPreset(
+    CustomMealPreset preset, {
+    String? meal,
+    DateTime? date,
+  }) {
+    final targetMeal = meal ?? preset.meal;
+    for (final item in preset.items) {
+      logFromHistory(
+        item.copyWith(meal: targetMeal),
+        meal: targetMeal,
+        date: date,
+      );
+    }
+  }
+
   void toggleMealExpanded(String meal) {
     expandedMeals[meal] = !isMealExpanded(meal);
   }
 
-  
-  
-    bool isMealExpanded(String meal) {
-  return expandedMeals[meal] ?? true;
-    
+  bool isMealExpanded(String meal) {
+    return expandedMeals[meal] ?? true;
   }
 
   Future<void> dismissBreakfastSuggestion() async {
@@ -295,13 +429,22 @@ void onInit() {
   }
 
   Future<void> refreshMealsFromApi({DateTime? date}) {
+      debugPrint("========== refreshMealsFromApi CALLED ==========");
+  debugPrint(
+  StackTrace.current.toString(),
+  wrapWidth: 1024,
+);
     if (_refreshMealsFuture != null) {
       return _refreshMealsFuture!;
     }
 
     _refreshMealsFuture = _refreshMealsFromApi(date: date).whenComplete(() {
+      
+      
       _refreshMealsFuture = null;
+      
     });
+    
     return _refreshMealsFuture!;
   }
 
@@ -323,7 +466,9 @@ void onInit() {
     mealsApiErrorMessage.value = null;
 
     try {
-      debugPrint('FoodController: calling GET meals API at ${ApiEndpoints.url(ApiEndpoints.mealsWithQuery(date: date))}');
+      debugPrint(
+        'FoodController: calling GET meals API at ${ApiEndpoints.url(ApiEndpoints.mealsWithQuery(date: date))}',
+      );
       final fetched = await _mealsRepository.fetchMeals(
         accessToken: userController.accessToken,
         date: date,
@@ -345,10 +490,7 @@ void onInit() {
         _markEntriesDirty();
       } else if (fetched.isNotEmpty) {
         entries.assignAll(
-          MealEntryMerge.mergeAll(
-            current: entries.toList(),
-            fetched: fetched,
-          ),
+          MealEntryMerge.mergeAll(current: entries.toList(), fetched: fetched),
         );
         _markEntriesDirty();
       }
@@ -374,9 +516,13 @@ void onInit() {
       entries.where((e) => e.date == selectedLogDate.value).toList();
 
   void setSelectedLogDate(DateTime date) {
-    selectedLogDate.value = MealEntry.normalizeDate(date);
-    entriesRevision.value++;
-  }
+  selectedLogDate.value = MealEntry.normalizeDate(date);
+  entriesRevision.value++;
+
+  unawaited(
+    refreshMealsFromApi(date: selectedLogDate.value),
+  );
+}
 
   List<MealEntry> mealsForDate(DateTime day, String meal) {
     final normalized = MealEntry.normalizeDate(day);
@@ -384,14 +530,48 @@ void onInit() {
         .where((e) => e.date == normalized && e.meal == meal)
         .toList();
   }
-  List<MealEntry> getYesterdayMeals() {
-  final yesterday = MealEntry.normalizeDate(
-    selectedLogDate.value.subtract(const Duration(days: 1)),
-  );
+List<MealEntry> getLastLoggedMeals() {
+  final today = MealEntry.normalizeDate(selectedLogDate.value);
 
-  return entries
-      .where((entry) => entry.date == yesterday)
+  final previousDays = entries
+      .where((e) => e.date.isBefore(today))
+      .map((e) => e.date)
+      .toSet()
       .toList();
+
+  if (previousDays.isEmpty) {
+    return [];
+  }
+
+  previousDays.sort((a, b) => b.compareTo(a));
+
+  final lastLoggedDay = previousDays.first;
+
+  return entries.where((e) => e.date == lastLoggedDay).toList();
+}
+
+DateTime? get lastLoggedDate {
+  final today = MealEntry.normalizeDate(selectedLogDate.value);
+
+  final previousDays = entries
+      .where((e) => e.date.isBefore(today))
+      .map((e) => e.date)
+      .toSet()
+      .toList();
+
+  if (previousDays.isEmpty) return null;
+
+  previousDays.sort((a, b) => b.compareTo(a));
+
+  return previousDays.first;
+}
+
+String get lastLoggedDayLabel {
+  final date = lastLoggedDate;
+
+  if (date == null) return '';
+
+  return DateFormat('EEEE').format(date);
 }
 
   List<MealEntry> mealsForSelectedDate(String meal) =>
@@ -406,8 +586,7 @@ void onInit() {
   int get selectedDateCalories =>
       selectedDateMeals.fold(0, (sum, e) => sum + e.calories);
 
-  List<DailyNutrition> get last7Days =>
-      nutritionForLastDays(7);
+  List<DailyNutrition> get last7Days => nutritionForLastDays(7);
 
   List<DailyNutrition> nutritionForLastDays(int dayCount) {
     final today = MealEntry.normalizeDate(DateTime.now());
@@ -437,10 +616,17 @@ void onInit() {
 
     isSearching.value = true;
     try {
-      searchResults.value = await _api.searchFoods(trimmed);
+      searchResults.value = await searchFoodsEphemeral(trimmed);
     } finally {
       isSearching.value = false;
     }
+  }
+
+  /// Search without updating [searchQuery] / [searchResults] — for pickers.
+  Future<List<FoodItem>> searchFoodsEphemeral(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return [];
+    return _api.searchFoods(trimmed);
   }
 
   void onSearchChanged(String value) {
@@ -451,15 +637,11 @@ void onInit() {
     });
   }
 
-  void logFromHistory(
-    SavedMealItem item, {
-    DateTime? date,
-    String? meal,
-  }) {
+  void logFromHistory(SavedMealItem item, {DateTime? date, String? meal}) {
     _insertEntry(
-      item.copyWith(meal: meal ?? item.meal).toMealEntry(
-        date: date ?? selectedLogDate.value,
-      ),
+      item
+          .copyWith(meal: meal ?? item.meal)
+          .toMealEntry(date: date ?? selectedLogDate.value),
     );
   }
 
@@ -483,63 +665,55 @@ void onInit() {
   //   return sourceMeals.length;
   // }
 
-int copyYesterdayToDate({DateTime? date}) {
-  
-  final target = MealEntry.normalizeDate(date ?? selectedLogDate.value);
-  final yesterday = target.subtract(const Duration(days: 1));
+  int copyYesterdayToDate({DateTime? date}) {
+    final target = MealEntry.normalizeDate(date ?? selectedLogDate.value);
+    final sourceMeals = getLastLoggedMeals();
 
-  final sourceMeals =
-      entries.where((entry) => entry.date == yesterday).toList();
+    if (sourceMeals.isEmpty) return 0;
 
-  if (sourceMeals.isEmpty) return 0;
+    repeatedYesterdayEntries.clear();
 
-  repeatedYesterdayEntries.clear();
+    for (final entry in sourceMeals) {
+      final copied = MealEntry(
+        food: entry.food,
+        grams: entry.grams,
+        meal: entry.meal,
+        date: target,
+      );
 
-  for (final entry in sourceMeals) {
-    final copied = MealEntry(
-      food: entry.food,
-      grams: entry.grams,
-      meal: entry.meal,
-      date: target,
-    );
+      repeatedYesterdayEntries.add(copied);
+      _insertEntry(copied);
+    }
 
-    repeatedYesterdayEntries.add(copied);
-    _insertEntry(copied);
+    return sourceMeals.length;
   }
 
-  return sourceMeals.length;
-}
-int copySelectedYesterdayMeals({DateTime? date}) {
-  final target = MealEntry.normalizeDate(date ?? selectedLogDate.value);
-  final yesterday = target.subtract(const Duration(days: 1));
+  int copySelectedYesterdayMeals({DateTime? date}) {
+    final target = MealEntry.normalizeDate(date ?? selectedLogDate.value);
+    final sourceMeals = getLastLoggedMeals()
+        .where((entry) => selectedYesterdayMeals.contains(entry.id))
+        .toList();
 
-  final sourceMeals = entries.where(
-    (entry) =>
-        entry.date == yesterday &&
-        selectedYesterdayMeals.contains(entry.id),
-  ).toList();
+    if (sourceMeals.isEmpty) return 0;
 
-  if (sourceMeals.isEmpty) return 0;
+    repeatedYesterdayEntries.clear();
 
-  repeatedYesterdayEntries.clear();
+    for (final entry in sourceMeals) {
+      final copied = MealEntry(
+        food: entry.food,
+        grams: entry.grams,
+        meal: entry.meal,
+        date: target,
+      );
 
-  for (final entry in sourceMeals) {
-    final copied = MealEntry(
-      food: entry.food,
-      grams: entry.grams,
-      meal: entry.meal,
-      date: target,
-    );
+      repeatedYesterdayEntries.add(copied);
+      _insertEntry(copied);
+    }
 
-    repeatedYesterdayEntries.add(copied);
-    _insertEntry(copied);
+    selectedYesterdayMeals.clear();
+
+    return sourceMeals.length;
   }
-
-  selectedYesterdayMeals.clear();
-
-  return sourceMeals.length;
-}
-
 
   void _insertEntry(MealEntry entry) {
     entries.add(entry);
@@ -552,43 +726,48 @@ int copySelectedYesterdayMeals({DateTime? date}) {
   int get totalCaloriesEaten =>
       todayMeals.fold(0, (sum, e) => sum + e.calories);
 
-  double get totalProtein =>
-      todayMeals.fold(0.0, (sum, e) => sum + e.protein);
+  double get totalProtein => todayMeals.fold(0.0, (sum, e) => sum + e.protein);
 
-  double get totalCarbs =>
-      todayMeals.fold(0.0, (sum, e) => sum + e.carbs);
+  double get totalCarbs => todayMeals.fold(0.0, (sum, e) => sum + e.carbs);
 
   double get totalFat => todayMeals.fold(0.0, (sum, e) => sum + e.fat);
 
-  void addToLog(
-    FoodItem food, {
-    String? meal,
-    DateTime? date,
-    int? grams,
-  }) {
+  void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
     _insertEntry(
       MealEntry(
         food: food,
         grams: grams ?? selectedGrams.value,
         meal: meal ?? selectedMeal.value,
-        date: date ?? selectedLogDate.value,
+    date: MealEntry.normalizeDate(DateTime.now()),
       ),
     );
     selectedGrams.value = 100;
   }
 
   Future<String?> _mealAccessToken() async {
-    if (!Get.isRegistered<UserController>()) return null;
-
-    final userController = Get.find<UserController>();
-    await userController.localProfileReady;
-    await userController.loadAuthSession();
-
-    if (!userController.isLoggedIn || userController.accessToken.isEmpty) {
+    if (!Get.isRegistered<UserController>()) {
+      debugPrint(
+        'FoodController: MISSING token — UserController not registered '
+        '(lib/controllers/food_controller.dart _mealAccessToken)',
+      );
       return null;
     }
 
-    return userController.accessToken;
+    final userController = Get.find<UserController>();
+    final resolution = await userController.resolveAccessTokenWithDiagnostics();
+    if (!resolution.isResolved) {
+      debugPrint(
+        'FoodController: MISSING token — stage=${resolution.failureStage} '
+        'at ${resolution.failureLocation}',
+      );
+      return null;
+    }
+
+    debugPrint(
+      'FoodController: access token OK '
+      'source=${resolution.source} length=${resolution.tokenLength}',
+    );
+    return resolution.token;
   }
 
   Future<void> _syncCreateMeal(MealEntry entry) async {
@@ -609,8 +788,12 @@ int copySelectedYesterdayMeals({DateTime? date}) {
 
       entries[index] = created;
       _markEntriesDirty();
-      _notifyStreakController();
+
       await refreshMealsFromApi();
+
+      if (Get.isRegistered<StreakController>()) {
+        await Get.find<StreakController>().refreshFromApi();
+      }
     } on MealsApiException catch (error) {
       debugPrint('FoodController: create meal API failed: $error');
       mealsApiErrorMessage.value = error.message;
@@ -621,8 +804,10 @@ int copySelectedYesterdayMeals({DateTime? date}) {
       );
     } catch (error) {
       debugPrint('FoodController: create meal API failed: $error');
-      mealsApiErrorMessage.value =
-          apiNetworkErrorMessage(error, action: 'saving meal');
+      mealsApiErrorMessage.value = apiNetworkErrorMessage(
+        error,
+        action: 'saving meal',
+      );
       AppSnackbar.info(
         '${entry.food.name} was added to your diary. '
         'It could not sync to the server yet.',
@@ -631,38 +816,38 @@ int copySelectedYesterdayMeals({DateTime? date}) {
     }
   }
 
- void toggleYesterdayMeal(String id) {
-  if (selectedYesterdayMeals.contains(id)) {
-    selectedYesterdayMeals.remove(id);
-  } else {
-    selectedYesterdayMeals.add(id);
+  void toggleYesterdayMeal(String id) {
+    if (selectedYesterdayMeals.contains(id)) {
+      selectedYesterdayMeals.remove(id);
+    } else {
+      selectedYesterdayMeals.add(id);
+    }
   }
-}
 
- bool isYesterdayMealSelected(String id) {
-  return selectedYesterdayMeals.contains(id);
-}
-
-int get selectedYesterdayMealCount {
-  return selectedYesterdayMeals.length;
-}
-
-void clearYesterdaySelection() {
-  selectedYesterdayMeals.clear();
-}
-
-
-void selectAllYesterdayMeals() {
-  selectedYesterdayMeals.clear();
-
-  for (final meal in getYesterdayMeals()) {
-    selectedYesterdayMeals.add(meal.id);
+  bool isYesterdayMealSelected(String id) {
+    return selectedYesterdayMeals.contains(id);
   }
-}
 
-void unselectAllYesterdayMeals() {
-  selectedYesterdayMeals.clear();
-}
+  int get selectedYesterdayMealCount {
+    return selectedYesterdayMeals.length;
+  }
+
+  void clearYesterdaySelection() {
+    selectedYesterdayMeals.clear();
+  }
+
+  void selectAllYesterdayMeals() {
+    selectedYesterdayMeals.clear();
+
+    for (final meal in getLastLoggedMeals()) {
+      selectedYesterdayMeals.add(meal.id);
+    }
+  }
+
+  void unselectAllYesterdayMeals() {
+    selectedYesterdayMeals.clear();
+  }
+
   void _markEntriesDirty() {
     entries.refresh();
     entriesRevision.value++;
@@ -680,9 +865,12 @@ void unselectAllYesterdayMeals() {
   }
 
   void _notifyStreakController() {
-    if (!Get.isRegistered<StreakController>()) return;
-    Get.find<StreakController>().onMealsChanged();
-  }
+  debugPrint("🔥 _notifyStreakController called");
+
+  if (!Get.isRegistered<StreakController>()) return;
+
+  Get.find<StreakController>().onMealsChanged();
+}
 
   void _maybeCelebrateCalorieGoal() {
     if (!Get.isRegistered<DashboardController>()) return;
@@ -733,18 +921,11 @@ void unselectAllYesterdayMeals() {
   List<MealSummary> get todayMealSummaries =>
       MealType.all.map(summaryForMeal).toList();
 
-  void updateEntry(
-    MealEntry entry, {
-    int? grams,
-    String? meal,
-  }) {
+  void updateEntry(MealEntry entry, {int? grams, String? meal}) {
     final index = entries.indexWhere((e) => e.id == entry.id);
     if (index < 0) return;
 
-    entries[index] = entry.copyWith(
-      grams: grams,
-      meal: meal,
-    );
+    entries[index] = entry.copyWith(grams: grams, meal: meal);
     _notifyEntriesChanged();
   }
 
@@ -753,40 +934,55 @@ void unselectAllYesterdayMeals() {
     _notifyEntriesChanged();
     unawaited(_syncDeleteMeal(entry));
   }
+
   Future<void> cancelRepeatedYesterdayMeals() async {
-  if (repeatedYesterdayEntries.isEmpty) return;
+    if (repeatedYesterdayEntries.isEmpty) return;
 
-  final meals = List<MealEntry>.from(repeatedYesterdayEntries);
+    final meals = List<MealEntry>.from(repeatedYesterdayEntries);
 
-  repeatedYesterdayEntries.clear();
+    repeatedYesterdayEntries.clear();
 
-  for (final meal in meals) {
-    removeEntry(meal);
+    for (final meal in meals) {
+      removeEntry(meal);
+    }
+
+    entriesRevision.value++;
   }
-
-  entriesRevision.value++;  
-}
 
   Future<void> _syncDeleteMeal(MealEntry entry) async {
     final accessToken = await _mealAccessToken();
-    if (accessToken == null) return;
+    if (accessToken == null) {
+      debugPrint(
+        'FoodController: skipping DELETE meals API for ${entry.food.name} '
+        '(no access token)',
+      );
+      return;
+    }
+
+    final mealId = _resolveMealIdForApiDelete(entry);
+    if (mealId == null) {
+      debugPrint(
+        'FoodController: skipping DELETE meals API for ${entry.food.name} '
+        '(no server meal id; localId=${entry.id})',
+      );
+      return;
+    }
 
     try {
       debugPrint(
         'FoodController: calling DELETE meals API at '
-        '${ApiEndpoints.mealsByIdUrl(entry.id)}',
+        '${ApiEndpoints.mealsByIdUrl(mealId)}',
       );
       await _mealsRepository.deleteMeal(
         accessToken: accessToken,
-        mealId: entry.id,
+        mealId: mealId,
       );
 
-      _notifyStreakController();
-      await refreshMealsFromApi();
+      await refreshMealsFromApi(date: entry.date);
     } on MealsApiException catch (error) {
       if (error.statusCode == 404) {
         debugPrint(
-          'FoodController: delete meal API returned 404 for ${entry.id}',
+          'FoodController: delete meal API returned 404 for $mealId',
         );
         return;
       }
@@ -804,8 +1000,10 @@ void unselectAllYesterdayMeals() {
       debugPrint('FoodController: delete meal API failed: $error');
       entries.add(entry);
       _markEntriesDirty();
-      mealsApiErrorMessage.value =
-          apiNetworkErrorMessage(error, action: 'deleting meal');
+      mealsApiErrorMessage.value = apiNetworkErrorMessage(
+        error,
+        action: 'deleting meal',
+      );
       AppSnackbar.info(
         '${entry.food.name} was removed from your diary, but it could not '
         'be deleted on the server yet.',
@@ -814,38 +1012,98 @@ void unselectAllYesterdayMeals() {
     }
   }
 
+  String? _resolveMealIdForApiDelete(MealEntry entry) {
+    final entryId = entry.id.trim();
+    if (entryId.isNotEmpty && !_looksLikeLocalMealId(entryId)) {
+      return entryId;
+    }
+
+    for (final apiEntry in apiMeals) {
+      if (apiEntry.id == entryId && entryId.isNotEmpty) {
+        return apiEntry.id;
+      }
+    }
+
+    for (final apiEntry in apiMeals) {
+      if (_matchesLoggedMeal(apiEntry, entry) &&
+          !_looksLikeLocalMealId(apiEntry.id)) {
+        return apiEntry.id;
+      }
+    }
+
+    return null;
+  }
+
+  bool _looksLikeLocalMealId(String id) {
+    final value = int.tryParse(id);
+    if (value == null) return false;
+    // Local ids come from microsecondsSinceEpoch (~1e15 in 2026).
+    return value >= 1000000000000000;
+  }
+
+  bool _matchesLoggedMeal(MealEntry a, MealEntry b) {
+    return a.meal == b.meal &&
+        MealEntry.normalizeDate(a.date) == MealEntry.normalizeDate(b.date) &&
+        a.food.name.toLowerCase() == b.food.name.toLowerCase() &&
+        a.grams == b.grams;
+  }
+
   MealEntry? findEntry(String id) {
     for (final entry in entries) {
       if (entry.id == id) return entry;
     }
     return null;
   }
+
   Future<void> loadRepeatYesterdayCardState() async {
-  final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
-  final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-  final dismissedDate = prefs.getString(_repeatCardDismissKey);
+    final dismissedDate = prefs.getString(_repeatCardDismissKey);
 
-  showRepeatYesterdayCard.value = dismissedDate != today;
-}
+    showRepeatYesterdayCard.value = dismissedDate != today;
+  }
 
-Future<void> dismissRepeatYesterdayCard() async {
-  final prefs = await SharedPreferences.getInstance();
+  Future<void> dismissRepeatYesterdayCard() async {
+    final prefs = await SharedPreferences.getInstance();
 
-  final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-  await prefs.setString(_repeatCardDismissKey, today);
+    await prefs.setString(_repeatCardDismissKey, today);
 
-  showRepeatYesterdayCard.value = false;
-}
-
+    showRepeatYesterdayCard.value = false;
+  }
+bool get isViewingToday => _isToday(selectedLogDate.value);
   bool _isToday(DateTime date) =>
       date == MealEntry.normalizeDate(DateTime.now());
+
+
+void prepareForNewMeal() {
+  final today = MealEntry.normalizeDate(DateTime.now());
+
+  // Immediately switch the diary back to today.
+  selectedLogDate.value = today;
+
+  entriesRevision.value++;
+
+  unawaited(refreshMealsFromApi(date: today));
+}
+      
+      void showReadOnlyMessage() {
+  Get.snackbar(
+    'Read Only',
+    "Past meals can't be edited.",
+    snackPosition: SnackPosition.BOTTOM,
+    duration: const Duration(seconds: 2),
+  );
+}
 
   @override
   void onClose() {
     _debounce?.cancel();
     super.onClose();
+
+    
   }
 }

@@ -12,13 +12,19 @@ class WeightRepository {
   Future<List<WeightEntry>> fetchWeights({
     required String accessToken,
     DateTime? date,
-    int page = 1,
-    int limit = 30,
+    String? period,
+    DateTime? fromDate,
+    DateTime? toDate,
+    int? page,
+    int? limit,
   }) async {
     try {
       return await _apiService.fetchWeights(
         accessToken: accessToken,
         date: date,
+        period: period,
+        fromDate: fromDate,
+        toDate: toDate,
         page: page,
         limit: limit,
       );

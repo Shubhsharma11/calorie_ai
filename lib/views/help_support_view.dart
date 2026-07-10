@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
 
 class HelpSupportView extends StatefulWidget {
@@ -34,8 +35,9 @@ class _HelpSupportViewState extends State<HelpSupportView> {
       question: 'Can I track water intake?',
       answer:
           'Yes. Use the Water Intake banner on Home or open Water Tracker '
-          'from Profile or Stats. Tap + to log a glass and track progress '
-          'toward your daily 8-glass goal.',
+          'from Profile or Stats. Log water in ml with quick-add buttons '
+          '(+250 ml, +500 ml, or a custom amount) and track progress toward '
+          'your daily goal, which you can change in Settings.',
     ),
     (
       question: 'How does food scanning work?',
@@ -61,10 +63,11 @@ class _HelpSupportViewState extends State<HelpSupportView> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Help & Support')),
+      appBar: const AppAppBar(title: 'Help & Support'),
       body: ResponsivePage(
         scrollable: true,
         child: Column(
@@ -75,6 +78,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
               style: TextStyle(
                 fontSize: r.scale(22, tablet: 24),
                 fontWeight: FontWeight.bold,
+                color: AppColors.textPrimaryOf(context),
               ),
             ),
             SizedBox(height: r.scale(8)),
@@ -82,7 +86,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
               'Find answers below or reach out to our support team.',
               style: TextStyle(
                 fontSize: r.scale(14),
-                color: AppColors.textSecondary,
+                color: AppColors.textSecondaryOf(context),
                 height: 1.4,
               ),
             ),
@@ -92,7 +96,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
               style: TextStyle(
                 fontSize: r.scale(12),
                 fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
+                color: AppColors.textSecondaryOf(context),
                 letterSpacing: 0.6,
               ),
             ),
@@ -104,7 +108,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
               return Padding(
                 padding: EdgeInsets.only(bottom: r.scale(8)),
                 child: Material(
-                  color: AppColors.card,
+                  color: AppColors.cardOf(context),
                   borderRadius: BorderRadius.circular(14),
                   child: InkWell(
                     onTap: () => setState(
@@ -134,7 +138,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
                                     fontWeight: FontWeight.w600,
                                     color: isExpanded
                                         ? AppColors.primary
-                                        : AppColors.textPrimary,
+                                        : AppColors.textPrimaryOf(context),
                                   ),
                                 ),
                               ),
@@ -154,7 +158,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
                               faq.answer,
                               style: TextStyle(
                                 fontSize: r.scale(14),
-                                color: AppColors.textSecondary,
+                                color: AppColors.textSecondaryOf(context),
                                 height: 1.5,
                               ),
                             ),
@@ -172,7 +176,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
               style: TextStyle(
                 fontSize: r.scale(12),
                 fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
+                color: AppColors.textSecondaryOf(context),
                 letterSpacing: 0.6,
               ),
             ),
@@ -207,7 +211,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
                 'Calorie AI v1.0.0',
                 style: TextStyle(
                   fontSize: r.scale(12),
-                  color: AppColors.textSecondary,
+                  color: AppColors.textSecondaryOf(context),
                 ),
               ),
             ),
@@ -252,14 +256,15 @@ class _ContactCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
 
     return Container(
       padding: EdgeInsets.all(r.scale(16)),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.surfaceOf(context),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.borderOf(context)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -284,6 +289,7 @@ class _ContactCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: r.scale(15),
                     fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimaryOf(context),
                   ),
                 ),
                 SizedBox(height: r.scale(2)),
@@ -300,7 +306,7 @@ class _ContactCard extends StatelessWidget {
                   detail,
                   style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.textSecondary,
+                    color: AppColors.textSecondaryOf(context),
                   ),
                 ),
                 SizedBox(height: r.scale(10)),

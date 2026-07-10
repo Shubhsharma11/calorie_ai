@@ -8,12 +8,12 @@ class WaterProgressChart extends StatelessWidget {
   const WaterProgressChart({
     super.key,
     required this.days,
-    required this.waterGoal,
+    required this.waterGoalMl,
     this.chartHeight = 160,
   });
 
   final List<DailyWaterIntake> days;
-  final int waterGoal;
+  final int waterGoalMl;
   final double chartHeight;
 
   static const Color _waterBlue = Color(0xFF007AFF);
@@ -24,11 +24,11 @@ class WaterProgressChart extends StatelessWidget {
   Widget build(BuildContext context) {
     if (days.isEmpty) return const SizedBox.shrink();
 
-    final values = days.map((d) => d.glasses).toList();
+    final values = days.map((d) => d.totalMl).toList();
     final maxValue = _maxChartValue(values);
     final total = values.fold<int>(0, (sum, v) => sum + v);
     final avg = values.isEmpty ? 0.0 : total / values.length;
-    final daysOnGoal = days.where((d) => d.goalMet(waterGoal)).length;
+    final daysOnGoal = days.where((d) => d.goalMet(waterGoalMl)).length;
     final isSingleDay = days.length == 1;
     final day = days.first;
 
@@ -47,11 +47,11 @@ class WaterProgressChart extends StatelessWidget {
                     return Stack(
                       clipBehavior: Clip.hardEdge,
                       children: [
-                        if (waterGoal > 0)
+                        if (waterGoalMl > 0)
                           Positioned(
                             left: 0,
                             right: 0,
-                            bottom: (waterGoal / maxValue * barAreaHeight)
+                            bottom: (waterGoalMl / maxValue * barAreaHeight)
                                 .clamp(0.0, barAreaHeight - 1),
                             child: Row(
                               children: [
@@ -82,7 +82,7 @@ class WaterProgressChart extends StatelessWidget {
                                 List.generate(days.length, (index) {
                               final intake = days[index];
                               final value = values[index];
-                              final metGoal = intake.goalMet(waterGoal);
+                              final metGoal = intake.goalMet(waterGoalMl);
                               final showValueLabel =
                                   _showDayLabel(index, days.length);
                               final hasValueLabel = intake.hasData &&
@@ -128,7 +128,7 @@ class WaterProgressChart extends StatelessWidget {
                                                 const SizedBox(width: 2),
                                               ],
                                               Text(
-                                                '$value',
+                                                _compactMl(value),
                                                 style: TextStyle(
                                                   fontSize: days.length > 14
                                                       ? 8
@@ -214,7 +214,7 @@ class WaterProgressChart extends StatelessWidget {
         if (isSingleDay)
           _GoalStatusCard(
             intake: day,
-            waterGoal: waterGoal,
+            waterGoalMl: waterGoalMl,
           )
         else
           Row(
@@ -222,7 +222,7 @@ class WaterProgressChart extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  'Avg: ${avg.toStringAsFixed(1)} glasses',
+                  'Avg: ${formatWaterMl(avg.round())} / day',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -251,8 +251,17 @@ class WaterProgressChart extends StatelessWidget {
 
   double _maxChartValue(List<int> values) {
     var max = values.fold<int>(0, (a, b) => a > b ? a : b);
-    if (waterGoal > max) max = waterGoal;
+    if (waterGoalMl > max) max = waterGoalMl;
     return max > 0 ? max.toDouble() : 1;
+  }
+
+  /// Short label for bar values (e.g. 750, 1.5L, 2L).
+  static String _compactMl(int ml) {
+    if (ml < 1000) return '$ml';
+    final liters = ml / 1000;
+    return liters == liters.roundToDouble()
+        ? '${liters.round()}L'
+        : '${liters.toStringAsFixed(1)}L';
   }
 
   Color _barColor(DailyWaterIntake intake, bool metGoal) {
@@ -289,16 +298,17 @@ class WaterProgressChart extends StatelessWidget {
 class _GoalStatusCard extends StatelessWidget {
   const _GoalStatusCard({
     required this.intake,
-    required this.waterGoal,
+    required this.waterGoalMl,
   });
 
   final DailyWaterIntake intake;
-  final int waterGoal;
+  final int waterGoalMl;
 
   @override
   Widget build(BuildContext context) {
-    final met = intake.goalMet(waterGoal);
-    final remaining = (waterGoal - intake.glasses).clamp(0, waterGoal);
+    final met = intake.goalMet(waterGoalMl);
+    final remainingMl = (waterGoalMl - intake.totalMl).clamp(0, waterGoalMl);
+    final overMl = (intake.totalMl - waterGoalMl).clamp(0, 1000000);
 
     return Container(
       width: double.infinity,
@@ -327,7 +337,11 @@ class _GoalStatusCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  met ? 'Daily goal achieved!' : '$remaining glasses to goal',
+                  met
+                      ? overMl > 0
+                          ? 'Goal achieved · +$overMl ml extra'
+                          : 'Daily goal achieved!'
+                      : '$remainingMl ml to goal',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: met ? AppColors.primary : AppColors.textPrimary,
@@ -335,7 +349,8 @@ class _GoalStatusCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${intake.glasses} of $waterGoal glasses',
+                  '${intake.totalMl} of $waterGoalMl ml '
+                  '(≈ ${intake.glasses} glass${intake.glasses == 1 ? '' : 'es'})',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,

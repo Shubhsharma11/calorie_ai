@@ -6,6 +6,7 @@ import '../models/food_item.dart';
 import '../models/meal_entry.dart';
 import '../models/meal_type.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/food_emoji_avatar.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
@@ -58,8 +59,8 @@ class _EditMealViewState extends State<EditMealView> {
     final calories = _entry.food.caloriesForGrams(_grams);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Food'),
+      appBar: AppAppBar(
+        title: 'Edit Food',
         actions: [
           IconButton(
             onPressed: _delete,

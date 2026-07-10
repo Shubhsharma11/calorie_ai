@@ -3,22 +3,39 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
+import '../core/weight_chart_data.dart';
 import '../models/daily_water_intake.dart';
 import '../models/exercise_entry.dart';
 import '../models/exercise_type.dart';
 import '../models/meal_entry.dart';
+import '../models/water_log_entry.dart';
 import '../models/water_period.dart';
 import '../models/weight_entry.dart';
+import '../repositories/water_repository.dart';
 import '../repositories/weight_repository.dart';
 import '../services/local_storage_service.dart';
 import '../services/step_tracking_service.dart';
+import '../services/water_api_service.dart';
 import '../services/weight_api_service.dart';
 import '../widgets/water_goal_success_dialog.dart';
+import 'settings_controller.dart';
 import 'user_controller.dart';
 
 enum WeightLogStatus { unchanged, savedAndSynced, failed }
 
 enum WeightDeleteStatus { deleted, failed, missingId }
+
+enum WaterDeleteStatus { deleted, failed, missingId }
+
+class WaterDeleteOutcome {
+  const WaterDeleteOutcome(
+    this.status, {
+    this.message,
+  });
+
+  final WaterDeleteStatus status;
+  final String? message;
+}
 
 class WeightDeleteOutcome {
   const WeightDeleteOutcome(
@@ -46,9 +63,11 @@ class TrackerController extends GetxController {
     LocalStorageService? storage,
     StepTrackingService? stepTracking,
     WeightRepository? weightRepository,
+    WaterRepository? waterRepository,
   }) : _storage = storage ?? LocalStorageService(),
        _stepTracking = stepTracking ?? StepTrackingService(),
-       _weightRepository = weightRepository ?? WeightRepository() {
+       _weightRepository = weightRepository ?? WeightRepository(),
+       _waterRepository = waterRepository ?? WaterRepository() {
     if (initialWeight != null) {
       currentWeight.value = initialWeight;
     }
@@ -57,7 +76,9 @@ class TrackerController extends GetxController {
   final LocalStorageService _storage;
   final StepTrackingService _stepTracking;
   final WeightRepository _weightRepository;
+  final WaterRepository _waterRepository;
   final RxMap<DateTime, int> waterByDate = <DateTime, int>{}.obs;
+  final RxList<WaterLogEntry> waterEntries = <WaterLogEntry>[].obs;
   final Rx<WaterPeriod> waterPeriod = WaterPeriod.week.obs;
 
   final RxDouble currentWeight = 70.0.obs;
@@ -74,11 +95,25 @@ class TrackerController extends GetxController {
   final RxBool needsHealthConnectInstall = false.obs;
   final RxBool usesHealthConnect = false.obs;
 
-  static const int waterGoal = 8;
+  static const int mlPerGlass = DailyWaterIntake.mlPerGlass;
+  static const int defaultWaterGoalMl = SettingsController.defaultWaterGoalMl;
+
+  static int get waterGoalMl {
+    if (Get.isRegistered<SettingsController>()) {
+      return Get.find<SettingsController>().waterGoalMl.value;
+    }
+    return defaultWaterGoalMl;
+  }
   static const int weightApiLimit = 30;
   static const int stepsGoal = 10000;
+  static const String defaultWeightApiPeriod = '1week';
+  static const int waterApiPageLimit = 30;
 
   bool _waterGoalCelebrationShown = false;
+  bool _waterGoalListenerBound = false;
+  bool _waterApi404Logged = false;
+  WeightChartPeriod _weightChartPeriod = WeightChartPeriod.week;
+  WeightChartCustomRange? _weightChartCustomRange;
 
   DateTime get _today => MealEntry.normalizeDate(DateTime.now());
 
@@ -90,10 +125,46 @@ class TrackerController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    _migrateLegacyWaterCounts();
     unawaited(_storage.clearWeightEntryLogs());
     unawaited(_loadWeightHistory());
     unawaited(_loadActivityLog());
+    unawaited(refreshWaterFromApi());
+    _bindWaterGoalListener();
   }
+
+  @override
+  void onReady() {
+    super.onReady();
+    _bindWaterGoalListener();
+    unawaited(refreshWaterFromApi());
+  }
+
+  void _bindWaterGoalListener() {
+    if (_waterGoalListenerBound || !Get.isRegistered<SettingsController>()) {
+      return;
+    }
+    _waterGoalListenerBound = true;
+    ever(
+      Get.find<SettingsController>().waterGoalMl,
+      (_) => syncWaterGoalCelebration(),
+    );
+  }
+
+  /// Converts pre-ml glass counts (1, 2, 3…) left in memory after hot reload.
+  void _migrateLegacyWaterCounts() {
+    var changed = false;
+    for (final entry in waterByDate.entries.toList()) {
+      final raw = entry.value;
+      if (!_isLegacyGlassCount(raw)) continue;
+      waterByDate[entry.key] = raw * mlPerGlass;
+      changed = true;
+    }
+    if (changed) waterByDate.refresh();
+  }
+
+  bool _isLegacyGlassCount(int value) =>
+      value > 0 && value <= 24 && value % mlPerGlass != 0;
 
   @override
   void onClose() {
@@ -136,38 +207,58 @@ class TrackerController extends GetxController {
   int stepsForDate(DateTime date) =>
       stepsByDate[MealEntry.normalizeDate(date)] ?? 0;
 
-  int get waterGlasses => waterForDate(_today);
+  /// Total millilitres logged today.
+  int get waterMl => waterForDate(_today);
 
-  double get waterProgress => (waterGlasses / waterGoal).clamp(0.0, 1.0);
+  /// Glass equivalent of today's intake, for display.
+  int get waterGlasses => (waterMl / mlPerGlass).round();
 
-  bool get isWaterGoalComplete => waterGlasses >= waterGoal;
+  double get waterProgress =>
+      waterGoalMl > 0 ? (waterMl / waterGoalMl).clamp(0.0, 1.0) : 0.0;
 
-  int waterForDate(DateTime date) =>
-      waterByDate[MealEntry.normalizeDate(date)] ?? 0;
+  bool get isWaterGoalComplete => waterMl >= waterGoalMl;
+
+  int get waterMlOverGoal => (waterMl - waterGoalMl).clamp(0, 1000000);
+
+  int get waterMlRemaining => (waterGoalMl - waterMl).clamp(0, waterGoalMl);
+
+  /// Total millilitres logged on [date].
+  int waterForDate(DateTime date) {
+    final key = MealEntry.normalizeDate(date);
+    final raw = waterByDate[key] ?? 0;
+    if (!_isLegacyGlassCount(raw)) return raw;
+
+    final ml = raw * mlPerGlass;
+    waterByDate[key] = ml;
+    return ml;
+  }
 
   List<DailyWaterIntake> waterForLastDays(int dayCount) {
     final today = _today;
     return List.generate(dayCount, (index) {
       final day = today.subtract(Duration(days: dayCount - 1 - index));
-      return DailyWaterIntake(date: day, glasses: waterForDate(day));
+      return DailyWaterIntake(date: day, totalMl: waterForDate(day));
     });
   }
 
   List<DailyWaterIntake> get activeWaterDays => switch (waterPeriod.value) {
     WaterPeriod.today => [
-      DailyWaterIntake(date: _today, glasses: waterGlasses),
+      DailyWaterIntake(date: _today, totalMl: waterMl),
     ],
     WaterPeriod.yesterday => [
       DailyWaterIntake(
         date: _today.subtract(const Duration(days: 1)),
-        glasses: waterForDate(_today.subtract(const Duration(days: 1))),
+        totalMl: waterForDate(_today.subtract(const Duration(days: 1))),
       ),
     ],
     WaterPeriod.week => waterForLastDays(7),
     WaterPeriod.month => waterForLastDays(30),
   };
 
-  void setWaterPeriod(WaterPeriod period) => waterPeriod.value = period;
+  void setWaterPeriod(WaterPeriod period) {
+    waterPeriod.value = period;
+    unawaited(_refreshWaterForPeriod(period));
+  }
 
   String periodLabelFor(WaterPeriod period) => switch (period) {
     WaterPeriod.today => 'Today',
@@ -176,26 +267,88 @@ class TrackerController extends GetxController {
     WaterPeriod.month => '30 Days',
   };
 
-  void addWater() {
+  /// Adds one standard glass (250 ml).
+  void addWater() => addWaterMl(mlPerGlass);
+
+  void addWaterMl(int ml) => unawaited(_addWaterMl(ml));
+
+  Future<void> _addWaterMl(int ml) async {
+    if (ml <= 0) return;
     final today = _today;
-    final current = waterForDate(today);
-    if (current >= waterGoal) return;
+    final previous = waterForDate(today);
+    final wasComplete = previous >= waterGoalMl;
 
-    waterByDate[today] = current + 1;
+    waterByDate[today] = previous + ml;
     waterByDate.refresh();
+    _maybeShowWaterGoalCelebration(wasComplete);
 
-    if (isWaterGoalComplete && !_waterGoalCelebrationShown) {
+    final accessToken = await _weightAccessToken();
+    if (accessToken == null) return;
+
+    try {
+      final response = await _waterRepository.logWater(
+        accessToken: accessToken,
+        amountMl: ml,
+      );
+      final loggedEntry = response.entry;
+      if (loggedEntry != null) {
+        _upsertWaterEntries([loggedEntry]);
+      }
+      final serverTotal = response.dailyTotalMl;
+      if (serverTotal != null) {
+        waterByDate[today] = serverTotal;
+        waterByDate.refresh();
+      } else {
+        await refreshWaterForDate(today);
+      }
+    } on WaterApiException catch (error) {
+      _logWaterApi404Once(error);
+      debugPrint('TrackerController: water log failed: $error');
+    } catch (error) {
+      debugPrint('TrackerController: water log failed: $error');
+    }
+  }
+
+  void _logWaterApi404Once(WaterApiException error) {
+    if (error.statusCode != 404 || _waterApi404Logged) return;
+    _waterApi404Logged = true;
+    debugPrint(
+      'TrackerController: water API route not found (404) — '
+      'local tracking continues. Deploy /api/v1/water or run with '
+      '--dart-define=API_BASE_URL=http://10.0.2.2:3000',
+    );
+  }
+
+  void _maybeShowWaterGoalCelebration(bool wasComplete) {
+    if (!wasComplete && isWaterGoalComplete && !_waterGoalCelebrationShown) {
       _waterGoalCelebrationShown = true;
       WaterGoalSuccessDialog.show();
     }
   }
 
-  void removeWater() {
+  /// Removes one standard glass (250 ml).
+  void removeWater() => removeWaterMl(mlPerGlass);
+
+  void removeWaterMl(int ml) => unawaited(_removeWaterMl(ml));
+
+  Future<void> _removeWaterMl(int ml) async {
+    if (ml <= 0) return;
     final today = _today;
     final current = waterForDate(today);
     if (current <= 0) return;
 
-    final next = current - 1;
+    final entry = _latestTodayWaterEntry(preferredMl: ml);
+    if (entry != null) {
+      final outcome = await deleteWaterEntry(entry);
+      if (outcome.status == WaterDeleteStatus.deleted) {
+        if (!isWaterGoalComplete) {
+          _waterGoalCelebrationShown = false;
+        }
+        return;
+      }
+    }
+
+    final next = current - ml;
     if (next <= 0) {
       waterByDate.remove(today);
     } else {
@@ -208,14 +361,237 @@ class TrackerController extends GetxController {
     }
   }
 
+  Future<WaterDeleteOutcome> deleteWaterEntry(WaterLogEntry entry) async {
+    final entryId = entry.id?.trim();
+    if (entryId == null || entryId.isEmpty) {
+      return const WaterDeleteOutcome(
+        WaterDeleteStatus.missingId,
+        message: 'This entry cannot be deleted without a server id.',
+      );
+    }
+
+    final accessToken = await _weightAccessToken();
+    if (accessToken == null) {
+      return const WaterDeleteOutcome(
+        WaterDeleteStatus.failed,
+        message: 'Sign in to delete water from your account.',
+      );
+    }
+
+    try {
+      debugPrint(
+        'TrackerController: DELETE /api/v1/water/$entryId starting',
+      );
+      await _waterRepository.deleteWater(
+        accessToken: accessToken,
+        waterId: entryId,
+      );
+      waterEntries.removeWhere((item) => item.id == entryId);
+      waterEntries.refresh();
+      await refreshWaterForDate(entry.normalizedDate);
+      debugPrint(
+        'TrackerController: water entry deleted — '
+        'today=${waterForDate(_today)}ml',
+      );
+      return const WaterDeleteOutcome(WaterDeleteStatus.deleted);
+    } on WaterApiException catch (error) {
+      _logWaterApi404Once(error);
+      if (error.statusCode == 404) {
+        debugPrint(
+          'TrackerController: delete water API returned 404 for $entryId',
+        );
+        waterEntries.removeWhere((item) => item.id == entryId);
+        waterEntries.refresh();
+        await refreshWaterForDate(entry.normalizedDate);
+        return const WaterDeleteOutcome(WaterDeleteStatus.deleted);
+      }
+
+      return WaterDeleteOutcome(
+        WaterDeleteStatus.failed,
+        message: error.message,
+      );
+    } catch (error) {
+      return WaterDeleteOutcome(
+        WaterDeleteStatus.failed,
+        message: error.toString(),
+      );
+    }
+  }
+
+  WaterLogEntry? _latestTodayWaterEntry({int? preferredMl}) {
+    final today = _today;
+    final todayEntries = waterEntries
+        .where((entry) => entry.normalizedDate == today)
+        .toList();
+    if (todayEntries.isEmpty) return null;
+
+    if (preferredMl != null) {
+      final matches =
+          todayEntries.where((entry) => entry.amountMl == preferredMl).toList();
+      if (matches.isNotEmpty) return matches.last;
+    }
+
+    return todayEntries.last;
+  }
+
+  void syncWaterGoalCelebration() {
+    if (!isWaterGoalComplete) {
+      _waterGoalCelebrationShown = false;
+    }
+    waterByDate.refresh();
+  }
+
+  /// Loads today's water total and paginated history from the API.
+  Future<void> refreshWaterFromApi() async {
+    await refreshWaterForDate(_today);
+    await refreshWaterHistory();
+  }
+
+  Future<void> _refreshWaterForPeriod(WaterPeriod period) async {
+    switch (period) {
+      case WaterPeriod.today:
+        await refreshWaterForDate(_today);
+      case WaterPeriod.yesterday:
+        await refreshWaterForDate(_today.subtract(const Duration(days: 1)));
+      case WaterPeriod.week:
+      case WaterPeriod.month:
+        await refreshWaterHistory();
+    }
+  }
+
+  void _applyWaterTotals(Map<DateTime, int> totals) {
+    if (totals.isEmpty) return;
+    for (final entry in totals.entries) {
+      waterByDate[entry.key] = entry.value;
+    }
+    waterByDate.refresh();
+  }
+
+  void _applyWaterFetchResult(
+    WaterFetchResult result, {
+    DateTime? replaceEntriesForDate,
+  }) {
+    if (result.entries.isNotEmpty) {
+      if (replaceEntriesForDate != null) {
+        final day = MealEntry.normalizeDate(replaceEntriesForDate);
+        waterEntries.removeWhere((entry) => entry.normalizedDate == day);
+        waterEntries.addAll(result.entries);
+      } else {
+        _upsertWaterEntries(result.entries);
+      }
+      waterEntries.refresh();
+    }
+    _applyWaterTotals(result.dailyTotalsMl);
+  }
+
+  void _upsertWaterEntries(List<WaterLogEntry> incoming) {
+    for (final entry in incoming) {
+      final id = entry.id?.trim();
+      if (id != null && id.isNotEmpty) {
+        final index = waterEntries.indexWhere((item) => item.id == id);
+        if (index == -1) {
+          waterEntries.add(entry);
+        } else {
+          waterEntries[index] = entry;
+        }
+        continue;
+      }
+
+      waterEntries.add(entry);
+    }
+  }
+
+  Future<void> refreshWaterForDate(DateTime date) async {
+    final accessToken = await _weightAccessToken();
+    if (accessToken == null) return;
+
+    try {
+      final result = await _waterRepository.fetchWaterByDate(
+        accessToken: accessToken,
+        date: date,
+      );
+      _applyWaterFetchResult(result, replaceEntriesForDate: date);
+    } on WaterApiException catch (error) {
+      _logWaterApi404Once(error);
+      debugPrint('TrackerController: water date fetch failed: $error');
+    } catch (error) {
+      debugPrint('TrackerController: water date fetch failed: $error');
+    }
+  }
+
+  Future<void> refreshWaterHistory({int page = 1}) async {
+    final accessToken = await _weightAccessToken();
+    if (accessToken == null) return;
+
+    try {
+      final result = await _waterRepository.fetchWaterHistory(
+        accessToken: accessToken,
+        page: page,
+        limit: waterApiPageLimit,
+      );
+      _applyWaterFetchResult(result);
+    } on WaterApiException catch (error) {
+      _logWaterApi404Once(error);
+      debugPrint('TrackerController: water history fetch failed: $error');
+    } catch (error) {
+      debugPrint('TrackerController: water history fetch failed: $error');
+    }
+  }
+
   Future<void> _loadWeightHistory() async {
-    await refreshWeightFromApi();
+    await refreshWeightFromApi(period: defaultWeightApiPeriod);
     if (weightEntries.isEmpty) {
       _seedDisplayWeightFromProfile();
     }
   }
 
+  void setWeightChartPeriod(
+    WeightChartPeriod period, {
+    WeightChartCustomRange? customRange,
+  }) {
+    _weightChartPeriod = period;
+    _weightChartCustomRange = customRange;
+  }
+
+  Future<void> refreshWeightForChartPeriod({
+    WeightChartPeriod? period,
+    WeightChartCustomRange? customRange,
+    bool keepExistingOnEmpty = false,
+    List<WeightEntry> authoritativeEntries = const [],
+  }) async {
+    final effectivePeriod = period ?? _weightChartPeriod;
+    final effectiveRange = customRange ?? _weightChartCustomRange;
+
+    if (effectivePeriod == WeightChartPeriod.custom) {
+      final range = effectiveRange;
+      if (range == null) {
+        await refreshWeightFromApi(
+          period: defaultWeightApiPeriod,
+          keepExistingOnEmpty: keepExistingOnEmpty,
+          authoritativeEntries: authoritativeEntries,
+        );
+        return;
+      }
+      await refreshWeightFromApi(
+        fromDate: range.start,
+        toDate: range.end,
+        keepExistingOnEmpty: keepExistingOnEmpty,
+        authoritativeEntries: authoritativeEntries,
+      );
+      return;
+    }
+
+    await refreshWeightFromApi(
+      period: effectivePeriod.apiPeriod,
+      keepExistingOnEmpty: keepExistingOnEmpty,
+      authoritativeEntries: authoritativeEntries,
+    );
+  }
+
   Future<void> refreshWeightFromApi({
+    String? period,
+    DateTime? fromDate,
+    DateTime? toDate,
     bool keepExistingOnEmpty = false,
     List<WeightEntry> authoritativeEntries = const [],
   }) async {
@@ -232,8 +608,13 @@ class TrackerController extends GetxController {
     try {
       final fetched = await _weightRepository.fetchWeights(
         accessToken: accessToken,
-        page: 1,
-        limit: weightApiLimit,
+        period: period,
+        fromDate: fromDate,
+        toDate: toDate,
+        page: period == null && fromDate == null && toDate == null ? 1 : null,
+        limit: period == null && fromDate == null && toDate == null
+            ? weightApiLimit
+            : null,
       );
 
       if (fetched.isNotEmpty) {
@@ -444,7 +825,7 @@ class TrackerController extends GetxController {
         _upsertWeightEntry(savedEntry);
 
         debugPrint('TrackerController: refreshing weight history from GET');
-        await refreshWeightFromApi(
+        await refreshWeightForChartPeriod(
           keepExistingOnEmpty: true,
           authoritativeEntries: [savedEntry],
         );
@@ -538,7 +919,7 @@ class TrackerController extends GetxController {
         accessToken: accessToken,
         weightId: entryId,
       );
-      await refreshWeightFromApi();
+      await refreshWeightForChartPeriod();
       if (weightEntries.isEmpty) {
         _seedDisplayWeightFromProfile();
         weightRevision.value++;
@@ -553,7 +934,7 @@ class TrackerController extends GetxController {
         debugPrint(
           'TrackerController: delete weight API returned 404 for $entryId',
         );
-        await refreshWeightFromApi();
+        await refreshWeightForChartPeriod();
         return const WeightDeleteOutcome(WeightDeleteStatus.deleted);
       }
 

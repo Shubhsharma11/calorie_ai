@@ -9,6 +9,32 @@ abstract final class AppColors {
     _isDark = brightness == Brightness.dark;
   }
 
+  /// Prefer this at the top of a screen build so [AppColors] matches [Theme].
+  static void syncFromContext(BuildContext context) {
+    syncWithBrightness(Theme.of(context).brightness);
+  }
+
+  static bool isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
+
+  static Color textPrimaryOf(BuildContext context) =>
+      isDark(context) ? darkTextPrimary : lightTextPrimary;
+
+  static Color textSecondaryOf(BuildContext context) =>
+      isDark(context) ? darkTextSecondary : lightTextSecondary;
+
+  static Color backgroundOf(BuildContext context) =>
+      isDark(context) ? darkBackground : lightPageBackground;
+
+  static Color cardOf(BuildContext context) =>
+      isDark(context) ? darkCard : lightCard;
+
+  static Color surfaceOf(BuildContext context) =>
+      isDark(context) ? darkSurface : lightSurface;
+
+  static Color borderOf(BuildContext context) =>
+      isDark(context) ? darkBorder : lightBorder;
+
   // Brand (shared)
   static const primary = Color(0xFF34C759);
   static const primaryDark = Color(0xFF248A3D);
@@ -19,6 +45,8 @@ abstract final class AppColors {
   static const selectionText = primary;
 
   // Light palette
+  /// Soft mint-grey page canvas — cards stay white on top.
+  static const lightPageBackground = Color(0xFFF4FAF6);
   static const lightBackground = Color(0xFFFFFFFF);
   static const lightSurface = Color(0xFFF2F2F7);
   static const lightCard = Color(0xFFFFFFFF);
@@ -26,16 +54,18 @@ abstract final class AppColors {
   static const lightTextSecondary = Color(0xFF8E8E93);
   static const lightBorder = Color(0xFFE5E5EA);
 
-  // Dark palette
-  static const darkBackground = Color(0xFF000000);
+  // Dark palette — soft greys (Material / iOS style), easier on the eyes than pure black.
+  static const darkBackground = Color(0xFF121212);
   static const darkSurface = Color(0xFF1C1C1E);
-  static const darkCard = Color(0xFF1C1C1E);
-  static const darkTextPrimary = Color(0xFFFFFFFF);
-  static const darkTextSecondary = Color(0xFF8E8E93);
-  static const darkBorder = Color(0xFF38383A);
+  static const darkCard = Color(0xFF2C2C2E);
+  static const darkTextPrimary = Color(0xFFE8E8ED);
+  static const darkTextSecondary = Color(0xFF98989F);
+  static const darkBorder = Color(0xFF3A3A3C);
+  /// Subtle green-tinted header wash in dark mode (profile, etc.).
+  static const darkHeaderWash = Color(0xFF1A231E);
 
   static Color get background =>
-      _isDark ? darkBackground : lightBackground;
+      _isDark ? darkBackground : lightPageBackground;
 
   static Color get surface => _isDark ? darkSurface : lightSurface;
 
@@ -51,15 +81,18 @@ abstract final class AppColors {
 
   /// Soft green fill used for selected chips, cards, and tabs.
   static Color get selectionFill =>
-      primary.withValues(alpha: _isDark ? 0.22 : 0.15);
+      primary.withValues(alpha: _isDark ? 0.16 : 0.15);
 
   /// Border accent on selected interactive items.
   static Color get selectionBorder => primary.withValues(alpha: 0.35);
 
   /// Subtle shadow / overlay tint that works in both themes.
   static Color get shadowColor => _isDark
-      ? Colors.black.withValues(alpha: 0.35)
+      ? Colors.black.withValues(alpha: 0.22)
       : Colors.black.withValues(alpha: 0.04);
+
+  /// Icon accent on dark surfaces — brighter green for legibility.
+  static Color get iconAccent => _isDark ? primary : primaryDark;
 
   static Color get dialogBarrier =>
       _isDark ? Colors.black87 : Colors.black54;

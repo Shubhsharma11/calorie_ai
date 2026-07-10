@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
@@ -11,6 +13,7 @@ import '../core/app_snackbar.dart';
 import '../core/weight_chart_data.dart';
 import '../models/meal_entry.dart';
 import '../models/weight_entry.dart';
+import '../widgets/app_app_bar.dart';
 import '../theme/app_colors.dart';
 
 class WeightTrackerView extends GetView<TrackerController> {
@@ -37,6 +40,18 @@ class _WeightTrackerBodyState extends State<_WeightTrackerBody> {
   WeightChartPeriod _chartPeriod = WeightChartPeriod.week;
   WeightChartCustomRange? _customChartRange;
 
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.setWeightChartPeriod(
+      _chartPeriod,
+      customRange: _customChartRange,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(widget.controller.refreshWeightForChartPeriod());
+    });
+  }
+
   Future<void> _onChartPeriodChanged(
     BuildContext context,
     WeightChartPeriod period,
@@ -48,10 +63,20 @@ class _WeightTrackerBodyState extends State<_WeightTrackerBody> {
         _chartPeriod = WeightChartPeriod.custom;
         _customChartRange = range;
       });
+      widget.controller.setWeightChartPeriod(
+        _chartPeriod,
+        customRange: _customChartRange,
+      );
+      await widget.controller.refreshWeightForChartPeriod(
+        period: _chartPeriod,
+        customRange: _customChartRange,
+      );
       return;
     }
 
     setState(() => _chartPeriod = period);
+    widget.controller.setWeightChartPeriod(_chartPeriod);
+    await widget.controller.refreshWeightForChartPeriod(period: _chartPeriod);
   }
 
   Future<WeightChartCustomRange?> _pickCustomChartRange(
@@ -87,16 +112,13 @@ class _WeightTrackerBodyState extends State<_WeightTrackerBody> {
     final controller = widget.controller;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Weight Tracker',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
+      appBar: AppAppBar(
+        title: 'Weight Tracker',
         actions: [
           IconButton(
             onPressed: () => _pickDateAndLogWeight(context),
-            icon: const Icon(Icons.calendar_month_outlined),
-            color: AppColors.primary,
+            icon: const Icon(Icons.calendar_month_outlined, color: AppColors.primary),
+            tooltip: 'Log weight',
           ),
         ],
       ),
@@ -545,29 +567,9 @@ class _WeightChartCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.pop(sheetContext),
-                        icon: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          size: 20,
-                        ),
-                        color: AppColors.textPrimary,
-                        tooltip: 'Back',
-                      ),
-                      const Expanded(
-                        child: Text(
-                          'Weight Entries',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 48),
-                    ],
+                  AppSheetHeader(
+                    title: 'Weight Entries',
+                    onBack: () => Navigator.pop(sheetContext),
                   ),
                   const SizedBox(height: 8),
                   Text(

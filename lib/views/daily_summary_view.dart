@@ -9,6 +9,7 @@ import '../core/dashboard_actions.dart';
 import '../core/responsive.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/rotating_motivation_text.dart';
 
 class DailySummaryView extends GetView<DailySummaryController> {
@@ -32,11 +33,11 @@ class DailySummaryView extends GetView<DailySummaryController> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Daily Summary'),
+      appBar: AppAppBar(
+        title: 'Daily Summary',
         actions: [
           IconButton(
-            icon: Icon(Icons.calendar_today_rounded),
+            icon: const Icon(Icons.calendar_today_rounded),
             onPressed: () => DashboardActions.openCalendar(context),
           ),
         ],
@@ -330,8 +331,10 @@ class _AchievementsSection extends GetView<DailySummaryController> {
                 color: DailySummaryView._blue,
                 title: 'Water Goal Completed',
                 subtitle: controller.waterGoalCompleted
-                    ? 'Great job!'
-                    : '${controller.waterRemaining} glasses left',
+                    ? controller.waterMlOverGoal > 0
+                        ? '+${controller.waterMlOverGoal} ml over goal'
+                        : 'Great job!'
+                    : '${controller.waterMlRemaining} ml left',
                 onTap: () => Get.toNamed(AppRoutes.waterTracker),
               ),
               const SizedBox(width: 10),
@@ -421,7 +424,7 @@ class _SmartInsightsSection extends GetView<DailySummaryController> {
   @override
   Widget build(BuildContext context) {
     final proteinGap = controller.proteinGap;
-    final waterLeft = controller.waterRemaining;
+    final waterLeftMl = controller.waterMlRemaining;
     final weeklyChange = controller.weeklyCalorieChangePercent;
 
     return Column(
@@ -441,13 +444,13 @@ class _SmartInsightsSection extends GetView<DailySummaryController> {
             suffix: ' target. Try adding more protein-rich foods.',
             onTap: () => Get.toNamed(AppRoutes.addFood),
           ),
-        if (waterLeft > 0)
+        if (waterLeftMl > 0)
           _InsightTile(
             icon: Icons.water_drop_rounded,
             iconColor: DailySummaryView._blue,
             text: 'Drink ',
-            bold: '$waterLeft more',
-            suffix: ' glasses of water to complete today\'s hydration goal.',
+            bold: '$waterLeftMl ml more',
+            suffix: ' water to complete today\'s hydration goal.',
             onTap: () => Get.toNamed(AppRoutes.waterTracker),
           ),
         _InsightTile(

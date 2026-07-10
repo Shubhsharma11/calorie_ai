@@ -12,6 +12,7 @@ import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/responsive_page.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/weight_ruler_slider.dart';
 
 class GoalWeightView extends StatefulWidget {
@@ -199,12 +200,7 @@ class _GoalWeightViewState extends State<GoalWeightView> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        centerTitle: true,
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-      ),
+      appBar: const AppAppBar.backOnly(),
       body: SetupScreenLayout(
         scrollable: true,
         content: Column(

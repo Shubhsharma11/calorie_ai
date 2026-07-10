@@ -3,21 +3,38 @@ import 'meal_entry.dart';
 class DailyWaterIntake {
   const DailyWaterIntake({
     required this.date,
-    required this.glasses,
+    required this.totalMl,
   });
 
+  /// Standard glass size used for glass-equivalent display.
+  static const int mlPerGlass = 250;
+
   final DateTime date;
-  final int glasses;
+  final int totalMl;
 
   factory DailyWaterIntake.empty(DateTime date) => DailyWaterIntake(
         date: MealEntry.normalizeDate(date),
-        glasses: 0,
+        totalMl: 0,
       );
 
-  bool goalMet(int goal) => glasses >= goal;
+  int get glasses => (totalMl / mlPerGlass).round();
 
-  bool get hasData => glasses > 0;
+  bool goalMet(int goalMl) => totalMl >= goalMl;
 
-  double progressFor(int goal) =>
-      goal > 0 ? (glasses / goal).clamp(0.0, 1.0) : 0;
+  bool get hasData => totalMl > 0;
+
+  double progressFor(int goalMl) =>
+      goalMl > 0 ? (totalMl / goalMl).clamp(0.0, 1.0) : 0;
+}
+
+/// Formats a millilitre amount for display (e.g. 750 ml, 1.5 L).
+String formatWaterMl(int ml) {
+  if (ml >= 1000) {
+    final liters = ml / 1000;
+    final text = liters == liters.roundToDouble()
+        ? liters.round().toString()
+        : liters.toStringAsFixed(1);
+    return '$text L';
+  }
+  return '$ml ml';
 }

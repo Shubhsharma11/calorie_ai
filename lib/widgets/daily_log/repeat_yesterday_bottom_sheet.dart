@@ -2,6 +2,7 @@ import 'package:calorie_ai/widgets/epeat_yesterday_meal_card.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/food_controller.dart';
+import '../../theme/app_colors.dart';
 import 'package:intl/intl.dart';
 
 class RepeatYesterdayBottomSheet extends StatelessWidget {
@@ -10,7 +11,12 @@ class RepeatYesterdayBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<FoodController>();
-    final meals = controller.getYesterdayMeals();
+    final meals = controller.getLastLoggedMeals();
+    if (controller.selectedYesterdayMealCount == 0 && meals.isNotEmpty) {
+    controller.selectAllYesterdayMeals();
+  }
+
+  
     for (final meal in meals) {
       debugPrint(meal.meal);
     }
@@ -33,9 +39,9 @@ class RepeatYesterdayBottomSheet extends StatelessWidget {
       maxChildSize: 0.95,
       builder: (context, scrollController) {
         return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: Column(
             children: [
@@ -45,7 +51,7 @@ class RepeatYesterdayBottomSheet extends StatelessWidget {
                 width: 50,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
+                  color: AppColors.border,
                   borderRadius: BorderRadius.circular(20),
                 ),
               ),
@@ -53,11 +59,12 @@ class RepeatYesterdayBottomSheet extends StatelessWidget {
               const SizedBox(height: 20),
               Column(
   children: [
-    const Text(
-      "Yesterday",
+    Text(
+      'Last Logged Meals',
       style: TextStyle(
         fontSize: 26,
         fontWeight: FontWeight.w700,
+        color: AppColors.textPrimary,
       ),
     ),
 
@@ -98,9 +105,12 @@ width: MediaQuery.of(context).size.width * 0.42,
                     meals.isNotEmpty;
 
                 return CheckboxListTile(
-                  title: const Text(
-                    "Select All",
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                  title: Text(
+                    'Select All',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                   value: allSelected,
                   onChanged: (value) {
@@ -143,21 +153,26 @@ width: MediaQuery.of(context).size.width * 0.42,
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text("Cancel"),
+onPressed: () {
+  Navigator.pop(context);
+},                     child: const Text("Cancel"),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Obx(
                           () => ElevatedButton(
-                            onPressed:
-                                controller.selectedYesterdayMealCount == 0
-                                ? null
-                                : () {
-                                    controller.copySelectedYesterdayMeals();
-                                    Navigator.pop(context);
-                                  },
+                            onPressed: controller.selectedYesterdayMealCount == 0
+    ? null
+    : () async {
+        final count = controller.copySelectedYesterdayMeals();
+
+        if (count > 0) {
+          await controller.dismissRepeatYesterdayCard();
+
+          Navigator.pop(context);
+        }
+      },
                             child: Text(
                               "Add ${controller.selectedYesterdayMealCount} "
                               "Meal${controller.selectedYesterdayMealCount == 1 ? "" : "s"}",
@@ -222,10 +237,10 @@ width: MediaQuery.of(context).size.width * 0.42,
   return Container(
     height: 66,
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: AppColors.surface,
       borderRadius: BorderRadius.circular(16),
       border: Border.all(
-        color: Colors.grey.shade300,
+        color: AppColors.border,
       ),
     ),
     child: Row(
@@ -254,9 +269,9 @@ width: MediaQuery.of(context).size.width * 0.42,
     const SizedBox(width: 6),
     Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 16,
-        color: Colors.black87,
+        color: AppColors.textSecondary,
         fontWeight: FontWeight.w500,
       ),
     ),

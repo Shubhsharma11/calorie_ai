@@ -8,6 +8,7 @@ import '../core/streak_calculator.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
 
 class StreakView extends GetView<StreakController> {
@@ -20,7 +21,7 @@ class StreakView extends GetView<StreakController> {
     final r = context.responsive;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Your Streak')),
+      appBar: const AppAppBar(title: 'Your Streak'),
       body: RefreshIndicator(
         onRefresh: controller.refreshFromApi,
         child: ResponsivePage(

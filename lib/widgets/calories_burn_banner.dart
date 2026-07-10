@@ -26,12 +26,12 @@ class CaloriesBurnBanner extends StatelessWidget {
 
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: AppColors.shadowColor,
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -60,6 +60,7 @@ class CaloriesBurnBanner extends StatelessWidget {
                         style: TextStyle(
                           fontSize: r.scale(14),
                           fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                       const Spacer(),

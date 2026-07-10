@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/api_timezone.dart';
 import '../models/api_meal_mapper.dart';
 import '../models/meal_entry.dart';
 import 'api_client.dart';
@@ -33,7 +34,7 @@ class MealsApiService {
 
     final response = await _apiClient.get(
       endpoint,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
     );
 
     return _parseMealsResponse(response, fallbackDate: date);
@@ -48,7 +49,7 @@ class MealsApiService {
 
     final response = await _apiClient.post(
       ApiEndpoints.meals,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
       body: body,
     );
 
@@ -64,7 +65,7 @@ class MealsApiService {
 
     final response = await _apiClient.delete(
       endpoint,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
     );
 
     _parseDeleteResponse(response, mealId: mealId);

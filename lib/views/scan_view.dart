@@ -8,6 +8,7 @@ import '../models/food_item.dart';
 import '../theme/app_colors.dart';
 import '../widgets/food_emoji_avatar.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
 
 class ScanView extends GetView<ScanController> {
@@ -18,7 +19,7 @@ class ScanView extends GetView<ScanController> {
     final r = context.responsive;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan Barcode')),
+      appBar: const AppAppBar(title: 'Scan Barcode'),
       body: ResponsivePage(
         scrollable: false,
         child: Column(

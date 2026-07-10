@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/main_controller.dart';
+import '../controllers/theme_controller.dart';
 import '../core/app_page_transitions.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
@@ -15,8 +16,6 @@ import 'scan_view.dart';
 class MainView extends GetView<MainController> {
   const MainView({super.key});
 
-  static const _profileTabIndex = 4;
-
   static const _tabs = [
     (icon: Icons.home, label: 'Home'),
     (icon: Icons.menu_book, label: 'Diary'),
@@ -27,6 +26,8 @@ class MainView extends GetView<MainController> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
+
     const pages = [
       DashboardView(),
       DailyLogView(),
@@ -39,6 +40,8 @@ class MainView extends GetView<MainController> {
 
     return Obx(() {
       final tab = controller.tabIndex.value;
+      // Rebuild tabs when theme changes so AppColors stay in sync.
+      final _ = Get.find<ThemeController>().themeMode.value;
 
       if (r.isWide) {
         return Scaffold(
@@ -109,12 +112,10 @@ class MainView extends GetView<MainController> {
           },
           child: KeyedSubtree(
             key: ValueKey<int>(tab),
-            child: tab == _profileTabIndex
-                ? pages[tab]
-                : SafeArea(
-                    bottom: false,
-                    child: pages[tab],
-                  ),
+            child: SafeArea(
+            bottom: false,
+            child: pages[tab],
+          ),
           ),
         ),
         bottomNavigationBar: FloatingBottomNavBar(

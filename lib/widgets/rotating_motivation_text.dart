@@ -63,7 +63,7 @@ class _RotatingMotivationTextState extends State<RotatingMotivationText> {
         );
 
     final lineHeight = (style.fontSize ?? 14) * (style.height ?? 1.3);
-    const maxLines = 2;
+    const maxLines = 1;
     final fixedHeight = lineHeight * maxLines;
 
     return SizedBox(
@@ -76,7 +76,7 @@ class _RotatingMotivationTextState extends State<RotatingMotivationText> {
           switchOutCurve: Curves.easeInCubic,
           layoutBuilder: (currentChild, previousChildren) {
             return Stack(
-              alignment: Alignment.topLeft,
+              alignment: Alignment.centerLeft,
               clipBehavior: Clip.hardEdge,
               children: [
                 ...previousChildren,
@@ -96,14 +96,15 @@ class _RotatingMotivationTextState extends State<RotatingMotivationText> {
               ),
             );
           },
-          child: Align(
+          child: FittedBox(
             key: ValueKey<int>(_index),
-            alignment: Alignment.topLeft,
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
             child: Text(
               widget.messages[_index],
               style: style,
-              maxLines: maxLines,
-              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              softWrap: false,
             ),
           ),
         ),

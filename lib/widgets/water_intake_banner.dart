@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/tracker_controller.dart';
+import '../controllers/settings_controller.dart';
 import '../core/responsive.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
@@ -15,26 +16,41 @@ class WaterIntakeBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    if (!Get.isRegistered<TrackerController>()) {
+      return const SizedBox.shrink();
+    }
     final tracker = Get.find<TrackerController>();
 
     return Obx(() {
+      if (Get.isRegistered<SettingsController>()) {
+        Get.find<SettingsController>().waterGoalMl.value;
+      }
+      final waterMl = tracker.waterMl;
+      final goalMl = TrackerController.waterGoalMl;
       final glasses = tracker.waterGlasses;
-      final goal = TrackerController.waterGoal;
       final progress = tracker.waterProgress;
       final isComplete = tracker.isWaterGoalComplete;
+      final overMl = tracker.waterMlOverGoal;
+      final remainingMl = tracker.waterMlRemaining;
       final _ = tracker.waterByDate.length;
       final color = isComplete ? AppColors.primary : _waterBlue;
+      final subtitle = overMl > 0
+          ? 'Goal reached · +$overMl ml extra'
+          : isComplete
+              ? 'Goal reached · ≈ $glasses glass${glasses == 1 ? '' : 'es'}'
+              : glasses > 0
+                  ? '$remainingMl ml left · ≈ $glasses glass${glasses == 1 ? '' : 'es'}'
+                  : '$remainingMl ml left';
 
       return Container(
         decoration: BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -71,7 +87,7 @@ class WaterIntakeBanner extends StatelessWidget {
                                   ),
                                   const Spacer(),
                                   Text(
-                                    '$glasses / $goal',
+                                    '$waterMl / $goalMl ml',
                                     style: TextStyle(
                                       fontSize: r.scale(14),
                                       fontWeight: FontWeight.w700,
@@ -79,6 +95,15 @@ class WaterIntakeBanner extends StatelessWidget {
                                     ),
                                   ),
                                 ],
+                              ),
+                              SizedBox(height: r.scale(4)),
+                              Text(
+                                subtitle,
+                                style: TextStyle(
+                                  fontSize: r.scale(11),
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
                               SizedBox(height: r.scale(8)),
                               ClipRRect(
@@ -108,14 +133,14 @@ class WaterIntakeBanner extends StatelessWidget {
             Padding(
               padding: EdgeInsets.only(right: r.scale(8)),
               child: IconButton.filled(
-                onPressed: isComplete ? null : tracker.addWater,
+                onPressed: tracker.addWater,
                 icon: Icon(Icons.add, size: 20),
                 style: IconButton.styleFrom(
                   backgroundColor: color,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary,
                   disabledBackgroundColor: AppColors.border,
                 ),
-                tooltip: 'Add glass',
+                tooltip: 'Add 250 ml',
               ),
             ),
           ],

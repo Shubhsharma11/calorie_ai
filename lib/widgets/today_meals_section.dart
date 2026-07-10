@@ -98,10 +98,17 @@ class _MealGroup extends StatelessWidget {
             ),
             if (showAddButton)
               TextButton.icon(
-                onPressed: () {
-                  food.setSelectedMeal(meal);
-                  Get.toNamed(AppRoutes.addFood);
-                },
+  onPressed: () {
+    // If the user is viewing an old day,
+    // switch back to today before adding a meal.
+    food.prepareForNewMeal();
+
+    // Remember which meal (Breakfast/Lunch/etc.) they selected.
+    food.setSelectedMeal(meal);
+
+    // Open the Add Food screen.
+    Get.toNamed(AppRoutes.addFood);
+  },
                 icon: Icon(Icons.add, size: 18, color: AppColors.primary),
                 label: Text(
                   'Add',

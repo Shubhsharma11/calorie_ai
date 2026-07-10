@@ -8,6 +8,7 @@ import '../core/streak_calculator.dart';
 import '../core/responsive.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
 
 class NotificationsView extends StatefulWidget {
@@ -27,10 +28,19 @@ class _NotificationsViewState extends State<NotificationsView> {
     final r = context.responsive;
 
     return Scaffold(
-      body: SafeArea(
-        child: ResponsivePage(
-          scrollable: true,
-          child: Obx(() {
+      appBar: AppAppBar(
+        title: 'Notifications',
+        actions: [
+          IconButton(
+            onPressed: () => Get.toNamed(AppRoutes.settings),
+            icon: const Icon(Icons.settings_rounded),
+            tooltip: 'Settings',
+          ),
+        ],
+      ),
+      body: ResponsivePage(
+        scrollable: true,
+        child: Obx(() {
             final notifications = _buildNotifications(
               settings,
             ).where((item) => !_dismissedIds.contains(item.id)).toList();
@@ -48,10 +58,7 @@ class _NotificationsViewState extends State<NotificationsView> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _TopBar(
-                  onSettingsTap: () => Get.toNamed(AppRoutes.settings),
-                ),
-                SizedBox(height: r.scale(18)),
+                SizedBox(height: r.scale(8)),
                 _GreetingBanner(),
                 SizedBox(height: r.scale(22)),
                 _SectionHeader(
@@ -100,7 +107,6 @@ class _NotificationsViewState extends State<NotificationsView> {
             );
           }),
         ),
-      ),
     );
   }
 
@@ -139,7 +145,7 @@ class _NotificationsViewState extends State<NotificationsView> {
           title: waterDone ? 'Water goal completed' : 'Water goal pending',
           body: waterDone
               ? 'Great work. You reached your hydration goal.'
-              : 'You have logged ${tracker.waterGlasses} of ${TrackerController.waterGoal} glasses today.',
+              : 'You have logged ${tracker.waterMl} of ${TrackerController.waterGoalMl} ml today.',
           timeLabel: '2 min ago',
           accentColor: const Color(0xFFFF8A00),
           backgroundColor: const Color(0xFFFFF3E4),
@@ -252,39 +258,6 @@ class _NotificationsViewState extends State<NotificationsView> {
 
   void _clearNotification(String id) {
     setState(() => _dismissedIds.add(id));
-  }
-}
-
-class _TopBar extends StatelessWidget {
-  const _TopBar({required this.onSettingsTap});
-
-  final VoidCallback onSettingsTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _RoundIconButton(
-          icon: Icons.arrow_back_ios_new_rounded,
-          onTap: Get.back,
-        ),
-        Expanded(
-          child: Text(
-            'Notifications',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ),
-        _RoundIconButton(
-          icon: Icons.settings_rounded,
-          onTap: onSettingsTap,
-        ),
-      ],
-    );
   }
 }
 
@@ -625,30 +598,6 @@ class _StreakDaysBadge extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _RoundIconButton extends StatelessWidget {
-  const _RoundIconButton({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: 42,
-          height: 42,
-          child: Icon(icon, size: 20, color: AppColors.textPrimary),
-        ),
       ),
     );
   }

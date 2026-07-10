@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
 
-const profilePurple = Color(0xFF3D3A7A);
-
 /// Green numbered section label (e.g. "1 Profile").
 class ProfileSectionHeader extends StatelessWidget {
   const ProfileSectionHeader({
@@ -20,6 +18,7 @@ class ProfileSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
 
     return Padding(
@@ -37,7 +36,7 @@ class ProfileSectionHeader extends StatelessWidget {
             child: Text(
               '$number',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.onPrimary,
                 fontWeight: FontWeight.bold,
                 fontSize: r.scale(14),
               ),
@@ -49,7 +48,7 @@ class ProfileSectionHeader extends StatelessWidget {
             style: TextStyle(
               fontSize: r.scale(17, tablet: 18),
               fontWeight: FontWeight.w700,
-              color: titleColor ?? profilePurple,
+              color: titleColor ?? AppColors.textPrimaryOf(context),
             ),
           ),
         ],
@@ -58,9 +57,7 @@ class ProfileSectionHeader extends StatelessWidget {
   }
 }
 
-const _profileIconColor = Color(0xFF3D4F6B);
-
-/// White rounded card used across profile sub-screens.
+/// Rounded card used across profile sub-screens.
 class ProfileSectionCard extends StatelessWidget {
   const ProfileSectionCard({super.key, required this.child});
 
@@ -68,15 +65,17 @@ class ProfileSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: AppColors.cardOf(context),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderOf(context)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: AppColors.shadowColor,
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
@@ -105,6 +104,8 @@ class ProfileMenuRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
@@ -117,7 +118,7 @@ class ProfileMenuRow extends StatelessWidget {
             Icon(
               icon,
               size: context.responsive.scale(26, tablet: 28),
-              color: _profileIconColor,
+              color: AppColors.primary,
             ),
             SizedBox(width: context.responsive.scale(18)),
             Expanded(
@@ -126,14 +127,14 @@ class ProfileMenuRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: context.responsive.scale(16, tablet: 17),
                   fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary,
+                  color: AppColors.textPrimaryOf(context),
                 ),
               ),
             ),
             Icon(
               Icons.chevron_right_rounded,
               size: context.responsive.scale(24),
-              color: _profileIconColor,
+              color: AppColors.textSecondaryOf(context),
             ),
           ],
         ),
@@ -162,13 +163,14 @@ class ProfileGoalField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
 
     return Material(
-      color: AppColors.card,
+      color: AppColors.cardOf(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppColors.border),
+        side: BorderSide(color: AppColors.borderOf(context)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -188,7 +190,7 @@ class ProfileGoalField extends StatelessWidget {
                       label,
                       style: TextStyle(
                         fontSize: r.scale(13),
-                        color: AppColors.textSecondary,
+                        color: AppColors.textSecondaryOf(context),
                       ),
                     ),
                     SizedBox(height: r.scale(4)),
@@ -197,7 +199,7 @@ class ProfileGoalField extends StatelessWidget {
                       style: TextStyle(
                         fontSize: r.scale(18, tablet: 19),
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: AppColors.textPrimaryOf(context),
                       ),
                     ),
                     if (subtitle != null) ...[
@@ -206,7 +208,7 @@ class ProfileGoalField extends StatelessWidget {
                         subtitle!,
                         style: TextStyle(
                           fontSize: r.scale(12),
-                          color: AppColors.textSecondary,
+                          color: AppColors.textSecondaryOf(context),
                         ),
                       ),
                     ],
@@ -216,7 +218,7 @@ class ProfileGoalField extends StatelessWidget {
               Icon(
                 icon ?? Icons.chevron_right_rounded,
                 size: r.scale(22),
-                color: iconColor ?? AppColors.textSecondary,
+                color: iconColor ?? AppColors.textSecondaryOf(context),
               ),
             ],
           ),
@@ -236,14 +238,15 @@ class ProfileGoalProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
     final progressPct = (progress * 100).round();
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: AppColors.cardOf(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.borderOf(context)),
       ),
       padding: EdgeInsets.symmetric(
         horizontal: r.scale(16),
@@ -259,7 +262,7 @@ class ProfileGoalProgressCard extends StatelessWidget {
                 'Progress',
                 style: TextStyle(
                   fontSize: r.scale(13),
-                  color: AppColors.textSecondary,
+                  color: AppColors.textSecondaryOf(context),
                 ),
               ),
               Text(
@@ -267,7 +270,7 @@ class ProfileGoalProgressCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: r.scale(16),
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                  color: AppColors.textPrimaryOf(context),
                 ),
               ),
             ],
@@ -278,7 +281,7 @@ class ProfileGoalProgressCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: r.scale(8),
-              backgroundColor: AppColors.border,
+              backgroundColor: AppColors.borderOf(context),
               color: AppColors.primary,
             ),
           ),

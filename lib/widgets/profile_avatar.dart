@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/responsive.dart';
 import '../models/user_model.dart';
+import '../theme/app_colors.dart';
 /// Circular profile photo — tap to change (no visible camera badge).
 class ProfileAvatar extends StatelessWidget {
   const ProfileAvatar({
@@ -27,7 +28,7 @@ class ProfileAvatar extends StatelessWidget {
         customBorder: const CircleBorder(),
         child: CircleAvatar(
           radius: size,
-          backgroundColor: const Color(0xFFE8ECF0),
+          backgroundColor: AppColors.surface,
           backgroundImage: user.profilePhotoBytes != null
               ? MemoryImage(user.profilePhotoBytes!)
               : null,
@@ -35,7 +36,7 @@ class ProfileAvatar extends StatelessWidget {
               ? Icon(
                   Icons.person_rounded,
                   size: size * 1.1,
-                  color: const Color(0xFF5C6F8C),
+                  color: AppColors.textSecondary,
                 )
               : null,
         ),

@@ -203,4 +203,20 @@ void main() {
     expect(merged.food.name, 'Oats');
     expect(merged.grams, 150);
   });
+
+  test('ApiMealMapper reads _id from GET payload', () {
+    final entry = ApiMealMapper.entryFromApiJson({
+      '_id': 'mongo-meal-1',
+      'name': 'Oats',
+      'calories': 389,
+      'protein': 13,
+      'carbs': 66,
+      'fat': 7,
+      'mealTime': 'breakfast',
+      'quantity': 100,
+    });
+
+    expect(entry, isNotNull);
+    expect(entry!.id, 'mongo-meal-1');
+  });
 }

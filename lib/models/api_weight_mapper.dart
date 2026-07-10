@@ -100,7 +100,7 @@ abstract final class ApiWeightMapper {
     if (date == null) return null;
 
     return WeightEntry(
-      id: json['id']?.toString(),
+      id: json['id']?.toString() ?? json['_id']?.toString(),
       date: MealEntry.normalizeDate(date),
       kg: kg,
     );

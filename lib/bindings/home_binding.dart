@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:get/get.dart';
 
 import '../controllers/analytics_controller.dart';
@@ -22,11 +20,11 @@ class HomeBinding extends Bindings {
     if (!Get.isRegistered<FoodController>()) {
       Get.put(FoodController(), permanent: true);
     }
-    unawaited(Get.find<FoodController>().refreshMealsFromApi());
+    
     if (!Get.isRegistered<StreakController>()) {
       Get.put(StreakController(), permanent: true);
     }
-    unawaited(Get.find<StreakController>().refreshFromApi());
+  
     if (!Get.isRegistered<DashboardController>()) {
       Get.put(DashboardController(), permanent: true);
     }
@@ -36,16 +34,16 @@ class HomeBinding extends Bindings {
     if (!Get.isRegistered<AnalyticsController>()) {
       Get.put(AnalyticsController());
     }
+    if (!Get.isRegistered<SettingsController>()) {
+      Get.put(SettingsController(), permanent: true);
+    }
     if (!Get.isRegistered<TrackerController>()) {
       // Weight is hydrated from GET /api/v1/weight — not local profile defaults.
-      Get.put(TrackerController());
-    }
-    if (!Get.isRegistered<SettingsController>()) {
-      Get.lazyPut(SettingsController.new);
+      Get.put(TrackerController(), permanent: true);
     }
     if (!Get.isRegistered<NutritionPlanController>()) {
       Get.put(NutritionPlanController(), permanent: true);
     }
-    unawaited(Get.find<NutritionPlanController>().loadPlan());
+
   }
 }

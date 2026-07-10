@@ -42,6 +42,7 @@ void main() {
           'recordedAt': '2026-06-29T12:00:00.000Z',
         },
       },
+
     });
 
     expect(entries, hasLength(1));
@@ -50,6 +51,24 @@ void main() {
       MealEntry.normalizeDate(entries.single.date),
       DateTime(2026, 6, 29),
     );
+  });
+
+  test('ApiWeightMapper maps Mongo-style _id on weight entries', () {
+    final entries = ApiWeightMapper.entriesFromResponse({
+      'success': true,
+      'data': {
+        'entries': [
+          {
+            '_id': 'mongo-w-1',
+            'weightKg': 68,
+            'recordedAt': '2026-06-29T12:00:00.000Z',
+          },
+        ],
+      },
+    });
+
+    expect(entries.single.id, 'mongo-w-1');
+    expect(entries.single.kg, 68);
   });
 
   test('ApiWeightMapper maps POST log response', () {

@@ -9,7 +9,7 @@ abstract final class AppTheme {
 
   static ThemeData get light => _buildTheme(
         brightness: Brightness.light,
-        background: AppColors.lightBackground,
+        background: AppColors.lightPageBackground,
         surface: AppColors.lightSurface,
         card: AppColors.lightCard,
         textPrimary: AppColors.lightTextPrimary,
@@ -32,7 +32,7 @@ abstract final class AppTheme {
         error: AppColors.errorDark,
         statusBarIconBrightness: Brightness.light,
         statusBarBrightness: Brightness.dark,
-        selectionFillAlpha: 0.22,
+        selectionFillAlpha: 0.16,
       );
 
   static ThemeData _buildTheme({
@@ -49,7 +49,7 @@ abstract final class AppTheme {
     required double selectionFillAlpha,
   }) {
     final isDark = brightness == Brightness.dark;
-    final textTheme = _textTheme(textPrimary, textSecondary);
+    final textTheme = _textTheme(textPrimary, textSecondary, brightness);
 
     return ThemeData(
       useMaterial3: true,
@@ -76,7 +76,17 @@ abstract final class AppTheme {
         backgroundColor: background,
         foregroundColor: textPrimary,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: true,
+        titleTextStyle: TextStyle(
+          fontFamily: fontFamily,
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+          color: textPrimary,
+          letterSpacing: -0.2,
+        ),
+        iconTheme: IconThemeData(color: textPrimary, size: 20),
+        actionsIconTheme: IconThemeData(color: textPrimary, size: 22),
         systemOverlayStyle: SystemUiOverlayStyle(
           statusBarBrightness: statusBarBrightness,
           statusBarIconBrightness: statusBarIconBrightness,
@@ -228,8 +238,15 @@ abstract final class AppTheme {
     );
   }
 
-  static TextTheme _textTheme(Color textPrimary, Color textSecondary) {
-    final base = Typography.material2021().black.apply(
+  static TextTheme _textTheme(
+    Color textPrimary,
+    Color textSecondary,
+    Brightness brightness,
+  ) {
+    final base = (brightness == Brightness.dark
+            ? Typography.material2021().white
+            : Typography.material2021().black)
+        .apply(
           fontFamily: fontFamily,
           bodyColor: textPrimary,
           displayColor: textPrimary,
