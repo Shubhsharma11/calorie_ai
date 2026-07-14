@@ -31,6 +31,8 @@ final String? userId;
   static const _activityLogKey = 'activity_log_v1';
   static const _authSessionKey = 'auth_session_v1';
   static const _onboardingCompletedKey = 'onboarding_completed_v1';
+  static const _onboardingStepKey = 'onboarding_step_v1';
+  static const _onboardingDraftKey = 'onboarding_draft_v1';
 
   Future<SharedPreferences> get _storage async =>
       _prefs ??= await SharedPreferences.getInstance();
@@ -323,6 +325,43 @@ await prefs.setString(_mealKey(), encoded);
     await prefs.setBool(_onboardingCompletedKey, completed);
   }
 
+  Future<String?> loadOnboardingStep() async {
+    final prefs = await _storage;
+    final step = prefs.getString(_onboardingStepKey);
+    if (step == null || step.isEmpty) return null;
+    return step;
+  }
+
+  Future<void> saveOnboardingStep(String route) async {
+    final prefs = await _storage;
+    await prefs.setString(_onboardingStepKey, route);
+  }
+
+  Future<Map<String, dynamic>?> loadOnboardingDraft() async {
+    final prefs = await _storage;
+    final raw = prefs.getString(_onboardingDraftKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> saveOnboardingDraft(Map<String, dynamic> draft) async {
+    final prefs = await _storage;
+    await prefs.setString(_onboardingDraftKey, jsonEncode(draft));
+  }
+
+  Future<void> clearOnboardingProgress() async {
+    final prefs = await _storage;
+    await prefs.remove(_onboardingStepKey);
+    await prefs.remove(_onboardingDraftKey);
+  }
+
   Future<void> clearUserProfileCache() async {
     final prefs = await _storage;
     await prefs.remove(_healthProblemKey);
@@ -330,6 +369,8 @@ await prefs.setString(_mealKey(), encoded);
     await prefs.remove(_calorieAdjustmentKey);
     await prefs.remove(_nutritionTargetsKey);
     await prefs.remove(_onboardingCompletedKey);
+    await prefs.remove(_onboardingStepKey);
+    await prefs.remove(_onboardingDraftKey);
   }
 
   /// Removes legacy on-device weight logs. Weight history is API-only now.

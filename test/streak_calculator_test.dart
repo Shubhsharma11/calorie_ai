@@ -92,5 +92,37 @@ void main() {
       );
       expect(stats.longestStreak, 20);
     });
+
+    test('marks past unlogged days as missed', () {
+      final stats = StreakCalculator.computeFromDates(
+        {
+          MealEntry.normalizeDate(today),
+          MealEntry.normalizeDate(twoDaysAgo),
+        },
+        asOf: today,
+      );
+
+      final missedDays = stats.recentDays.where((day) => day.isMissed);
+      expect(missedDays, isNotEmpty);
+      expect(
+        missedDays.any(
+          (day) => day.date == MealEntry.normalizeDate(yesterday),
+        ),
+        isTrue,
+      );
+    });
+
+    test('detects broken streak after a missed day', () {
+      final stats = StreakCalculator.computeFromDates(
+        {
+          MealEntry.normalizeDate(twoDaysAgo),
+          MealEntry.normalizeDate(DateTime(2026, 6, 7)),
+        },
+        asOf: today,
+      );
+
+      expect(stats.currentStreak, 0);
+      expect(stats.streakBroken, isTrue);
+    });
   });
 }

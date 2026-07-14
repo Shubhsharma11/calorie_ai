@@ -48,7 +48,7 @@ class UserModel {
   int? nutritionPlanCarbsG;
   int? nutritionPlanFatG;
 
-  ActivityLevel activityLevel = ActivityLevel.moderatelyActive;
+  ActivityLevel? activityLevel;
   DateTime targetDate = DateTime(
     DateTime.now().year,
     DateTime.now().month,
@@ -77,6 +77,7 @@ class UserModel {
     ActivityLevel.lightlyActive => 1.375,
     ActivityLevel.moderatelyActive => 1.55,
     ActivityLevel.veryActive => 1.725,
+    null => 1.2,
   };
 
   /// Calories to maintain current weight (TDEE).
@@ -155,7 +156,7 @@ class UserModel {
     nutritionPlanProteinG = null;
     nutritionPlanCarbsG = null;
     nutritionPlanFatG = null;
-    activityLevel = ActivityLevel.moderatelyActive;
+    activityLevel = null;
     targetDate = DateTime(
       DateTime.now().year,
       DateTime.now().month,

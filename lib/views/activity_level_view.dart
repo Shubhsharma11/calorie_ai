@@ -73,7 +73,9 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: () async {
+                    onPressed: selected == null
+                        ? null
+                        : () async {
                       controller.notifyGoalConsumers();
                       if (fromProfile || returnToDailyGoal) {
                         var didSaveProfile = false;

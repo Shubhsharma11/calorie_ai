@@ -82,14 +82,10 @@ class NutritionPlanModel {
         'avoid',
         'avoidFoods',
       ]),
-      tips: _readStringList(plan, const [
-        'tips',
-        'aiTips',
-        'ai_tips',
-        'recommendations',
-        'lifestyleTips',
-      ]),
-      summary: _readString(plan, const ['summary', 'description']),
+      tips: _collectTips(data, nutritionPlan, plan),
+      summary: _readString(plan, const ['summary', 'description']) ??
+          _readString(nutritionPlan, const ['summary', 'description']) ??
+          _readString(data, const ['summary', 'description']),
       targetWeightKg: _readDouble(plan, const [
         'targetWeightKg',
         'goalWeightKg',
@@ -99,6 +95,35 @@ class NutritionPlanModel {
       tdee: _readInt(plan, const ['tdee']),
     );
   }
+}
+
+List<String> _collectTips(
+  Map<String, dynamic> data,
+  Map<String, dynamic> nutritionPlan,
+  Map<String, dynamic> plan,
+) {
+  const keys = [
+    'tips',
+    'aiTips',
+    'ai_tips',
+    'recommendations',
+    'lifestyleTips',
+    'lifestyle_tips',
+  ];
+
+  for (final map in [plan, nutritionPlan, data]) {
+    final tips = _readStringList(map, keys);
+    if (tips.isNotEmpty) return tips;
+  }
+
+  final summary = _readString(plan, const ['summary', 'description']) ??
+      _readString(nutritionPlan, const ['summary', 'description']) ??
+      _readString(data, const ['summary', 'description']);
+  if (summary != null && summary.isNotEmpty) {
+    return [summary];
+  }
+
+  return const [];
 }
 
 Map<String, dynamic> _unwrapData(Map<String, dynamic> json) {
@@ -178,7 +203,17 @@ List<String> _readStringList(
             if (item is Map) {
               return _readString(
                     Map<String, dynamic>.from(item),
-                    const ['name', 'title', 'label', 'food'],
+                    const [
+                      'text',
+                      'tip',
+                      'message',
+                      'content',
+                      'description',
+                      'name',
+                      'title',
+                      'label',
+                      'food',
+                    ],
                   ) ??
                   '';
             }

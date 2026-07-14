@@ -121,7 +121,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
   }
 
   Future<void> _editGender(UserModel user) async {
-    const options = ['Male', 'Female'];
+    const options = ['Male', 'Female', 'Other'];
     final selected = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppColors.card,
@@ -379,7 +379,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
                       _InfoRow(
                         label: 'Activity Level',
                         subtitle: 'Your daily activity level',
-                        value: user.activityLevel.title,
+                        value: user.activityLevel?.title ?? 'Not set',
                         wideValue: true,
                         onTap: () => _editActivityLevel(user),
                       ),

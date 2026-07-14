@@ -14,6 +14,17 @@ class GoalProgressMessage {
   final IconData icon;
   final bool isOverGoal;
 
+  /// Matches the home banner — true at 100% rounded progress or exact kcal goal.
+  static bool isGoalReached({
+    required int consumed,
+    required int goal,
+  }) {
+    if (goal <= 0 || consumed <= 0) return false;
+    if (consumed >= goal) return true;
+    final progressPercent = (consumed / goal * 100).round().clamp(0, 100);
+    return progressPercent >= 100;
+  }
+
   static GoalProgressMessage forIntake({
     required int consumed,
     required int goal,

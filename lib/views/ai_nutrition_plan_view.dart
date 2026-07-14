@@ -1,19 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../controllers/nutrition_plan_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
 
-class AiNutritionPlanView extends StatelessWidget {
+class AiNutritionPlanView extends StatefulWidget {
   const AiNutritionPlanView({super.key});
 
   @override
+  State<AiNutritionPlanView> createState() => _AiNutritionPlanViewState();
+}
+
+class _AiNutritionPlanViewState extends State<AiNutritionPlanView> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (Get.isRegistered<NutritionPlanController>()) {
+        Get.find<NutritionPlanController>().loadPlan(force: true);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final user = Get.find<UserController>().user;
     final r = context.responsive;
+    final planController = Get.isRegistered<NutritionPlanController>()
+        ? Get.find<NutritionPlanController>()
+        : null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -29,29 +49,41 @@ class AiNutritionPlanView extends StatelessWidget {
       ),
       body: ResponsivePage(
         scrollable: true,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(height: r.scale(8)),
-            _PlanSummaryCard(
-                calories: user.dailyCalorieGoal,
-                protein: user.proteinGoalG,
-                carbs: user.carbsGoalG,
-                fat: user.fatGoalG,
+        child: Obx(() {
+          final plan = planController?.plan.value;
+          final isLoading = planController?.isLoading.value ?? false;
+          final _ = planController?.revision.value;
+
+          final calories = plan?.calories ?? user.dailyCalorieGoal;
+          final protein = plan?.proteinG ?? user.proteinGoalG;
+          final carbs = plan?.carbsG ?? user.carbsGoalG;
+          final fat = plan?.fatG ?? user.fatGoalG;
+          final tips = plan?.tips ?? const <String>[];
+
+          if (isLoading && plan == null) {
+            return Padding(
+              padding: EdgeInsets.only(top: r.scale(48)),
+              child: const Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: r.scale(8)),
+              _PlanSummaryCard(
+                calories: calories,
+                protein: protein,
+                carbs: carbs,
+                fat: fat,
               ),
               SizedBox(height: r.scale(16)),
-              const _SectionHeader(title: 'Meal Plan'),
+              const _SectionHeader(title: 'AI Tips for You'),
               SizedBox(height: r.scale(9)),
-              ..._mealPlans.map(
-                (meal) => Padding(
-                  padding: EdgeInsets.only(bottom: r.scale(10)),
-                  child: _MealPlanCard(meal: meal),
-                ),
-              ),
-              SizedBox(height: r.scale(4)),
-              const _FoodsToAvoidCard(),
-              SizedBox(height: r.scale(12)),
-              const _AiTipsCard(),
+              if (tips.isEmpty)
+                _TipsEmptyState(isLoading: isLoading)
+              else
+                _AiTipsCard(tips: tips),
               SizedBox(height: r.scale(14)),
               SizedBox(
                 height: 50,
@@ -88,9 +120,10 @@ class AiNutritionPlanView extends StatelessWidget {
                   ),
                 ],
               ),
-            SizedBox(height: r.scale(12)),
-          ],
-        ),
+              SizedBox(height: r.scale(12)),
+            ],
+          );
+        }),
       ),
     );
   }
@@ -339,255 +372,49 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _MealPlanCard extends StatelessWidget {
-  const _MealPlanCard({required this.meal});
+class _TipsEmptyState extends StatelessWidget {
+  const _TipsEmptyState({required this.isLoading});
 
-  final _MealPlan meal;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
 
     return Container(
-      padding: EdgeInsets.all(r.scale(11)),
+      padding: EdgeInsets.all(r.scale(18)),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(meal.icon, color: meal.color, size: r.scale(18)),
-                    SizedBox(width: r.scale(6)),
-                    Text(
-                      meal.title,
-                      style: TextStyle(
-                        color: meal.color,
-                        fontWeight: FontWeight.w900,
-                        fontSize: r.scale(14, tablet: 15),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: r.scale(8)),
-                ...meal.items.map(
-                  (item) => Padding(
-                    padding: EdgeInsets.only(bottom: r.scale(3)),
-                    child: Text(
-                      '- $item',
-                      style: TextStyle(
-                        fontSize: r.scale(12, tablet: 13),
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: r.scale(8)),
-          _FoodPlate(meal: meal),
-          SizedBox(width: r.scale(8)),
-          _KcalBadge(kcal: meal.kcal, color: meal.color),
-        ],
-      ),
-    );
-  }
-}
-
-class _FoodPlate extends StatelessWidget {
-  const _FoodPlate({required this.meal});
-
-  final _MealPlan meal;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Container(
-      width: r.scale(62, tablet: 70),
-      height: r.scale(62, tablet: 70),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Center(
-        child: SizedBox(
-          width: r.scale(50, tablet: 56),
-          height: r.scale(50, tablet: 56),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              ...meal.plateItems.map(
-                (item) => Positioned(
-                  left: r.scale(item.left),
-                  top: r.scale(item.top),
-                  child: Container(
-                    width: r.scale(item.size),
-                    height: r.scale(item.size),
-                    decoration: BoxDecoration(
-                      color: item.color,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _KcalBadge extends StatelessWidget {
-  const _KcalBadge({required this.kcal, required this.color});
-
-  final int kcal;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Container(
-      width: r.scale(54, tablet: 60),
-      padding: EdgeInsets.symmetric(vertical: r.scale(11)),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(13),
       ),
       child: Column(
         children: [
-          Text(
-            '$kcal',
-            style: TextStyle(
-              color: color,
-              fontSize: r.scale(17, tablet: 18),
-              fontWeight: FontWeight.w900,
-              height: 1,
-            ),
+          Icon(
+            Icons.lightbulb_outline_rounded,
+            size: r.scale(36),
+            color: AppColors.textSecondary,
           ),
-          SizedBox(height: r.scale(3)),
+          SizedBox(height: r.scale(10)),
           Text(
-            'kcal',
+            isLoading ? 'Loading your tips...' : 'No tips available yet',
+            textAlign: TextAlign.center,
             style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: r.scale(10),
-              fontWeight: FontWeight.w700,
+              fontSize: r.scale(14),
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _FoodsToAvoidCard extends StatelessWidget {
-  const _FoodsToAvoidCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return _InfoPanel(
-      icon: Icons.do_not_disturb_on_rounded,
-      iconColor: AppColors.error,
-      title: 'Foods to Avoid',
-      subtitle: 'Based on your health conditions',
-      backgroundColor: const Color(0xFFFFF0F0),
-      trailing: const _AvoidIllustration(),
-      children: const [
-        _AvoidFood(label: 'Sugary Drinks'),
-        _AvoidFood(label: 'Refined Sugar'),
-        _AvoidFood(label: 'White Bread'),
-        _AvoidFood(label: 'Packaged Juice'),
-      ],
-    );
-  }
-}
-
-class _AvoidIllustration extends StatelessWidget {
-  const _AvoidIllustration();
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Icon(
-      Icons.do_not_disturb_alt_rounded,
-      color: AppColors.error.withValues(alpha: 0.18),
-      size: r.scale(62),
     );
   }
 }
 
 class _AiTipsCard extends StatelessWidget {
-  const _AiTipsCard();
+  const _AiTipsCard({required this.tips});
 
-  @override
-  Widget build(BuildContext context) {
-    return _InfoPanel(
-      icon: Icons.lightbulb_rounded,
-      iconColor: const Color(0xFF007AFF),
-      title: 'AI Tips for You',
-      backgroundColor: const Color(0xFFEFF7FF),
-      trailing: const _WaterBottleIllustration(),
-      children: const [
-        _TipLine(text: 'Drink 3L water daily'),
-        _TipLine(text: 'Walk 8,000 steps every day'),
-        _TipLine(text: 'Sleep 7-8 hours'),
-        _TipLine(text: 'Eat protein in every meal'),
-        _TipLine(text: 'Avoid late-night snacking'),
-      ],
-    );
-  }
-}
-
-class _InfoPanel extends StatelessWidget {
-  const _InfoPanel({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.backgroundColor,
-    required this.children,
-    this.subtitle,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String? subtitle;
-  final Color backgroundColor;
-  final List<Widget> children;
-  final Widget? trailing;
+  final List<String> tips;
 
   @override
   Widget build(BuildContext context) {
@@ -596,83 +423,21 @@ class _InfoPanel extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(r.scale(13)),
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: AppColors.selectionFill,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: iconColor.withValues(alpha: 0.14)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.14)),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(icon, color: iconColor, size: r.scale(18)),
-                    SizedBox(width: r.scale(7)),
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: iconColor,
-                        fontSize: r.scale(14, tablet: 15),
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-                if (subtitle != null) ...[
-                  SizedBox(height: r.scale(2)),
-                  Text(
-                    subtitle!,
-                    style: TextStyle(
-                      fontSize: r.scale(10, tablet: 11),
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-                SizedBox(height: r.scale(10)),
-                Wrap(
-                  spacing: r.scale(14),
-                  runSpacing: r.scale(7),
-                  children: children,
-                ),
-              ],
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: tips.map((tip) => _TipLine(text: tip)).toList(),
             ),
           ),
-          if (trailing != null) ...[SizedBox(width: r.scale(10)), trailing!],
-        ],
-      ),
-    );
-  }
-}
-
-class _AvoidFood extends StatelessWidget {
-  const _AvoidFood({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return SizedBox(
-      width: r.scale(122, tablet: 140),
-      child: Row(
-        children: [
-          Icon(Icons.cancel_rounded, color: AppColors.error, size: r.scale(15)),
-          SizedBox(width: r.scale(6)),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: r.scale(11, tablet: 12),
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
+          SizedBox(width: r.scale(10)),
+          const _WaterBottleIllustration(),
         ],
       ),
     );
@@ -688,13 +453,14 @@ class _TipLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = context.responsive;
 
-    return SizedBox(
-      width: r.scale(180, tablet: 220),
+    return Padding(
+      padding: EdgeInsets.only(bottom: r.scale(6)),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
             Icons.check_circle_rounded,
-            color: const Color(0xFF007AFF),
+            color: AppColors.primary,
             size: r.scale(15),
           ),
           SizedBox(width: r.scale(6)),
@@ -705,6 +471,7 @@ class _TipLine extends StatelessWidget {
                 fontSize: r.scale(12, tablet: 13),
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
+                height: 1.4,
               ),
             ),
           ),
@@ -747,96 +514,11 @@ class _WaterBottleIllustration extends StatelessWidget {
           ),
           Icon(
             Icons.water_drop_rounded,
-            color: const Color(0xFF8EC5FF),
+            color: AppColors.primary.withValues(alpha: 0.55),
             size: r.scale(72),
           ),
         ],
       ),
     );
   }
-}
-
-const _mealPlans = [
-  _MealPlan(
-    title: 'Breakfast',
-    icon: Icons.wb_sunny_rounded,
-    color: Color(0xFFFFB800),
-    kcal: 450,
-    items: ['Oats with milk', '2 Boiled eggs', '1 Banana'],
-    plateItems: [
-      _PlateItem(Color(0xFFFFF3C4), 5, 5, 19),
-      _PlateItem(Color(0xFFFFD44D), 11, 11, 10),
-      _PlateItem(Color(0xFFF6E7B6), 28, 4, 15),
-      _PlateItem(Color(0xFFFFF3C4), 27, 26, 18),
-      _PlateItem(Color(0xFFFFD44D), 33, 32, 9),
-    ],
-  ),
-  _MealPlan(
-    title: 'Lunch',
-    icon: Icons.wb_sunny_outlined,
-    color: AppColors.primary,
-    kcal: 700,
-    items: ['Brown rice', 'Grilled chicken / Paneer', 'Mixed vegetables'],
-    plateItems: [
-      _PlateItem(Color(0xFFF4E2C4), 4, 8, 22),
-      _PlateItem(Color(0xFFC96C2C), 24, 6, 18),
-      _PlateItem(Color(0xFFFF9500), 18, 25, 10),
-      _PlateItem(Color(0xFF34C759), 30, 28, 12),
-      _PlateItem(Color(0xFF8BC34A), 8, 29, 11),
-    ],
-  ),
-  _MealPlan(
-    title: 'Dinner',
-    icon: Icons.dark_mode_rounded,
-    color: Color(0xFF8B5CF6),
-    kcal: 650,
-    items: ['2 Roti', 'Dal', 'Salad'],
-    plateItems: [
-      _PlateItem(Color(0xFFE9C68A), 5, 19, 27),
-      _PlateItem(Color(0xFFD89744), 27, 6, 18),
-      _PlateItem(Color(0xFF34C759), 33, 29, 11),
-      _PlateItem(Color(0xFFFF9500), 22, 23, 8),
-    ],
-  ),
-  _MealPlan(
-    title: 'Snacks',
-    icon: Icons.apple_rounded,
-    color: AppColors.error,
-    kcal: 350,
-    items: ['Apple', 'Almonds (10 pcs)', 'Greek Yogurt'],
-    plateItems: [
-      _PlateItem(Color(0xFFF7F1E3), 6, 8, 35),
-      _PlateItem(Color(0xFF1C1C1E), 12, 9, 8),
-      _PlateItem(Color(0xFF283593), 28, 8, 9),
-      _PlateItem(Color(0xFFC68B59), 19, 28, 8),
-      _PlateItem(Color(0xFFC68B59), 31, 27, 7),
-    ],
-  ),
-];
-
-class _MealPlan {
-  const _MealPlan({
-    required this.title,
-    required this.icon,
-    required this.color,
-    required this.kcal,
-    required this.items,
-    required this.plateItems,
-  });
-
-  final String title;
-  final IconData icon;
-  final Color color;
-  final int kcal;
-  final List<String> items;
-  final List<_PlateItem> plateItems;
-}
-
-class _PlateItem {
-  const _PlateItem(this.color, this.left, this.top, this.size);
-
-  final Color color;
-  final double left;
-  final double top;
-  final double size;
 }

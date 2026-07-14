@@ -6,8 +6,10 @@ import 'package:get/get.dart';
 import '../core/streak_calculator.dart';
 import '../models/meal_streak_model.dart';
 import '../repositories/meal_streak_repository.dart';
+import '../repositories/meals_repository.dart';
 import '../services/local_storage_service.dart';
 import '../services/meal_streak_api_service.dart';
+import '../services/meals_api_service.dart';
 import '../widgets/streak_milestone_dialog.dart';
 import 'user_controller.dart';
 
@@ -15,49 +17,62 @@ class StreakController extends GetxController {
   StreakController({
     LocalStorageService? storage,
     MealStreakRepository? repository,
+    MealsRepository? mealsRepository,
   })  : _storage = storage ?? LocalStorageService(),
-        _repository = repository ?? MealStreakRepository();
+        _repository = repository ?? MealStreakRepository(),
+        _mealsRepository = mealsRepository ?? MealsRepository();
 
   final LocalStorageService _storage;
   final MealStreakRepository _repository;
+  final MealsRepository _mealsRepository;
 
-  final RxInt storedLongestStreak = 0.obs;
   final RxSet<int> celebratedMilestones = <int>{}.obs;
   final RxInt revision = 0.obs;
   final RxBool isLoadingApi = false.obs;
   final RxnString apiErrorMessage = RxnString();
 
   MealStreakModel? _apiStreak;
+  Set<DateTime> _calendarLoggedDates = {};
   late final Future<void> _ready;
   bool _isFetchingApi = false;
   bool _pendingRefresh = false;
 
   bool get usesApiStreak => _apiStreak != null;
 
+  bool get isLoggedIn {
+    if (!Get.isRegistered<UserController>()) return false;
+    final user = Get.find<UserController>();
+    return user.isLoggedIn && user.accessToken.isNotEmpty;
+  }
+
   StreakStats get stats {
     revision.value;
-    if (_apiStreak != null) {
-      return _apiStreak!.toStreakStats(
-        storedLongest: storedLongestStreak.value,
-      );
-    }
-    return StreakStats(
-      currentStreak: 0,
-      longestStreak: storedLongestStreak.value,
-      hasLoggedToday: false,
-      isAtRisk: false,
-      recentDays: StreakCalculator.buildRecentDays(const {}),
-    );
+    if (!isLoggedIn || _apiStreak == null) return StreakStats.empty;
+
+    return _apiStreak!.toStreakStats(calendarDates: _calendarLoggedDates);
   }
 
   int get currentStreak => stats.currentStreak;
   int get longestStreak => stats.longestStreak;
   bool get hasLoggedToday => stats.hasLoggedToday;
   bool get isAtRisk => stats.isAtRisk;
+  bool get streakBroken => stats.streakBroken;
   List<StreakDay> get recentDays => stats.recentDays;
 
   String get statusMessage {
+    if (!isLoggedIn) {
+      return 'Sign in to track your meal logging streak.';
+    }
+    if (_apiStreak == null && isLoadingApi.value) {
+      return 'Loading your streak...';
+    }
+    if (_apiStreak == null && apiErrorMessage.value != null) {
+      return 'Could not load streak. Pull to refresh.';
+    }
     if (currentStreak == 0) {
+      if (streakBroken) {
+        return 'You missed a day — log today to start a new streak.';
+      }
       return 'Log a meal today to start your streak.';
     }
     if (hasLoggedToday) {
@@ -70,15 +85,40 @@ class StreakController extends GetxController {
   void onInit() {
     super.onInit();
     _ready = _loadMetadata();
-    unawaited(refreshFromApi());
+    unawaited(_bootstrap());
+  }
+
+  Future<void> _bootstrap() async {
+    await _ready;
+    revision.value++;
+    await refreshFromApi();
   }
 
   Future<void> _loadMetadata() async {
-    storedLongestStreak.value = await _storage.loadLongestStreak();
     celebratedMilestones
       ..clear()
       ..addAll(await _storage.loadCelebratedMilestones());
     revision.value++;
+  }
+
+  Future<Set<DateTime>> _loadCalendarDates({
+    required String accessToken,
+    required MealStreakModel streak,
+  }) async {
+    if (streak.loggedDates.isNotEmpty) {
+      return streak.loggedDates;
+    }
+
+    try {
+      final meals = await _mealsRepository.fetchMeals(accessToken: accessToken);
+      return StreakCalculator.loggedDatesFrom(meals);
+    } on MealsApiException catch (error) {
+      debugPrint('StreakController: meals API for calendar failed: $error');
+      return const {};
+    } catch (error) {
+      debugPrint('StreakController: meals API for calendar failed: $error');
+      return const {};
+    }
   }
 
   Future<void> refreshFromApi() async {
@@ -95,6 +135,7 @@ class StreakController extends GetxController {
 
     if (!userController.isLoggedIn || userController.accessToken.isEmpty) {
       _apiStreak = null;
+      _calendarLoggedDates = {};
       apiErrorMessage.value = null;
       isLoadingApi.value = false;
       revision.value++;
@@ -104,19 +145,18 @@ class StreakController extends GetxController {
     _isFetchingApi = true;
     isLoadingApi.value = true;
     apiErrorMessage.value = null;
+    revision.value++;
 
     try {
       debugPrint('StreakController: calling GET meals streak API');
       final streak = await _repository.fetchStreak(
         accessToken: userController.accessToken,
       );
+      _calendarLoggedDates = await _loadCalendarDates(
+        accessToken: userController.accessToken,
+        streak: streak,
+      );
       _apiStreak = streak;
-
-      if (streak.longestStreak > storedLongestStreak.value) {
-        storedLongestStreak.value = streak.longestStreak;
-        await _storage.saveLongestStreak(streak.longestStreak);
-      }
-
       revision.value++;
       await _maybeCelebrateMilestone(streak.currentStreak);
     } on MealStreakApiException catch (error) {
@@ -148,6 +188,12 @@ class StreakController extends GetxController {
 
     if (!user.isLoggedIn || user.accessToken.isEmpty) return;
 
+    await refreshFromApi();
+  }
+
+  Future<void> onAuthChanged() async {
+    await _ready;
+    revision.value++;
     await refreshFromApi();
   }
 

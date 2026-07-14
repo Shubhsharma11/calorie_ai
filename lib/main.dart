@@ -35,15 +35,21 @@ Future<void> main() async {
   Get.put(UserController(), permanent: true);
   final userController = Get.find<UserController>();
   await userController.loadAuthSession();
+  await userController.restoreOnboardingProgress();
 
-  runApp(CalorieAiApp(initialRoute: _resolveInitialRoute(userController)));
+  runApp(
+    CalorieAiApp(
+      initialRoute: await _resolveInitialRoute(userController),
+    ),
+  );
 }
 
-String _resolveInitialRoute(UserController userController) {
+Future<String> _resolveInitialRoute(UserController userController) async {
   if (userController.isLoggedIn && userController.accessToken.isNotEmpty) {
-    return userController.isEmailVerified
-        ? AppRoutes.main
-        : AppRoutes.personalDetails;
+    if (userController.isEmailVerified) {
+      return AppRoutes.main;
+    }
+    return userController.resolveSetupResumeRoute();
   }
   return AppRoutes.onboarding;
 }

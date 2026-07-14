@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../core/api_errors.dart';
 import '../core/app_snackbar.dart';
+import '../core/goal_progress_message.dart';
 import '../core/meal_entry_merge.dart';
 import '../models/custom_meal_preset.dart';
 import '../models/daily_nutrition.dart';
@@ -74,7 +76,7 @@ class FoodController extends GetxController {
   ).obs;
 
   Timer? _debounce;
-  bool _calorieGoalCelebrationShown = false;
+  final Set<String> _goalCelebratedDates = <String>{};
   Future<void>? _refreshMealsFuture;
   String? _dismissedBreakfastSuggestionDate;
   static const String _repeatCardDismissKey = 'repeat_card_dismiss_date';
@@ -101,6 +103,7 @@ class FoodController extends GetxController {
     if (cached.isNotEmpty) {
       entries.assignAll(cached);
       entriesRevision.value++;
+      _maybeCelebrateCalorieGoal(day: MealEntry.normalizeDate(DateTime.now()));
     }
 
     unawaited(refreshMealsFromApi());
@@ -717,7 +720,7 @@ String get lastLoggedDayLabel {
 
   void _insertEntry(MealEntry entry) {
     entries.add(entry);
-    _markEntriesDirty();
+    _markEntriesDirty(celebrationDay: entry.date);
     unawaited(_syncCreateMeal(entry));
   }
 
@@ -738,7 +741,7 @@ String get lastLoggedDayLabel {
         food: food,
         grams: grams ?? selectedGrams.value,
         meal: meal ?? selectedMeal.value,
-    date: MealEntry.normalizeDate(DateTime.now()),
+        date: MealEntry.normalizeDate(date ?? selectedLogDate.value),
       ),
     );
     selectedGrams.value = 100;
@@ -784,10 +787,14 @@ String get lastLoggedDayLabel {
       );
 
       final index = entries.indexWhere((e) => e.id == entry.id);
-      if (index < 0) return;
+      if (index >= 0) {
+        entries[index] = created;
+      }
 
-      entries[index] = created;
-      _markEntriesDirty();
+      // A refresh that ran while the POST was in flight may have already
+      // merged the server copy in — keep only one entry per server id.
+      _dropDuplicateEntriesById(created.id);
+      _markEntriesDirty(celebrationDay: created.date);
 
       await refreshMealsFromApi();
 
@@ -814,6 +821,19 @@ String get lastLoggedDayLabel {
         title: 'Saved on device',
       );
     }
+  }
+
+  void _dropDuplicateEntriesById(String id) {
+    if (id.trim().isEmpty) return;
+    var seen = false;
+    entries.removeWhere((e) {
+      if (e.id != id) return false;
+      if (!seen) {
+        seen = true;
+        return false;
+      }
+      return true;
+    });
   }
 
   void toggleYesterdayMeal(String id) {
@@ -848,16 +868,12 @@ String get lastLoggedDayLabel {
     selectedYesterdayMeals.clear();
   }
 
-  void _markEntriesDirty() {
+  void _markEntriesDirty({DateTime? celebrationDay}) {
     entries.refresh();
     entriesRevision.value++;
     unawaited(_persistEntries());
     _notifyStreakController();
-    _maybeCelebrateCalorieGoal();
-  }
-
-  void _notifyEntriesChanged() {
-    _markEntriesDirty();
+    _maybeCelebrateCalorieGoal(day: celebrationDay);
   }
 
   Future<void> _persistEntries() async {
@@ -872,22 +888,34 @@ String get lastLoggedDayLabel {
   Get.find<StreakController>().onMealsChanged();
 }
 
-  void _maybeCelebrateCalorieGoal() {
+  void _maybeCelebrateCalorieGoal({DateTime? day}) {
     if (!Get.isRegistered<DashboardController>()) return;
 
-    final dash = Get.find<DashboardController>();
-    final goal = dash.calorieGoal;
+    final normalizedDay = MealEntry.normalizeDate(day ?? DateTime.now());
+    final dateKey = MealEntry.dateToKey(normalizedDay);
+    final goal = Get.find<DashboardController>().calorieGoal;
     if (goal <= 0) return;
 
-    final consumed = dash.foodCalories;
-    if (consumed < goal) {
-      _calorieGoalCelebrationShown = false;
+    final consumed = caloriesForDate(normalizedDay);
+    if (!GoalProgressMessage.isGoalReached(consumed: consumed, goal: goal)) {
+      _goalCelebratedDates.remove(dateKey);
       return;
     }
 
-    if (_calorieGoalCelebrationShown) return;
-    _calorieGoalCelebrationShown = true;
-    CalorieGoalSuccessDialog.show(consumed: consumed, goal: goal);
+    if (_goalCelebratedDates.contains(dateKey)) return;
+    _goalCelebratedDates.add(dateKey);
+
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!Get.isRegistered<DashboardController>()) return;
+      CalorieGoalSuccessDialog.show(consumed: consumed, goal: goal);
+    });
+  }
+
+  int caloriesForDate(DateTime day) {
+    final normalized = MealEntry.normalizeDate(day);
+    return entries
+        .where((entry) => entry.date == normalized)
+        .fold(0, (sum, entry) => sum + entry.calories);
   }
 
   List<MealEntry> mealsForToday(String meal) =>
@@ -926,12 +954,12 @@ String get lastLoggedDayLabel {
     if (index < 0) return;
 
     entries[index] = entry.copyWith(grams: grams, meal: meal);
-    _notifyEntriesChanged();
+    _markEntriesDirty(celebrationDay: entry.date);
   }
 
   void removeEntry(MealEntry entry) {
     entries.removeWhere((e) => e.id == entry.id);
-    _notifyEntriesChanged();
+    _markEntriesDirty(celebrationDay: entry.date);
     unawaited(_syncDeleteMeal(entry));
   }
 

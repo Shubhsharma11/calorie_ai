@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../core/goal_progress_message.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
+import 'finish_icon.dart';
+import 'training_icon.dart';
 
 /// Formats an integer with thousands separators (e.g. 1370 -> 1,370).
 String _formatKcal(int value) {
@@ -126,75 +128,40 @@ class CalorieOverviewCard extends StatelessWidget {
                 Row(
                   children: [
                     _StatTile(
-                      label: 'Eaten',
-                      value: eaten,
-                      icon: Icons.local_fire_department_rounded,
-                      accent: const Color(0xFFFF6B35),
+                      label: isOverGoal ? 'Over goal' : 'Goal',
+                      value: isOverGoal ? caloriesOver : goal,
+                      accent: isOverGoal
+                          ? AppColors.warning
+                          : AppColors.primary,
+                      iconWidget: FinishIcon(size: r.scale(32)),
                       valueColor: isOverGoal ? AppColors.warning : null,
                       onTap: onAddFood,
+                      showChevron: true,
                     ),
-                    SizedBox(width: r.scale(8)),
-                    _StatTile(
-                      label: 'Goal',
-                      value: goal,
-                      icon: Icons.flag_rounded,
-                      accent: AppColors.primary,
-                    ),
-                    SizedBox(width: r.scale(8)),
+                    SizedBox(width: r.scale(10)),
                     _StatTile(
                       label: 'Burned',
                       value: burned,
-                      icon: Icons.directions_run_rounded,
                       accent: const Color(0xFFFF9500),
+                      iconWidget: TrainingIcon(size: r.scale(40)),
                       onTap: onCaloriesBurn,
-                      showChevron: true,
+                      showChevron: onCaloriesBurn != null,
                     ),
                   ],
                 ),
                 if (burned > 0) ...[
-                  SizedBox(height: r.scale(12)),
-                  Material(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      onTap: onCaloriesBurn,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: r.scale(12),
-                          vertical: r.scale(10),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.directions_run_rounded,
-                              size: r.scale(16),
-                              color: const Color(0xFFFF9500),
-                            ),
-                            SizedBox(width: r.scale(8)),
-                            Expanded(
-                              child: Text(
-                                netOver
-                                    ? 'Net incl. activity · ${_formatKcal(netCaloriesOver)} over'
-                                    : 'Net incl. activity · ${_formatKcal(netRemaining)} kcal left',
-                                style: TextStyle(
-                                  fontSize: r.scale(12),
-                                  fontWeight: FontWeight.w600,
-                                  color: netOver
-                                      ? AppColors.warning
-                                      : AppColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                            if (onCaloriesBurn != null)
-                              Icon(
-                                Icons.chevron_right_rounded,
-                                size: r.scale(18),
-                                color: AppColors.textSecondary,
-                              ),
-                          ],
-                        ),
-                      ),
+                  SizedBox(height: r.scale(8)),
+                  Text(
+                    netOver
+                        ? 'Incl. activity · ${_formatKcal(netCaloriesOver)} over'
+                        : 'Incl. activity · ${_formatKcal(netRemaining)} remaining',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: r.scale(12),
+                      fontWeight: FontWeight.w600,
+                      color: netOver
+                          ? AppColors.warning
+                          : AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -650,8 +617,8 @@ class _StatTile extends StatelessWidget {
   const _StatTile({
     required this.label,
     required this.value,
-    required this.icon,
     required this.accent,
+    required this.iconWidget,
     this.valueColor,
     this.onTap,
     this.showChevron = false,
@@ -659,7 +626,7 @@ class _StatTile extends StatelessWidget {
 
   final String label;
   final int value;
-  final IconData icon;
+  final Widget iconWidget;
   final Color accent;
   final Color? valueColor;
   final VoidCallback? onTap;
@@ -668,6 +635,19 @@ class _StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final chevronSize = r.scale(16);
+    final valueStyle = TextStyle(
+      fontSize: r.scale(13),
+      fontWeight: FontWeight.w700,
+      color: valueColor ?? AppColors.textPrimary,
+      height: 1.2,
+      letterSpacing: -0.2,
+    );
+    final unitStyle = TextStyle(
+      fontSize: r.scale(11),
+      fontWeight: FontWeight.w600,
+      color: valueColor ?? AppColors.textSecondary,
+    );
 
     final tile = Container(
       padding: EdgeInsets.symmetric(
@@ -681,49 +661,27 @@ class _StatTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: r.scale(38),
-            height: r.scale(38),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: accent.withValues(alpha: 0.28),
-              ),
-            ),
-            child: Icon(icon, color: accent, size: r.scale(20)),
+          SizedBox(
+            width: r.scale(40),
+            height: r.scale(40),
+            child: Center(child: iconWidget),
           ),
-          SizedBox(width: r.scale(7)),
+          SizedBox(width: r.scale(6)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: RichText(
-                    text: TextSpan(
-                      style: TextStyle(
-                        fontSize: r.scale(13),
-                        fontWeight: FontWeight.w700,
-                        color: valueColor ?? AppColors.textPrimary,
-                        height: 1.2,
-                        letterSpacing: -0.2,
-                      ),
-                      children: [
-                        TextSpan(text: '${_formatKcal(value)} '),
-                        TextSpan(
-                          text: 'kcal',
-                          style: TextStyle(
-                            fontSize: r.scale(11),
-                            fontWeight: FontWeight.w600,
-                            color: valueColor ?? AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
+                Text.rich(
+                  TextSpan(
+                    style: valueStyle,
+                    children: [
+                      TextSpan(text: '${_formatKcal(value)} '),
+                      TextSpan(text: 'kcal', style: unitStyle),
+                    ],
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 SizedBox(height: r.scale(2)),
                 Text(
@@ -739,12 +697,17 @@ class _StatTile extends StatelessWidget {
               ],
             ),
           ),
-          if (showChevron && onTap != null)
-            Icon(
-              Icons.chevron_right_rounded,
-              size: r.scale(16),
-              color: AppColors.textSecondary.withValues(alpha: 0.7),
-            ),
+          SizedBox(
+            width: chevronSize,
+            height: chevronSize,
+            child: showChevron && onTap != null
+                ? Icon(
+                    Icons.chevron_right_rounded,
+                    size: chevronSize,
+                    color: AppColors.textSecondary.withValues(alpha: 0.7),
+                  )
+                : null,
+          ),
         ],
       ),
     );

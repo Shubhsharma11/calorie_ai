@@ -17,7 +17,7 @@ extension BmiCategoryLabel on BmiCategory {
         BmiCategory.underweight =>
           'Focus on gradual, healthy weight gain within a normal BMI range.',
         BmiCategory.normal =>
-          'Small, steady changes are recommended to stay within a healthy range.',
+          'Small, steady changes are recommended to stay within a healthy range.',  
         BmiCategory.overweight =>
           'A moderate loss toward the healthy BMI range is recommended.',
         BmiCategory.obese =>

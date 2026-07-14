@@ -88,7 +88,9 @@ class AuthController extends GetxController {
         MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);
       } else {
-        Get.offAllNamed(AppRoutes.personalDetails);
+        await user.restoreOnboardingProgress();
+        final resumeRoute = await user.resolveSetupResumeRoute();
+        Get.offAllNamed(resumeRoute);
       }
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) return;

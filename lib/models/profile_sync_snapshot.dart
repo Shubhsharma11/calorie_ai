@@ -26,7 +26,7 @@ class ProfileSyncSnapshot {
   final double goalWeightKg;
   final bool isGoalWeightManual;
   final DateTime targetDate;
-  final ActivityLevel activityLevel;
+  final ActivityLevel? activityLevel;
   final List<HealthConcern> healthConcerns;
 
   factory ProfileSyncSnapshot.fromUser(UserModel user) {

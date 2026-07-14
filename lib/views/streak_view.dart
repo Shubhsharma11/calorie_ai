@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
+import '../controllers/food_controller.dart';
 import '../controllers/streak_controller.dart';
 import '../core/responsive.dart';
 import '../core/streak_calculator.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/fire_icon.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
@@ -23,7 +25,10 @@ class StreakView extends GetView<StreakController> {
     return Scaffold(
       appBar: const AppAppBar(title: 'Your Streak'),
       body: RefreshIndicator(
-        onRefresh: controller.refreshFromApi,
+        onRefresh: () async {
+          await Get.find<FoodController>().refreshMealsFromApi();
+          await controller.refreshFromApi();
+        },
         child: ResponsivePage(
           scrollable: true,
           child: Obx(() {
@@ -53,6 +58,7 @@ class StreakView extends GetView<StreakController> {
               _StreakHero(
                 streak: stats.currentStreak,
                 isAtRisk: stats.isAtRisk,
+                streakBroken: stats.streakBroken,
               ),
               SizedBox(height: r.scale(16)),
               Text(
@@ -82,8 +88,8 @@ class StreakView extends GetView<StreakController> {
                   ),
                   SizedBox(width: r.scale(10)),
                   _StatTile(
-                    icon: Icons.check_circle_rounded,
-                    color: const Color(0xFF2196F3),
+                    icon: Icons.restaurant_rounded,
+                    color: AppColors.primary,
                     value: stats.hasLoggedToday ? 'Yes' : 'No',
                     label: 'Logged Today',
                   ),
@@ -105,7 +111,9 @@ class StreakView extends GetView<StreakController> {
                 SizedBox(height: r.scale(24)),
                 PrimaryButton(
                   label: stats.currentStreak == 0
-                      ? 'Log your first meal'
+                      ? (stats.streakBroken
+                          ? 'Log a meal to restart streak'
+                          : 'Log your first meal')
                       : 'Log a meal to save streak',
                   onPressed: () => Get.toNamed(AppRoutes.addFood),
                 ),
@@ -125,10 +133,12 @@ class _StreakHero extends StatelessWidget {
   const _StreakHero({
     required this.streak,
     required this.isAtRisk,
+    required this.streakBroken,
   });
 
   final int streak;
   final bool isAtRisk;
+  final bool streakBroken;
 
   @override
   Widget build(BuildContext context) {
@@ -176,6 +186,16 @@ class _StreakHero extends StatelessWidget {
               'At risk — log today!',
               style: TextStyle(
                 color: StreakView._streakOrange,
+                fontWeight: FontWeight.w600,
+                fontSize: r.scale(13),
+              ),
+            ),
+          ] else if (streakBroken) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Missed day',
+              style: TextStyle(
+                color: AppColors.error.withValues(alpha: 0.85),
                 fontWeight: FontWeight.w600,
                 fontSize: r.scale(13),
               ),
@@ -292,23 +312,14 @@ class _DayCell extends StatelessWidget {
     if (day == null) return const SizedBox.shrink();
 
     final d = day!;
-    Color fill;
-    Color border;
-
-    if (d.partOfCurrentStreak) {
-      fill = StreakView._streakOrange;
-      border = StreakView._streakOrange;
-    } else if (d.logged) {
-      fill = AppColors.primary.withValues(alpha: 0.35);
-      border = AppColors.primary;
-    } else {
-      fill = AppColors.surface;
-      border = AppColors.border;
-    }
-
-    if (d.isToday) {
-      border = AppColors.textPrimary;
-    }
+    final hasStatus =
+        d.partOfCurrentStreak || d.logged || d.isMissed;
+    final fill = hasStatus ? Colors.transparent : AppColors.surface;
+    final border = d.isToday
+        ? AppColors.textPrimary
+        : hasStatus
+            ? AppColors.border.withValues(alpha: 0.55)
+            : AppColors.border;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -322,6 +333,7 @@ class _DayCell extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: border, width: d.isToday ? 1.5 : 1),
               ),
+              child: Center(child: _DayStatusIcon(day: d)),
             ),
           ),
           const SizedBox(height: 2),
@@ -341,53 +353,82 @@ class _DayCell extends StatelessWidget {
   }
 }
 
+class _DayStatusIcon extends StatelessWidget {
+  const _DayStatusIcon({required this.day});
+
+  final StreakDay day;
+
+  @override
+  Widget build(BuildContext context) {
+    if (day.partOfCurrentStreak) {
+      return const FireIcon(size: 13);
+    }
+    if (day.logged) {
+      return const Icon(
+        Icons.restaurant_rounded,
+        size: 12,
+        color: AppColors.primary,
+      );
+    }
+    if (day.isMissed) {
+      return Icon(
+        Icons.close_rounded,
+        size: 11,
+        color: AppColors.error.withValues(alpha: 0.8),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+}
+
 class _CalendarLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _LegendDot(color: StreakView._streakOrange, label: 'Current streak'),
-        SizedBox(width: 16),
-        _LegendDot(
-          color: AppColors.primary,
-          label: 'Logged',
-          faded: true,
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 16,
+      runSpacing: 8,
+      children: const [
+        _LegendItem(
+          icon: FireIcon(size: 12),
+          label: 'Current streak',
         ),
-        SizedBox(width: 16),
-        _LegendDot(color: AppColors.surface, label: 'Missed', bordered: true),
+        _LegendItem(
+          icon: Icon(
+            Icons.restaurant_rounded,
+            size: 12,
+            color: AppColors.primary,
+          ),
+          label: 'Food logged',
+        ),
+        _LegendItem(
+          icon: Icon(
+            Icons.close_rounded,
+            size: 11,
+            color: AppColors.error,
+          ),
+          label: 'Missed',
+        ),
       ],
     );
   }
 }
 
-class _LegendDot extends StatelessWidget {
-  const _LegendDot({
-    required this.color,
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({
+    required this.icon,
     required this.label,
-    this.faded = false,
-    this.bordered = false,
   });
 
-  final Color color;
+  final Widget icon;
   final String label;
-  final bool faded;
-  final bool bordered;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: faded ? color.withValues(alpha: 0.35) : color,
-            borderRadius: BorderRadius.circular(3),
-            border: bordered ? Border.all(color: AppColors.border) : null,
-          ),
-        ),
+        icon,
         const SizedBox(width: 4),
         Text(
           label,

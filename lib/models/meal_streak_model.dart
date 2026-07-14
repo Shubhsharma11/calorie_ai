@@ -63,8 +63,13 @@ class MealStreakModel {
     );
   }
 
-  StreakStats toStreakStats({int storedLongest = 0, int calendarDays = 30}) {
-    final computedLongest = StreakCalculator.computeLongestStreak(loggedDates);
+  StreakStats toStreakStats({
+    Set<DateTime>? calendarDates,
+    int storedLongest = 0,
+    int calendarDays = 30,
+  }) {
+    final dates = calendarDates ?? loggedDates;
+    final computedLongest = StreakCalculator.computeLongestStreak(dates);
     final longest = [
       longestStreak,
       computedLongest,
@@ -77,8 +82,9 @@ class MealStreakModel {
       hasLoggedToday: hasLoggedToday,
       isAtRisk: isAtRisk,
       recentDays: StreakCalculator.buildRecentDays(
-        loggedDates,
+        dates,
         dayCount: calendarDays,
+        currentStreakOverride: currentStreak,
       ),
     );
   }
@@ -143,6 +149,20 @@ class MealStreakModel {
 
       final dates = <DateTime>{};
       for (final item in value) {
+        if (item is Map) {
+          final map = Map<String, dynamic>.from(item);
+          final logged = _readBool(map, const [
+            'logged',
+            'hasLogged',
+            'has_logged',
+            'isLogged',
+            'is_logged',
+          ]);
+          if (logged == false) continue;
+          final parsed = _parseDate(map);
+          if (parsed != null) dates.add(parsed);
+          continue;
+        }
         final parsed = _parseDate(item);
         if (parsed != null) dates.add(parsed);
       }
@@ -161,7 +181,12 @@ class MealStreakModel {
     }
     if (value is Map) {
       final map = Map<String, dynamic>.from(value);
-      final raw = map['date'] ?? map['day'] ?? map['loggedAt'] ?? map['logged_at'];
+      final raw = map['date'] ??
+          map['day'] ??
+          map['loggedAt'] ??
+          map['logged_at'] ??
+          map['loggedDate'] ??
+          map['logged_date'];
       if (raw is String) return _parseDate(raw);
     }
     return null;

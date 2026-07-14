@@ -26,6 +26,7 @@ import '../services/onboarding_api_service.dart';
 import 'dashboard_controller.dart';
 import 'main_controller.dart';
 import 'nutrition_plan_controller.dart';
+import 'streak_controller.dart';
 import 'tracker_controller.dart';
 
 class UserController extends GetxController {
@@ -82,6 +83,7 @@ class UserController extends GetxController {
         _loadHealthProblem(),
         _loadNutritionTargets(),
       ]);
+      await restoreOnboardingProgress();
       _notifyCalorieGoalChanged();
       update();
     } finally {
@@ -546,7 +548,115 @@ class UserController extends GetxController {
   }
 
   void finishSetup() {
+    unawaited(persistOnboardingStep(AppRoutes.healthProblem));
     Get.toNamed(AppRoutes.healthProblem);
+  }
+
+  static const _resumeableSetupRoutes = <String>{
+    AppRoutes.personalDetails,
+    AppRoutes.goalSetup,
+    AppRoutes.activityLevel,
+    AppRoutes.healthProblem,
+    AppRoutes.nutritionPlanLoading,
+    AppRoutes.dailyCalorieGoal,
+  };
+
+  Map<String, dynamic> _onboardingDraftFromUser() {
+    final target = user.targetDate;
+    return {
+      'userId': userId,
+      'age': user.age,
+      'gender': user.gender,
+      'heightCm': user.heightCm,
+      'weightKg': user.weightKg,
+      'goal': user.goal?.apiValue,
+      'manualGoalWeightKg': user.manualGoalWeightKg,
+      'activityLevel': user.activityLevel?.name,
+      'targetDate':
+          '${target.year.toString().padLeft(4, '0')}-'
+          '${target.month.toString().padLeft(2, '0')}-'
+          '${target.day.toString().padLeft(2, '0')}',
+    };
+  }
+
+  void _applyOnboardingDraft(Map<String, dynamic> draft) {
+    final age = draft['age'];
+    if (age is num) user.age = age.round();
+
+    final gender = draft['gender'];
+    if (gender is String && gender.isNotEmpty) user.gender = gender;
+
+    final heightCm = draft['heightCm'];
+    if (heightCm is num) user.heightCm = heightCm.round();
+
+    final weightKg = draft['weightKg'];
+    if (weightKg is num) user.weightKg = weightKg.round();
+
+    final goal = draft['goal'];
+    if (goal is String) {
+      user.goal = _parseGoalType(goal);
+    }
+
+    final manualGoal = draft['manualGoalWeightKg'];
+    if (manualGoal == null) {
+      user.manualGoalWeightKg = null;
+    } else if (manualGoal is num) {
+      user.manualGoalWeightKg = manualGoal.toDouble();
+    }
+
+    final activity = draft['activityLevel'];
+    if (activity is String) {
+      user.activityLevel = _parseActivityLevel(activity);
+    } else if (activity == null) {
+      user.activityLevel = null;
+    }
+
+    final targetRaw = draft['targetDate'];
+    if (targetRaw is String) {
+      final parsed = _parseApiDate(targetRaw);
+      if (parsed != null) {
+        user.targetDate = DateTime(parsed.year, parsed.month, parsed.day);
+      }
+    }
+  }
+
+  Future<void> persistOnboardingStep(String nextRoute) async {
+    await _storage.saveOnboardingDraft(_onboardingDraftFromUser());
+    await _storage.saveOnboardingStep(nextRoute);
+  }
+
+  Future<void> restoreOnboardingProgress() async {
+    final completed = await _storage.isOnboardingCompleted();
+    if (completed || isEmailVerified) return;
+
+    final draft = await _storage.loadOnboardingDraft();
+    if (draft == null) return;
+
+    final draftUserId = draft['userId'];
+    if (draftUserId is String &&
+        draftUserId.isNotEmpty &&
+        userId.isNotEmpty &&
+        draftUserId != userId) {
+      await clearOnboardingProgress();
+      return;
+    }
+
+    _applyOnboardingDraft(draft);
+  }
+
+  Future<String> resolveSetupResumeRoute() async {
+    final completed = await _storage.isOnboardingCompleted();
+    if (completed || isEmailVerified) return AppRoutes.main;
+
+    final step = await _storage.loadOnboardingStep();
+    if (step != null && _resumeableSetupRoutes.contains(step)) {
+      return step;
+    }
+    return AppRoutes.personalDetails;
+  }
+
+  Future<void> clearOnboardingProgress() async {
+    await _storage.clearOnboardingProgress();
   }
 
   String? validateOnboardingPayload() {
@@ -555,6 +665,9 @@ class UserController extends GetxController {
     }
     if (user.goal == null) {
       return 'Please select a fitness goal.';
+    }
+    if (user.activityLevel == null) {
+      return 'Please select your activity level.';
     }
     if (user.age < 13 || user.age > 100) {
       return 'Please enter a valid age between 13 and 100.';
@@ -729,6 +842,7 @@ class UserController extends GetxController {
 
   Future<void> finishOnboardingSetup() async {
     await _storage.saveOnboardingCompleted(completed: true);
+    await clearOnboardingProgress();
     _notifyDashboard();
     MainController.resetHomeTabIfRegistered();
     Get.offAllNamed(AppRoutes.main);
@@ -966,10 +1080,15 @@ class UserController extends GetxController {
         accessToken: accessToken,
       ),
     );
+
+    if (Get.isRegistered<StreakController>()) {
+      unawaited(Get.find<StreakController>().onAuthChanged());
+    }
   }
 
   Future<void> markOnboardingComplete() async {
     await _storage.saveOnboardingCompleted(completed: true);
+    await clearOnboardingProgress();
   }
 
   Future<void> _markEmailVerifiedLocally() async {

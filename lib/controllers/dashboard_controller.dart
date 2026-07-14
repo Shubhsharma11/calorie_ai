@@ -31,7 +31,7 @@ class DashboardController extends GetxController {
   int get caloriesOver =>
       isOverCalorieGoal ? foodCalories - calorieGoal : 0;
 
-  /// Food budget remaining after subtracting burned calories (eat-back model).
+  /// Food  remaining after subtracting burned calories (eat-back model).
   int get netCaloriesRemaining =>
       (calorieGoal - foodCalories + exerciseCalories).clamp(0, 99999);
 

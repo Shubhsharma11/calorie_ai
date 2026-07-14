@@ -5,6 +5,7 @@ import '../controllers/tracker_controller.dart';
 import '../core/responsive.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import 'training_icon.dart';
 
 /// Steps & exercise quick actions for the Home screen Calories Burn area.
 class CaloriesBurnBanner extends StatelessWidget {
@@ -49,11 +50,7 @@ class CaloriesBurnBanner extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(
-                        Icons.local_fire_department_rounded,
-                        color: _burnOrange,
-                        size: r.scale(22),
-                      ),
+                      TrainingIcon(size: r.scale(24)),
                       SizedBox(width: r.scale(8)),
                       Text(
                         'Calories Burn',
@@ -94,7 +91,7 @@ class CaloriesBurnBanner extends StatelessWidget {
                       SizedBox(width: r.scale(8)),
                       Expanded(
                         child: _QuickStat(
-                          icon: Icons.directions_run_rounded,
+                          iconWidget: TrainingIcon(size: r.scale(18)),
                           color: _burnOrange,
                           label: 'Exercise',
                           value: '${exerciseMin}m',
@@ -123,14 +120,16 @@ class CaloriesBurnBanner extends StatelessWidget {
 
 class _QuickStat extends StatelessWidget {
   const _QuickStat({
-    required this.icon,
+    this.icon,
+    this.iconWidget,
     required this.color,
     required this.label,
     required this.value,
     required this.onTap,
   });
 
-  final IconData icon;
+  final IconData? icon;
+  final Widget? iconWidget;
   final Color color;
   final String label;
   final String value;
@@ -153,7 +152,7 @@ class _QuickStat extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, color: color, size: r.scale(18)),
+              iconWidget ?? Icon(icon, color: color, size: r.scale(18)),
               SizedBox(width: r.scale(8)),
               Expanded(
                 child: Column(

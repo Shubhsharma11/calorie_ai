@@ -6,11 +6,13 @@ class StreakDay {
     required this.date,
     required this.logged,
     required this.partOfCurrentStreak,
+    this.isMissed = false,
   });
 
   final DateTime date;
   final bool logged;
   final bool partOfCurrentStreak;
+  final bool isMissed;
 
   bool get isToday {
     final today = MealEntry.normalizeDate(DateTime.now());
@@ -33,6 +35,15 @@ class StreakStats {
   final bool hasLoggedToday;
   final bool isAtRisk;
   final List<StreakDay> recentDays;
+
+  /// True when the user had past logs but the streak is currently broken.
+  bool get streakBroken =>
+      currentStreak == 0 &&
+      recentDays.any((day) => day.logged && day.date.isBefore(_yesterday));
+
+  static DateTime get _yesterday =>
+      MealEntry.normalizeDate(DateTime.now())
+          .subtract(const Duration(days: 1));
 
   static const empty = StreakStats(
     currentStreak: 0,
@@ -112,21 +123,56 @@ abstract final class StreakCalculator {
   }) =>
       loggedDates.contains(MealEntry.normalizeDate(day));
 
+  /// Reconstructs logged days when the API returns counts without a date list.
+  static Set<DateTime> inferLoggedDatesFromStreak({
+    required int currentStreak,
+    required bool hasLoggedToday,
+    DateTime? asOf,
+  }) {
+    if (currentStreak <= 0) return {};
+
+    final today = MealEntry.normalizeDate(asOf ?? DateTime.now());
+    final end = hasLoggedToday
+        ? today
+        : today.subtract(const Duration(days: 1));
+
+    return {
+      for (var i = 0; i < currentStreak; i++)
+        end.subtract(Duration(days: i)),
+    };
+  }
+
+  static bool computeStreakBroken(
+    Set<DateTime> loggedDates, {
+    DateTime? asOf,
+  }) {
+    if (loggedDates.isEmpty) return false;
+    if (computeCurrentStreak(loggedDates, asOf: asOf) > 0) return false;
+
+    final today = MealEntry.normalizeDate(asOf ?? DateTime.now());
+    final yesterday = today.subtract(const Duration(days: 1));
+    return loggedDates.any((day) => day.isBefore(yesterday));
+  }
+
   static List<StreakDay> buildRecentDays(
     Set<DateTime> loggedDates, {
     int dayCount = 30,
     DateTime? asOf,
+    int? currentStreakOverride,
   }) {
     final today = MealEntry.normalizeDate(asOf ?? DateTime.now());
-    final currentStreak = computeCurrentStreak(loggedDates, asOf: today);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final currentStreak = currentStreakOverride ??
+        computeCurrentStreak(loggedDates, asOf: today);
 
     DateTime? streakEnd;
-    if (loggedDates.contains(today)) {
-      streakEnd = today;
-    } else if (loggedDates.contains(
-      today.subtract(const Duration(days: 1)),
-    )) {
-      streakEnd = today.subtract(const Duration(days: 1));
+    if (currentStreak > 0) {
+      if (loggedDates.contains(today)) {
+        streakEnd = today;
+      } else if (loggedDates.contains(yesterday) ||
+          currentStreakOverride != null) {
+        streakEnd = yesterday;
+      }
     }
 
     final streakStart = streakEnd != null && currentStreak > 0
@@ -145,6 +191,7 @@ abstract final class StreakCalculator {
         date: day,
         logged: logged,
         partOfCurrentStreak: logged && inStreak,
+        isMissed: !logged && day.isBefore(today),
       );
     });
   }
@@ -155,7 +202,20 @@ abstract final class StreakCalculator {
     int storedLongest = 0,
     DateTime? asOf,
   }) {
-    final dates = loggedDatesFrom(entries);
+    return computeFromDates(
+      loggedDatesFrom(entries),
+      calendarDays: calendarDays,
+      storedLongest: storedLongest,
+      asOf: asOf,
+    );
+  }
+
+  static StreakStats computeFromDates(
+    Set<DateTime> dates, {
+    int calendarDays = 30,
+    int storedLongest = 0,
+    DateTime? asOf,
+  }) {
     if (dates.isEmpty) {
       return StreakStats(
         currentStreak: 0,

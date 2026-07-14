@@ -79,4 +79,99 @@ void main() {
       180,
     );
   });
+
+  test('mergeAll drops local copy once the server returns the same meal', () {
+    final today = MealEntry.normalizeDate(DateTime.now());
+    // The local entry is still pending sync (local id) but the POST already
+    // committed, so the fetch returns the same meal with a server id.
+    final local = [
+      MealEntry(
+        id: '1752408000000000',
+        food: _food('Banana'),
+        grams: 100,
+        meal: MealType.breakfast,
+        date: today,
+      ),
+    ];
+    final fetched = [
+      MealEntry(
+        id: 'server-1',
+        food: _food('Banana'),
+        grams: 100,
+        meal: MealType.breakfast,
+        date: today,
+      ),
+    ];
+
+    final merged = MealEntryMerge.mergeAll(current: local, fetched: fetched);
+
+    expect(merged.length, 1);
+    expect(merged.single.id, 'server-1');
+  });
+
+  test('mergeAll keeps intentional duplicates logged twice', () {
+    final today = MealEntry.normalizeDate(DateTime.now());
+    // Two identical bananas logged on purpose; only one synced so far.
+    final local = [
+      MealEntry(
+        id: 'server-1',
+        food: _food('Banana'),
+        grams: 100,
+        meal: MealType.breakfast,
+        date: today,
+      ),
+      MealEntry(
+        id: 'local-2',
+        food: _food('Banana'),
+        grams: 100,
+        meal: MealType.breakfast,
+        date: today,
+      ),
+    ];
+    final fetched = [
+      MealEntry(
+        id: 'server-1',
+        food: _food('Banana'),
+        grams: 100,
+        meal: MealType.breakfast,
+        date: today,
+      ),
+    ];
+
+    final merged = MealEntryMerge.mergeAll(current: local, fetched: fetched);
+
+    expect(merged.length, 2);
+    expect(merged.any((entry) => entry.id == 'local-2'), isTrue);
+  });
+
+  test('mergeForDay drops local copy matched by fetched content', () {
+    final today = MealEntry.normalizeDate(DateTime.now());
+    final local = [
+      MealEntry(
+        id: 'local-1',
+        food: _food('Rice'),
+        grams: 200,
+        meal: MealType.lunch,
+        date: today,
+      ),
+    ];
+    final fetched = [
+      MealEntry(
+        id: 'server-1',
+        food: _food('Rice'),
+        grams: 200,
+        meal: MealType.lunch,
+        date: today,
+      ),
+    ];
+
+    final merged = MealEntryMerge.mergeForDay(
+      current: local,
+      day: today,
+      fetched: fetched,
+    );
+
+    expect(merged.length, 1);
+    expect(merged.single.id, 'server-1');
+  });
 }

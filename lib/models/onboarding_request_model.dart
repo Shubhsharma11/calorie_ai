@@ -134,6 +134,11 @@ class OnboardingRequestModel {
 
     final concerns = _apiConcerns(user);
 
+    final activity = user.activityLevel;
+    if (activity == null) {
+      throw const OnboardingPayloadException('Activity level is not set.');
+    }
+
     return OnboardingRequestModel(
       personalDetails: OnboardingPersonalDetails(
         age: user.age,
@@ -143,7 +148,7 @@ class OnboardingRequestModel {
         weightUnit: 'kg',
       ),
       goalType: goal.apiValue,
-      activityLevel: user.activityLevel.name,
+      activityLevel: activity.name,
       healthProblems: concerns
           .map(OnboardingHealthProblem.fromConcern)
           .toList(growable: false),
@@ -317,10 +322,10 @@ class OnboardingPatchModel {
   }
 
   factory OnboardingPatchModel.activityLevelDiff(
-    ActivityLevel level,
+    ActivityLevel? level,
     ProfileSyncSnapshot baseline,
   ) {
-    if (baseline.activityLevel == level) {
+    if (level == null || baseline.activityLevel == level) {
       return const OnboardingPatchModel._();
     }
 
@@ -341,7 +346,7 @@ class OnboardingPatchModel {
   factory OnboardingPatchModel.goalAndActivity(UserModel user) {
     return OnboardingPatchModel._(
       goal: user.goal?.apiValue,
-      activityLevel: user.activityLevel.name,
+      activityLevel: user.activityLevel?.name,
     );
   }
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-
 import '../controllers/auth_controller.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
@@ -38,6 +37,9 @@ class RegisterView extends GetView<AuthController> {
               obscureText: true,
               decoration: const InputDecoration(labelText: 'Password'),
             ),
+
+
+
             SizedBox(height: r.scale(24)),
             PrimaryButton(label: 'Sign Up', onPressed: controller.register),
             SizedBox(height: r.scale(16)),
@@ -46,6 +48,7 @@ class RegisterView extends GetView<AuthController> {
               icon: Icons.login,
               onPressed: controller.loginWithGoogle,
             ),
+            
             SizedBox(height: r.scale(24)),
             Wrap(
               alignment: WrapAlignment.center,

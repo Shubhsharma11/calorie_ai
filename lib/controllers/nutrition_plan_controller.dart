@@ -15,19 +15,28 @@ class NutritionPlanController extends GetxController {
   final NutritionPlanRepository _repository;
   bool _isFetching = false;
 
-  final isLoading = true.obs;
+  final isLoading = false.obs;
   final errorMessage = RxnString();
   final plan = Rxn<NutritionPlanModel>();
+  final revision = 0.obs;
+
+  @override
+  void onInit() {
+    super.onInit();
+    unawaited(loadPlan());
+  }
 
   void setLoadedPlan(NutritionPlanModel loadedPlan) {
     plan.value = loadedPlan;
     isLoading.value = false;
     errorMessage.value = null;
     _isFetching = false;
+    revision.value++;
   }
 
-  Future<void> loadPlan() async {
+  Future<void> loadPlan({bool force = false}) async {
     if (_isFetching) return;
+    if (!force && plan.value != null) return;
 
     final userController = Get.find<UserController>();
     await userController.localProfileReady;
@@ -39,12 +48,14 @@ class NutritionPlanController extends GetxController {
       );
       errorMessage.value = 'Please sign in to load your nutrition plan.';
       isLoading.value = false;
+      revision.value++;
       return;
     }
 
     _isFetching = true;
     isLoading.value = true;
     errorMessage.value = null;
+    revision.value++;
 
     try {
       debugPrint('NutritionPlanController: calling GET nutrition plan API');
@@ -52,8 +63,12 @@ class NutritionPlanController extends GetxController {
         accessToken: userController.accessToken,
       );
       plan.value = fetchedPlan;
+      debugPrint(
+        'NutritionPlanController: loaded plan with ${fetchedPlan.tips.length} tips',
+      );
       await userController.applyNutritionPlan(fetchedPlan);
     } on NutritionPlanApiException catch (error) {
+      debugPrint('NutritionPlanController: load failed: $error');
       errorMessage.value = error.message;
     } catch (error) {
       debugPrint('NutritionPlanController: load failed: $error');
@@ -62,6 +77,7 @@ class NutritionPlanController extends GetxController {
     } finally {
       _isFetching = false;
       isLoading.value = false;
+      revision.value++;
     }
   }
 
@@ -72,4 +88,6 @@ class NutritionPlanController extends GetxController {
   }
 
   bool get hasApiPlan => plan.value != null;
+
+  List<String> get tips => plan.value?.tips ?? [];
 }

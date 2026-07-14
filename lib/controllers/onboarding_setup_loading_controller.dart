@@ -39,6 +39,7 @@ class OnboardingSetupLoadingController extends GetxController {
     progress.value = 1;
     activeStep.value = _steps;
     await Future<void>.delayed(const Duration(milliseconds: 350));
+    await user.persistOnboardingStep(AppRoutes.dailyCalorieGoal);
     Get.offNamed(AppRoutes.dailyCalorieGoal);
   }
 

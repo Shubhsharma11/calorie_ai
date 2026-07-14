@@ -1,3 +1,4 @@
+import 'package:calorie_ai/models/meal_entry.dart';
 import 'package:calorie_ai/models/meal_streak_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -36,22 +37,37 @@ void main() {
     expect(model.loggedDates.length, 2);
   });
 
-  test('MealStreakModel.toStreakStats builds calendar days', () {
+  test('MealStreakModel.toStreakStats uses only real calendar dates', () {
     final model = MealStreakModel(
       currentStreak: 3,
       longestStreak: 8,
       hasLoggedToday: true,
       isAtRisk: false,
-      loggedDates: {
-        DateTime(2026, 6, 8),
-        DateTime(2026, 6, 9),
-        DateTime(2026, 6, 10),
-      },
+      loggedDates: const {},
     );
 
-    final stats = model.toStreakStats(storedLongest: 5);
+    final today = MealEntry.normalizeDate(DateTime.now());
+    final dates = {
+      today,
+      today.subtract(const Duration(days: 1)),
+      today.subtract(const Duration(days: 2)),
+    };
+
+    final stats = model.toStreakStats(calendarDates: dates);
     expect(stats.currentStreak, 3);
-    expect(stats.longestStreak, 8);
-    expect(stats.recentDays.length, 30);
+    expect(stats.recentDays.where((day) => day.logged).length, 3);
+  });
+
+  test('MealStreakModel.toStreakStats does not infer dates when calendar empty', () {
+    final model = MealStreakModel(
+      currentStreak: 3,
+      longestStreak: 8,
+      hasLoggedToday: true,
+      isAtRisk: false,
+      loggedDates: const {},
+    );
+
+    final stats = model.toStreakStats();
+    expect(stats.recentDays.where((day) => day.logged), isEmpty);
   });
 }

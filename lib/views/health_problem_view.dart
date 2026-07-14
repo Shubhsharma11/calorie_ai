@@ -195,6 +195,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
       return;
     }
 
+    await _user.persistOnboardingStep(AppRoutes.nutritionPlanLoading);
     Get.toNamed(AppRoutes.nutritionPlanLoading);
   }
 
@@ -292,7 +293,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
               if (!_noneSelected && _selectedCategories.isEmpty) ...[
                 SizedBox(height: r.scale(compact ? 14 : 18)),
                 const _GuidanceCard(
-                  icon: Icons.touch_app_rounded,
+                  iconAsset: 'assets/image/point.svg',
                   title: 'Choose what applies to you',
                   message:
                       'Select one or more health concerns and fill in details for each, or choose the option below if none apply.',
@@ -743,24 +744,15 @@ class _NoneOption extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
+              SizedBox(
                 width: iconSize,
                 height: iconSize,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppColors.primary.withValues(alpha: 0.14)
-                      : AppColors.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: selected
-                        ? AppColors.primary.withValues(alpha: 0.28)
-                        : AppColors.border,
+                child: Transform.scale(
+                  scale: 0.8,
+                  child: Image.asset(
+                    'assets/image/no-entry.png',
+                    fit: BoxFit.contain,
                   ),
-                ),
-                child: Icon(
-                  Icons.do_not_disturb_on_outlined,
-                  color: AppColors.primary,
-                  size: r.scale(26, tablet: 28),
                 ),
               ),
               SizedBox(width: r.scale(14)),
@@ -898,12 +890,12 @@ class _SectionTitle extends StatelessWidget {
 
 class _GuidanceCard extends StatelessWidget {
   const _GuidanceCard({
-    required this.icon,
+    required this.iconAsset,
     required this.title,
     required this.message,
   });
 
-  final IconData icon;
+  final String iconAsset;
   final String title;
   final String message;
 
@@ -924,14 +916,13 @@ class _GuidanceCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
+          SizedBox(
             width: r.scale(34),
             height: r.scale(34),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
+            child: SvgPicture.asset(
+              iconAsset,
+              fit: BoxFit.contain,
             ),
-            child: Icon(icon, size: r.scale(19), color: AppColors.primary),
           ),
           SizedBox(width: r.scale(12)),
           Expanded(

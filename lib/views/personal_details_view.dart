@@ -40,7 +40,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   String? _heightError;
   String? _weightError;
 
-  static const _genders = ['Male', 'Female'];
+  static const _genders = ['Male', 'Female', 'Other'];
   static const _ageIconAsset = 'assets/image/age.svg';
   static const _genderIconAsset = 'assets/image/gemder.svg';
   static const _heightIconAsset = 'assets/image/height.svg';
@@ -284,6 +284,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     } else {
       _user.onProfileUpdated();
       _user.syncWeightFromProfile();
+      await _user.persistOnboardingStep(AppRoutes.goalSetup);
       Get.toNamed(AppRoutes.goalSetup);
     }
   }
@@ -325,7 +326,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
               label: 'Gender',
               subtitle: 'Select your gender',
               errorText: _genderError,
-              child: _GenderToggle(
+              child: _GenderDropdown(
                 value: _gender,
                 options: _genders,
                 hasError: _genderError != null,
@@ -777,8 +778,8 @@ class _NumberInput extends StatelessWidget {
   }
 }
 
-class _GenderToggle extends StatelessWidget {
-  const _GenderToggle({
+class _GenderDropdown extends StatelessWidget {
+  const _GenderDropdown({
     required this.value,
     required this.options,
     required this.onChanged,
@@ -793,47 +794,80 @@ class _GenderToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final idleBorder = hasError
-        ? AppColors.error.withValues(alpha: 0.65)
-        : AppColors.border;
+    const fieldRadius = 10.0;
+    final borderColor =
+        hasError ? AppColors.error.withValues(alpha: 0.65) : AppColors.border;
+    final selected = value.isNotEmpty;
+    final textStyle = TextStyle(
+      fontSize: r.scale(14, tablet: 15),
+      fontWeight: FontWeight.w600,
+      color: AppColors.textPrimary,
+    );
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: options.map((option) {
-        final selected = value == option;
-        return Padding(
-          padding: EdgeInsets.only(left: option == options.first ? 0 : 6),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => onChanged(option),
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: r.scale(12),
-                  vertical: r.scale(8),
+    // Matches _NumberInput field height (vertical padding 10 + text).
+    return SizedBox(
+      width: r.scale(88),
+      height: r.scale(40),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(fieldRadius),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(fieldRadius),
+            border: Border.all(color: borderColor),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: ButtonTheme(
+              alignedDropdown: true,
+              child: DropdownButton<String>(
+                value: selected ? value : null,
+                isExpanded: true,
+                isDense: true,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                hint: Text(
+                  'Select',
+                  textAlign: TextAlign.center,
+                  style: textStyle.copyWith(color: AppColors.textSecondary),
                 ),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: selected ? AppColors.primary : idleBorder,
-                    width: selected ? 1.5 : 1,
-                  ),
+                icon: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: r.scale(18),
+                  color: AppColors.textSecondary,
                 ),
-                child: Text(
-                  option,
-                  style: TextStyle(
-                    fontSize: r.scale(12, tablet: 13),
-                    fontWeight: FontWeight.w600,
-                    color: selected ? AppColors.primary : AppColors.textPrimary,
-                  ),
-                ),
+                borderRadius: BorderRadius.circular(fieldRadius),
+                dropdownColor: AppColors.card,
+                style: textStyle,
+                selectedItemBuilder: (context) => options
+                    .map(
+                      (option) => Center(
+                        child: Text(
+                          option,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: textStyle,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                items: options
+                    .map(
+                      (option) => DropdownMenuItem(
+                        value: option,
+                        child: Center(
+                          child: Text(option, style: textStyle),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) onChanged(v);
+                },
               ),
             ),
           ),
-        );
-      }).toList(),
+        ),
+      ),
     );
   }
 }

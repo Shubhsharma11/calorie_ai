@@ -45,7 +45,9 @@ final showRepeat =
 
       return ResponsivePage(
         child: RefreshIndicator(
-          onRefresh: controller.refreshMealsFromApi,
+          onRefresh: () async {
+            await controller.refreshMealsFromApi();
+          },
           color: AppColors.primary,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),

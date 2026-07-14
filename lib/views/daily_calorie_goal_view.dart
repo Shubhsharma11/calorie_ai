@@ -149,12 +149,13 @@ class DailyCalorieGoalView extends GetView<UserController> {
     return (grams * calPerGram / calories).clamp(0.0, 1.0);
   }
 
-  static String _activityLabel(ActivityLevel level) {
+  static String _activityLabel(ActivityLevel? level) {
     return switch (level) {
       ActivityLevel.sedentary => 'Sedentary',
       ActivityLevel.lightlyActive => 'Light',
       ActivityLevel.moderatelyActive => 'Moderate',
       ActivityLevel.veryActive => 'Very Active',
+      null => 'Not set',
     };
   }
 }
