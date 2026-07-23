@@ -29,4 +29,42 @@ void main() {
     expect(capturedHeaders['Authorization'], 'Bearer token-123');
     expect(capturedHeaders['X-Timezone'], isNotEmpty);
   });
+
+  test('MealsApiService fetches meals with period and custom dates', () async {
+    late Uri capturedUri;
+
+    final client = MockClient((request) async {
+      capturedUri = request.url;
+      return http.Response(jsonEncode({'data': []}), 200);
+    });
+
+    final service = MealsApiService(apiClient: ApiClient(client: client));
+
+    await service.fetchMeals(
+      accessToken: 'token-123',
+      period: 'custom',
+      fromDate: DateTime(2026, 7, 1),
+      toDate: DateTime(2026, 7, 23),
+    );
+
+    expect(capturedUri.path, ApiEndpoints.meals);
+    expect(capturedUri.queryParameters['period'], 'custom');
+    expect(capturedUri.queryParameters['from_date'], '2026-07-01');
+    expect(capturedUri.queryParameters['to_date'], '2026-07-23');
+  });
+
+  test('mealsWithQuery builds period and date URLs', () {
+    expect(
+      ApiEndpoints.mealsWithQuery(period: '1week'),
+      '${ApiEndpoints.meals}?period=1week',
+    );
+    expect(
+      ApiEndpoints.mealsWithQuery(period: 'today'),
+      '${ApiEndpoints.meals}?period=today',
+    );
+    expect(
+      ApiEndpoints.mealsWithQuery(date: DateTime(2026, 7, 23)),
+      '${ApiEndpoints.meals}?date=2026-07-23',
+    );
+  });
 }

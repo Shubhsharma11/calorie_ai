@@ -20,8 +20,10 @@ import '../views/daily_summary_view.dart';
 import '../views/health_problem_view.dart';
 import '../controllers/daily_summary_controller.dart';
 import '../views/create_meal_view.dart';
+import '../views/create_custom_food_view.dart';
 import '../views/edit_meal_view.dart';
 import '../views/food_details_view.dart';
+import '../views/goal_amount_view.dart';
 import '../views/goal_setup_view.dart';
 import '../views/goal_weight_view.dart';
 import '../views/my_goals_view.dart';
@@ -35,7 +37,7 @@ import '../views/personal_details_view.dart';
 import '../views/personal_information_view.dart';
 import '../views/progress_view.dart';
 import '../views/register_view.dart';
-import '../controllers/streak_controller.dart';
+// import '../controllers/streak_controller.dart';
 import '../views/streak_view.dart';
 import '../views/calories_burn_view.dart';
 import '../views/water_tracker_view.dart';
@@ -63,6 +65,10 @@ abstract final class AppPages {
     AppPageTransitions.getPage(
       name: AppRoutes.goalSetup,
       page: () => const GoalSetupView(),
+    ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.goalAmount,
+      page: () => const GoalAmountView(),
     ),
     AppPageTransitions.getPage(
       name: AppRoutes.myGoals,
@@ -137,6 +143,11 @@ abstract final class AppPages {
     AppPageTransitions.getPage(
       name: AppRoutes.createMeal,
       page: () => const CreateMealView(),
+      binding: HomeBinding(),
+    ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.createCustomFood,
+      page: () => const CreateCustomFoodView(),
       binding: HomeBinding(),
     ),
     AppPageTransitions.getPage(
@@ -216,9 +227,10 @@ abstract final class AppPages {
       page: () => const StreakView(),
       binding: BindingsBuilder(() {
         HomeBinding().dependencies();
-        if (!Get.isRegistered<StreakController>()) {
-          Get.put(StreakController());
-        }
+        // Streak unused — do not register controller / hit streak API.
+        // if (!Get.isRegistered<StreakController>()) {
+        //   Get.put(StreakController());
+        // }
       }),
     ),
 

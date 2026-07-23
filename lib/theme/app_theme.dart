@@ -7,33 +7,35 @@ import 'app_colors.dart';
 abstract final class AppTheme {
   static const fontFamily = 'Manrope';
 
-  static ThemeData get light => _buildTheme(
-        brightness: Brightness.light,
-        background: AppColors.lightPageBackground,
-        surface: AppColors.lightSurface,
-        card: AppColors.lightCard,
-        textPrimary: AppColors.lightTextPrimary,
-        textSecondary: AppColors.lightTextSecondary,
-        border: AppColors.lightBorder,
-        error: AppColors.error,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        selectionFillAlpha: 0.15,
-      );
+  /// Cached instances — rebuilding ThemeData on every toggle is expensive and
+  /// also breaks inactive-tab theme freezing (new instances always notify).
+  static final ThemeData light = _buildTheme(
+    brightness: Brightness.light,
+    background: AppColors.lightPageBackground,
+    surface: AppColors.lightSurface,
+    card: AppColors.lightCard,
+    textPrimary: AppColors.lightTextPrimary,
+    textSecondary: AppColors.lightTextSecondary,
+    border: AppColors.lightBorder,
+    error: AppColors.error,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    selectionFillAlpha: 0.15,
+  );
 
-  static ThemeData get dark => _buildTheme(
-        brightness: Brightness.dark,
-        background: AppColors.darkBackground,
-        surface: AppColors.darkSurface,
-        card: AppColors.darkCard,
-        textPrimary: AppColors.darkTextPrimary,
-        textSecondary: AppColors.darkTextSecondary,
-        border: AppColors.darkBorder,
-        error: AppColors.errorDark,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        selectionFillAlpha: 0.16,
-      );
+  static final ThemeData dark = _buildTheme(
+    brightness: Brightness.dark,
+    background: AppColors.darkBackground,
+    surface: AppColors.darkSurface,
+    card: AppColors.darkCard,
+    textPrimary: AppColors.darkTextPrimary,
+    textSecondary: AppColors.darkTextSecondary,
+    border: AppColors.darkBorder,
+    error: AppColors.errorDark,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    selectionFillAlpha: 0.16,
+  );
 
   static ThemeData _buildTheme({
     required Brightness brightness,
@@ -113,7 +115,8 @@ abstract final class AppTheme {
           color: textSecondary,
           fontSize: 12,
         ),
-        tileColor: card,
+        // Do not set tileColor here — colored parents (cards/sheets) hide
+        // ListTile ink/background and trigger Flutter's visibility warning.
       ),
       textSelectionTheme: TextSelectionThemeData(
         cursorColor: AppColors.primary,

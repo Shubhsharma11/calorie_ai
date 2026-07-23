@@ -40,12 +40,15 @@ class WaterTrackerView extends GetView<TrackerController> {
           final waterMl = controller.waterMl;
           final goalMl = TrackerController.waterGoalMl;
           final glasses = controller.waterGlasses;
-          final overMl = controller.waterMlOverGoal;
           final period = controller.waterPeriod.value;
           final _ = controller.waterByDate.length;
           final chartHeight = _chartHeightFor(period, r);
-          final goalGlasses = goalMl ~/ TrackerController.mlPerGlass;
-          final filledGlasses = waterMl ~/ TrackerController.mlPerGlass;
+          final goalGlasses = goalMl > 0
+              ? (goalMl / TrackerController.mlPerGlass).round().clamp(1, 100)
+              : 8;
+          final overGlasses =
+              glasses > goalGlasses ? glasses - goalGlasses : 0;
+          final glassWord = glasses == 1 ? 'glass' : 'glasses';
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -61,7 +64,7 @@ class WaterTrackerView extends GetView<TrackerController> {
               ),
               const SizedBox(height: 24),
               Text(
-                '$waterMl ml',
+                '$glasses',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 44,
@@ -70,14 +73,24 @@ class WaterTrackerView extends GetView<TrackerController> {
                 ),
               ),
               Text(
-                'of ${formatWaterMl(goalMl)} today · ≈ $glasses glass${glasses == 1 ? '' : 'es'}',
+                glassWord,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'of $goalGlasses glasses today · ${formatWaterMl(waterMl)}',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
               ),
-              if (overMl > 0) ...[
+              if (overGlasses > 0) ...[
                 const SizedBox(height: 6),
                 Text(
-                  '+$overMl ml over daily goal',
+                  '+$overGlasses extra glass${overGlasses == 1 ? '' : 'es'}',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: _waterBlue,
@@ -103,15 +116,17 @@ class WaterTrackerView extends GetView<TrackerController> {
                 children: [
                   Expanded(
                     child: _QuickAddButton(
-                      label: '+250 ml',
-                      onTap: () => controller.addWaterMl(250),
+                      label: '+1 glass',
+                      onTap: controller.addWater,
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: _QuickAddButton(
-                      label: '+500 ml',
-                      onTap: () => controller.addWaterMl(500),
+                      label: '+2 glasses',
+                      onTap: () => controller.addWaterMl(
+                        TrackerController.mlPerGlass * 2,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -124,14 +139,41 @@ class WaterTrackerView extends GetView<TrackerController> {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              TextButton.icon(
-                onPressed:
-                    waterMl > 0 ? () => controller.removeWaterMl(250) : null,
-                icon: const Icon(Icons.remove_circle_outline, size: 18),
-                label: const Text('Remove 250 ml'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary,
+              const SizedBox(height: 12),
+              Center(
+                child: FilledButton.tonal(
+                  onPressed: waterMl > 0 ? controller.removeWater : null,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    backgroundColor: const Color(0xFFFFE8E6),
+                    foregroundColor: const Color(0xFFC45C54),
+                    disabledBackgroundColor:
+                        AppColors.surface.withValues(alpha: 0.7),
+                    disabledForegroundColor:
+                        AppColors.textSecondary.withValues(alpha: 0.45),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.remove_rounded, size: 16),
+                      SizedBox(width: 4),
+                      Text(
+                        'Remove 1 glass',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -154,34 +196,6 @@ class WaterTrackerView extends GetView<TrackerController> {
                 chartHeight: chartHeight,
               ),
               const SizedBox(height: 32),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                alignment: WrapAlignment.center,
-                children: [
-                  ...List.generate(goalGlasses, (i) {
-                    final filled = i < filledGlasses;
-                    return Icon(
-                      filled ? Icons.local_drink : Icons.local_drink_outlined,
-                      size: 40,
-                      color: filled
-                          ? (controller.isWaterGoalComplete
-                              ? AppColors.primary
-                              : _waterBlue)
-                          : AppColors.border,
-                    );
-                  }),
-                  ...List.generate(
-                    (filledGlasses - goalGlasses).clamp(0, 24),
-                    (_) => const Icon(
-                      Icons.local_drink,
-                      size: 40,
-                      color: _waterBlue,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
               Text(
                 '1 glass = ${TrackerController.mlPerGlass} ml',
                 textAlign: TextAlign.center,
@@ -202,6 +216,8 @@ class WaterTrackerView extends GetView<TrackerController> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: false,
+      showDragHandle: true,
       backgroundColor: AppColors.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -227,58 +243,92 @@ class _CustomWaterAmountSheet extends StatefulWidget {
 
 class _CustomWaterAmountSheetState extends State<_CustomWaterAmountSheet> {
   late final TextEditingController _textController;
+  late final FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
     _textController = TextEditingController();
+    _focusNode = FocusNode();
   }
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _textController.dispose();
     super.dispose();
   }
 
   void _submit(int ml) {
     if (ml <= 0) return;
-    FocusScope.of(context).unfocus();
+    // Pop first so the sheet doesn't drop onto the system bar while
+    // the keyboard is still animating away.
     widget.onAdd(ml);
-    Navigator.of(context).pop();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  void _onDone(String value) {
+    final ml = int.tryParse(value.trim()) ?? 0;
+    if (ml > 0) {
+      _submit(ml);
+      return;
+    }
+    _focusNode.unfocus();
   }
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final keyboard = media.viewInsets.bottom;
+    // Keep clear of home indicator / nav bar when the keyboard is closed.
+    final bottomPad = keyboard > 0
+        ? keyboard + 12
+        : media.padding.bottom + 20;
+
     return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
-      ),
+      padding: EdgeInsets.fromLTRB(20, 4, 20, bottomPad),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Add custom amount',
+            'Add water',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Quick glasses or enter an exact amount in ml.',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 16),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _CustomWaterAmountSheet._presets
-                .map(
-                  (ml) => ActionChip(
-                    label: Text('$ml ml'),
-                    labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                    backgroundColor: AppColors.surface,
-                    side: BorderSide(color: AppColors.border),
-                    onPressed: () => _submit(ml),
+            children: [
+              for (final glasses in const [1, 2, 3, 4])
+                ActionChip(
+                  label: Text(
+                    glasses == 1 ? '+1 glass' : '+$glasses glasses',
                   ),
-                )
-                .toList(),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                  backgroundColor: AppColors.surface,
+                  side: BorderSide(color: AppColors.border),
+                  onPressed: () =>
+                      _submit(glasses * TrackerController.mlPerGlass),
+                ),
+              ..._CustomWaterAmountSheet._presets.map(
+                (ml) => ActionChip(
+                  label: Text('$ml ml'),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                  backgroundColor: AppColors.surface,
+                  side: BorderSide(color: AppColors.border),
+                  onPressed: () => _submit(ml),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Row(
@@ -286,7 +336,12 @@ class _CustomWaterAmountSheetState extends State<_CustomWaterAmountSheet> {
               Expanded(
                 child: TextField(
                   controller: _textController,
-                  keyboardType: TextInputType.number,
+                  focusNode: _focusNode,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: false,
+                    signed: false,
+                  ),
+                  textInputAction: TextInputAction.done,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(4),
@@ -302,10 +357,7 @@ class _CustomWaterAmountSheetState extends State<_CustomWaterAmountSheet> {
                       vertical: 12,
                     ),
                   ),
-                  onSubmitted: (value) {
-                    final ml = int.tryParse(value.trim()) ?? 0;
-                    _submit(ml);
-                  },
+                  onSubmitted: _onDone,
                 ),
               ),
               const SizedBox(width: 12),

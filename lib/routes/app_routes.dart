@@ -3,6 +3,7 @@ abstract final class AppRoutes {
   static const login = '/login';
   static const register = '/register';
   static const goalSetup = '/goal-setup';
+  static const goalAmount = '/goal-amount';
   static const myGoals = '/my-goals';
   static const personalDetails = '/personal-details';
   static const personalInformation = '/personal-information';
@@ -20,6 +21,7 @@ abstract final class AppRoutes {
   static const home = main;
   static const addFood = '/add-food';
   static const createMeal = '/create-meal';
+  static const createCustomFood = '/create-custom-food';
   static const foodDetails = '/food-details';
   static const editMeal = '/edit-meal';
   static const progress = '/progress';

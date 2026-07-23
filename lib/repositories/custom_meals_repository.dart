@@ -39,4 +39,44 @@ class CustomMealsRepository {
       );
     }
   }
+
+  Future<CustomMealPreset> updateCustomMeal({
+    required String accessToken,
+    required String myMealId,
+    required CustomMealPreset preset,
+    String? imageUrl,
+  }) async {
+    try {
+      return await _apiService.updateCustomMeal(
+        accessToken: accessToken,
+        myMealId: myMealId,
+        preset: preset,
+        imageUrl: imageUrl,
+      );
+    } on CustomMealsApiException {
+      rethrow;
+    } catch (error) {
+      throw CustomMealsApiException(
+        apiNetworkErrorMessage(error, action: 'updating custom meal'),
+      );
+    }
+  }
+
+  Future<void> deleteCustomMeal({
+    required String accessToken,
+    required String myMealId,
+  }) async {
+    try {
+      await _apiService.deleteCustomMeal(
+        accessToken: accessToken,
+        myMealId: myMealId,
+      );
+    } on CustomMealsApiException {
+      rethrow;
+    } catch (error) {
+      throw CustomMealsApiException(
+        apiNetworkErrorMessage(error, action: 'deleting custom meal'),
+      );
+    }
+  }
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
+import '../core/app_snackbar.dart';
 import '../core/weight_chart_data.dart';
 import '../models/daily_water_intake.dart';
 import '../models/exercise_entry.dart';
@@ -122,6 +123,15 @@ class TrackerController extends GetxController {
 
   List<WeightEntry> get recentWeightEntries => weightEntries.toList();
 
+  Future<void>? _refreshWaterFuture;
+  DateTime? _lastWaterRefreshAt;
+  static const Duration _waterRefreshCooldown = Duration(seconds: 8);
+
+  Future<void>? _refreshWeightFuture;
+  String? _lastWeightRefreshKey;
+  DateTime? _lastWeightRefreshAt;
+  static const Duration _weightRefreshCooldown = Duration(seconds: 10);
+
   @override
   void onInit() {
     super.onInit();
@@ -137,7 +147,6 @@ class TrackerController extends GetxController {
   void onReady() {
     super.onReady();
     _bindWaterGoalListener();
-    unawaited(refreshWaterFromApi());
   }
 
   void _bindWaterGoalListener() {
@@ -204,6 +213,22 @@ class TrackerController extends GetxController {
         .toList();
   }
 
+  List<ExerciseEntry> exercisesForDate(DateTime date) {
+    final day = MealEntry.normalizeDate(date);
+    return exerciseEntries
+        .where((entry) => entry.normalizedDate == day)
+        .toList();
+  }
+
+  int caloriesBurnedForDate(DateTime date) {
+    final fromExercises = exercisesForDate(date).fold(
+      0,
+      (sum, entry) => sum + entry.calories,
+    );
+    final fromSteps = (stepsForDate(date) * 0.04).round();
+    return fromExercises + fromSteps;
+  }
+
   int stepsForDate(DateTime date) =>
       stepsByDate[MealEntry.normalizeDate(date)] ?? 0;
 
@@ -227,10 +252,8 @@ class TrackerController extends GetxController {
     final key = MealEntry.normalizeDate(date);
     final raw = waterByDate[key] ?? 0;
     if (!_isLegacyGlassCount(raw)) return raw;
-
-    final ml = raw * mlPerGlass;
-    waterByDate[key] = ml;
-    return ml;
+    // Read-only conversion — never write during widget builds (breaks Obx).
+    return raw * mlPerGlass;
   }
 
   List<DailyWaterIntake> waterForLastDays(int dayCount) {
@@ -267,20 +290,22 @@ class TrackerController extends GetxController {
     WaterPeriod.month => '30 Days',
   };
 
-  /// Adds one standard glass (250 ml).
-  void addWater() => addWaterMl(mlPerGlass);
+  /// Adds one standard glass (250 ml). Pass [date] to log for a past day.
+  void addWater({DateTime? date}) => addWaterMl(mlPerGlass, date: date);
 
-  void addWaterMl(int ml) => unawaited(_addWaterMl(ml));
+  void addWaterMl(int ml, {DateTime? date}) =>
+      unawaited(_addWaterMl(ml, date: date));
 
-  Future<void> _addWaterMl(int ml) async {
+  Future<void> _addWaterMl(int ml, {DateTime? date}) async {
     if (ml <= 0) return;
-    final today = _today;
-    final previous = waterForDate(today);
+    final day = MealEntry.normalizeDate(date ?? _today);
+    final previous = waterForDate(day);
     final wasComplete = previous >= waterGoalMl;
 
-    waterByDate[today] = previous + ml;
+    waterByDate[day] = previous + ml;
     waterByDate.refresh();
-    _maybeShowWaterGoalCelebration(wasComplete);
+    AppSnackbar.success(_waterLoggedMessage(ml), title: 'Water');
+    _maybeShowWaterGoalCelebration(wasComplete, forDate: day);
 
     final accessToken = await _weightAccessToken();
     if (accessToken == null) return;
@@ -289,6 +314,7 @@ class TrackerController extends GetxController {
       final response = await _waterRepository.logWater(
         accessToken: accessToken,
         amountMl: ml,
+        date: day == _today ? null : day,
       );
       final loggedEntry = response.entry;
       if (loggedEntry != null) {
@@ -296,10 +322,10 @@ class TrackerController extends GetxController {
       }
       final serverTotal = response.dailyTotalMl;
       if (serverTotal != null) {
-        waterByDate[today] = serverTotal;
+        waterByDate[day] = serverTotal;
         waterByDate.refresh();
       } else {
-        await refreshWaterForDate(today);
+        await refreshWaterForDate(day);
       }
     } on WaterApiException catch (error) {
       _logWaterApi404Once(error);
@@ -307,6 +333,15 @@ class TrackerController extends GetxController {
     } catch (error) {
       debugPrint('TrackerController: water log failed: $error');
     }
+  }
+
+  static String _waterLoggedMessage(int ml) {
+    if (ml == mlPerGlass) return 'Added 1 glass.';
+    if (ml > 0 && ml % mlPerGlass == 0) {
+      final glasses = ml ~/ mlPerGlass;
+      return 'Added $glasses glasses.';
+    }
+    return 'Added ${formatWaterMl(ml)}.';
   }
 
   void _logWaterApi404Once(WaterApiException error) {
@@ -319,29 +354,36 @@ class TrackerController extends GetxController {
     );
   }
 
-  void _maybeShowWaterGoalCelebration(bool wasComplete) {
-    if (!wasComplete && isWaterGoalComplete && !_waterGoalCelebrationShown) {
+  void _maybeShowWaterGoalCelebration(
+    bool wasComplete, {
+    DateTime? forDate,
+  }) {
+    final day = forDate == null ? _today : MealEntry.normalizeDate(forDate);
+    final complete = waterForDate(day) >= waterGoalMl;
+    if (!wasComplete && complete && !_waterGoalCelebrationShown) {
       _waterGoalCelebrationShown = true;
       WaterGoalSuccessDialog.show();
     }
   }
 
-  /// Removes one standard glass (250 ml).
-  void removeWater() => removeWaterMl(mlPerGlass);
+  /// Removes one standard glass (250 ml). Pass [date] to edit a past day.
+  void removeWater({DateTime? date}) => removeWaterMl(mlPerGlass, date: date);
 
-  void removeWaterMl(int ml) => unawaited(_removeWaterMl(ml));
+  void removeWaterMl(int ml, {DateTime? date}) =>
+      unawaited(_removeWaterMl(ml, date: date));
 
-  Future<void> _removeWaterMl(int ml) async {
+  Future<void> _removeWaterMl(int ml, {DateTime? date}) async {
     if (ml <= 0) return;
-    final today = _today;
-    final current = waterForDate(today);
+    final day = MealEntry.normalizeDate(date ?? _today);
+    final current = waterForDate(day);
     if (current <= 0) return;
 
-    final entry = _latestTodayWaterEntry(preferredMl: ml);
+    final entry = _latestWaterEntryForDate(day, preferredMl: ml);
     if (entry != null) {
       final outcome = await deleteWaterEntry(entry);
       if (outcome.status == WaterDeleteStatus.deleted) {
-        if (!isWaterGoalComplete) {
+        AppSnackbar.success(_waterRemovedMessage(ml), title: 'Water');
+        if (waterForDate(day) < waterGoalMl) {
           _waterGoalCelebrationShown = false;
         }
         return;
@@ -350,15 +392,25 @@ class TrackerController extends GetxController {
 
     final next = current - ml;
     if (next <= 0) {
-      waterByDate.remove(today);
+      waterByDate.remove(day);
     } else {
-      waterByDate[today] = next;
+      waterByDate[day] = next;
     }
     waterByDate.refresh();
+    AppSnackbar.success(_waterRemovedMessage(ml), title: 'Water');
 
-    if (!isWaterGoalComplete) {
+    if (waterForDate(day) < waterGoalMl) {
       _waterGoalCelebrationShown = false;
     }
+  }
+
+  static String _waterRemovedMessage(int ml) {
+    if (ml == mlPerGlass) return 'Removed 1 glass.';
+    if (ml > 0 && ml % mlPerGlass == 0) {
+      final glasses = ml ~/ mlPerGlass;
+      return 'Removed $glasses glasses.';
+    }
+    return 'Removed ${formatWaterMl(ml)}.';
   }
 
   Future<WaterDeleteOutcome> deleteWaterEntry(WaterLogEntry entry) async {
@@ -418,20 +470,22 @@ class TrackerController extends GetxController {
     }
   }
 
-  WaterLogEntry? _latestTodayWaterEntry({int? preferredMl}) {
-    final today = _today;
-    final todayEntries = waterEntries
-        .where((entry) => entry.normalizedDate == today)
+  WaterLogEntry? _latestWaterEntryForDate(
+    DateTime day, {
+    int? preferredMl,
+  }) {
+    final dayEntries = waterEntries
+        .where((entry) => entry.normalizedDate == day)
         .toList();
-    if (todayEntries.isEmpty) return null;
+    if (dayEntries.isEmpty) return null;
 
     if (preferredMl != null) {
       final matches =
-          todayEntries.where((entry) => entry.amountMl == preferredMl).toList();
+          dayEntries.where((entry) => entry.amountMl == preferredMl).toList();
       if (matches.isNotEmpty) return matches.last;
     }
 
-    return todayEntries.last;
+    return dayEntries.last;
   }
 
   void syncWaterGoalCelebration() {
@@ -442,9 +496,25 @@ class TrackerController extends GetxController {
   }
 
   /// Loads today's water total and paginated history from the API.
-  Future<void> refreshWaterFromApi() async {
-    await refreshWaterForDate(_today);
-    await refreshWaterHistory();
+  Future<void> refreshWaterFromApi({bool force = false}) {
+    final now = DateTime.now();
+    if (!force &&
+        _lastWaterRefreshAt != null &&
+        now.difference(_lastWaterRefreshAt!) < _waterRefreshCooldown) {
+      return _refreshWaterFuture ?? Future<void>.value();
+    }
+    if (_refreshWaterFuture != null) {
+      return _refreshWaterFuture!;
+    }
+
+    _refreshWaterFuture = () async {
+      await refreshWaterForDate(_today);
+      await refreshWaterHistory();
+    }().whenComplete(() {
+      _refreshWaterFuture = null;
+      _lastWaterRefreshAt = DateTime.now();
+    });
+    return _refreshWaterFuture!;
   }
 
   Future<void> _refreshWaterForPeriod(WaterPeriod period) async {
@@ -594,6 +664,45 @@ class TrackerController extends GetxController {
     DateTime? toDate,
     bool keepExistingOnEmpty = false,
     List<WeightEntry> authoritativeEntries = const [],
+  }) {
+    final cacheKey =
+        '${period ?? ''}|${fromDate?.toIso8601String() ?? ''}|'
+        '${toDate?.toIso8601String() ?? ''}';
+    final force = authoritativeEntries.isNotEmpty;
+    final now = DateTime.now();
+    if (!force &&
+        _lastWeightRefreshKey == cacheKey &&
+        _lastWeightRefreshAt != null &&
+        now.difference(_lastWeightRefreshAt!) < _weightRefreshCooldown &&
+        weightEntries.isNotEmpty) {
+      return _refreshWeightFuture ?? Future<void>.value();
+    }
+    if (!force &&
+        _refreshWeightFuture != null &&
+        _lastWeightRefreshKey == cacheKey) {
+      return _refreshWeightFuture!;
+    }
+
+    _lastWeightRefreshKey = cacheKey;
+    _refreshWeightFuture = _refreshWeightFromApi(
+      period: period,
+      fromDate: fromDate,
+      toDate: toDate,
+      keepExistingOnEmpty: keepExistingOnEmpty,
+      authoritativeEntries: authoritativeEntries,
+    ).whenComplete(() {
+      _refreshWeightFuture = null;
+      _lastWeightRefreshAt = DateTime.now();
+    });
+    return _refreshWeightFuture!;
+  }
+
+  Future<void> _refreshWeightFromApi({
+    String? period,
+    DateTime? fromDate,
+    DateTime? toDate,
+    bool keepExistingOnEmpty = false,
+    List<WeightEntry> authoritativeEntries = const [],
   }) async {
     final accessToken = await _weightAccessToken();
     if (accessToken == null) {
@@ -649,7 +758,7 @@ class TrackerController extends GetxController {
   }
 
   void _applyWeightEntries(List<WeightEntry> entries) {
-    final sorted = [...entries]..sort((a, b) => a.date.compareTo(b.date));
+    final sorted = WeightEntry.collapseToLatestPerDay(entries);
     weightEntries.assignAll(sorted);
     currentWeight.value = _resolveDisplayWeight(sorted);
     weightRevision.value++;
@@ -661,16 +770,19 @@ class TrackerController extends GetxController {
     );
   }
 
+  /// Collapses API history to one row per day (newest [WeightEntry.loggedAt]),
+  /// then applies [overrides] (e.g. a just-saved log) as the source of truth.
   static List<WeightEntry> _mergeWeightEntries(
     List<WeightEntry> base,
     List<WeightEntry> overrides,
   ) {
-    if (overrides.isEmpty) return base;
+    final collapsed = WeightEntry.collapseToLatestPerDay(base);
+    if (overrides.isEmpty) return collapsed;
 
-    final byDay = <DateTime, WeightEntry>{};
-    for (final entry in base) {
-      byDay[MealEntry.normalizeDate(entry.date)] = entry;
-    }
+    final byDay = <DateTime, WeightEntry>{
+      for (final entry in collapsed)
+        MealEntry.normalizeDate(entry.date): entry,
+    };
     for (final entry in overrides) {
       byDay[MealEntry.normalizeDate(entry.date)] = entry;
     }
@@ -701,7 +813,7 @@ class TrackerController extends GetxController {
   double _resolveDisplayWeight(List<WeightEntry> entries) {
     if (entries.isEmpty) return currentWeight.value;
 
-    final sorted = [...entries]..sort((a, b) => a.date.compareTo(b.date));
+    final sorted = WeightEntry.collapseToLatestPerDay(entries);
     for (var index = sorted.length - 1; index >= 0; index--) {
       if (MealEntry.normalizeDate(sorted[index].date) == _today) {
         return sorted[index].kg;
@@ -715,14 +827,16 @@ class TrackerController extends GetxController {
     required DateTime logDate,
     required double kg,
   }) {
+    final loggedAt = fromApi?.loggedAt ?? DateTime.now();
     if (fromApi == null) {
-      return WeightEntry(date: logDate, kg: kg);
+      return WeightEntry(date: logDate, kg: kg, loggedAt: loggedAt);
     }
 
     return WeightEntry(
       id: fromApi.id,
       date: logDate,
       kg: kg,
+      loggedAt: loggedAt,
     );
   }
 
@@ -830,6 +944,14 @@ class TrackerController extends GetxController {
           authoritativeEntries: [savedEntry],
         );
 
+        // Always keep the just-logged value as current when logging for today.
+        // A stale GET (or profile patch) can otherwise restore the previous weight.
+        if (logDate == _today) {
+          currentWeight.value = kg;
+        } else {
+          currentWeight.value = _resolveDisplayWeight(weightEntries);
+        }
+
         _syncLocalProfileAfterWeightLog(
           kg: kg,
           logDate: logDate,
@@ -871,9 +993,10 @@ class TrackerController extends GetxController {
     final userController = Get.find<UserController>();
     userController.user.weightKg = kg.round();
     userController.onProfileUpdated();
-    if (!profileUpdatedOnServer) {
-      userController.syncWeightFromProfile();
-    }
+    // Keep tracker on the precise logged value (not only the rounded profile int).
+    // Ignore [profileUpdatedOnServer]; weight API + local log are the source of truth
+    // for currentWeight so a later stale profile payload cannot roll it back.
+    updateWeight(kg);
   }
 
   void _upsertWeightEntry(WeightEntry entry) {
@@ -954,18 +1077,35 @@ class TrackerController extends GetxController {
   }
 
   void syncActivity() {
-    unawaited(_startAutoStepTracking(force: true));
+    unawaited(_enableAndStartStepTracking());
   }
 
   Future<void> installHealthConnect() async {
     await _stepTracking.installHealthConnect();
-    unawaited(_startAutoStepTracking(force: true));
+    await _enableAndStartStepTracking();
+  }
+
+  Future<void> disconnectStepTracking() async {
+    await _storage.saveStepTrackingEnabled(false);
+    await _stepTracking.stop();
+    isStepTrackingActive.value = false;
+    usesHealthConnect.value = false;
+    needsHealthConnectInstall.value = false;
+    stepTrackingMessage.value =
+        'Step tracking disconnected. Connect again anytime.';
+    _notifyActivityChanged();
+  }
+
+  Future<void> _enableAndStartStepTracking() async {
+    await _storage.saveStepTrackingEnabled(true);
+    await _startAutoStepTracking(force: true);
   }
 
   Future<void> _loadActivityLog() async {
     final storedSteps = await _storage.loadStepsByDate();
     final storedBaselines = await _storage.loadStepsBaselinesByDate();
     final storedExercises = await _storage.loadExerciseEntries();
+    final trackingEnabled = await _storage.loadStepTrackingEnabled();
 
     stepsByDate.assignAll(
       storedSteps.map(
@@ -980,6 +1120,14 @@ class TrackerController extends GetxController {
       ..addAll(storedBaselines);
     exerciseEntries.assignAll(storedExercises);
     _notifyActivityChanged();
+
+    if (trackingEnabled) {
+      // Requests native Health Connect / activity permission when needed.
+      unawaited(_startAutoStepTracking(force: true));
+    } else {
+      stepTrackingMessage.value =
+          'Step tracking is off. Tap Connect to enable.';
+    }
   }
 
   Future<void> _persistActivityLog() async {
@@ -1012,6 +1160,9 @@ class TrackerController extends GetxController {
   Future<void> _startAutoStepTracking({bool force = false}) async {
     if (!force && isStepTrackingActive.value) return;
 
+    final enabled = await _storage.loadStepTrackingEnabled();
+    if (!enabled && !force) return;
+
     stepTrackingMessage.value = null;
     needsHealthConnectInstall.value = false;
     final todayKey = _todayKey;
@@ -1040,7 +1191,8 @@ class TrackerController extends GetxController {
       onError: (message) {
         isStepTrackingActive.value = false;
         stepTrackingMessage.value = message;
-        needsHealthConnectInstall.value = message.contains('Install Health Connect');
+        needsHealthConnectInstall.value =
+            message.contains('Install Health Connect');
         _notifyActivityChanged();
       },
     );

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/api_timezone.dart';
 import '../models/meal_streak_model.dart';
 import 'api_client.dart';
 import 'api_endpoints.dart';
@@ -28,7 +29,7 @@ class MealStreakApiService {
 
     final response = await _apiClient.get(
       ApiEndpoints.mealsStreak,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
     );
 
     return _parseResponse(response);

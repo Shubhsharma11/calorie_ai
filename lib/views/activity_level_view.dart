@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
@@ -9,6 +11,7 @@ import '../core/route_args.dart';
 import '../models/activity_level.dart';
 import '../models/onboarding_request_model.dart';
 import '../models/profile_sync_snapshot.dart';
+import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
@@ -34,102 +37,130 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
     final compact = r.height < 720;
     final fromProfile = RouteArgs.isEditingFromProfile;
     final returnToDailyGoal = RouteArgs.shouldReturnToDailyGoal;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const AppAppBar.backOnly(),
-      body: GetBuilder<UserController>(
-        builder: (_) {
-          final selected = controller.user.activityLevel;
+    return PopScope(
+      canPop: fromProfile || returnToDailyGoal,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        unawaited(
+          controller.goToPreviousOnboardingStep(AppRoutes.activityLevel),
+        );
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppAppBar.backOnly(
+          onBack: () {
+            if (fromProfile || returnToDailyGoal) {
+              Get.back<void>();
+              return;
+            }
+            unawaited(
+              controller.goToPreviousOnboardingStep(AppRoutes.activityLevel),
+            );
+          },
+        ),
+        body: GetBuilder<UserController>(
+          builder: (_) {
+            final selected = controller.user.activityLevel;
 
-          return SetupScreenLayout(
-            scrollable: true,
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(height: r.scale(compact ? 4 : 8)),
-                _HeroSection(r: r, compact: compact),
-                SizedBox(height: r.scale(compact ? 8 : 12)),
-                ...ActivityLevel.values.map(
-                  (level) => Padding(
-                    padding: EdgeInsets.only(bottom: r.scale(compact ? 8 : 10)),
-                    child: _ActivityCard(
-                      level: level,
-                      selected: selected == level,
-                      onTap: () => controller.selectActivity(level),
+            return SetupScreenLayout(
+              scrollable: true,
+              content: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(height: r.scale(compact ? 4 : 8)),
+                  _HeroSection(r: r, compact: compact),
+                  SizedBox(height: r.scale(compact ? 8 : 12)),
+                  ...ActivityLevel.values.map(
+                    (level) => Padding(
+                      padding: EdgeInsets.only(
+                        bottom: r.scale(compact ? 8 : 10),
+                      ),
+                      child: _ActivityCard(
+                        level: level,
+                        selected: selected == level,
+                        onTap: () => controller.selectActivity(level),
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            action: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: selected == null
-                        ? null
-                        : () async {
-                      controller.notifyGoalConsumers();
-                      if (fromProfile || returnToDailyGoal) {
-                        var didSaveProfile = false;
-                        if (fromProfile) {
-                          final patch = OnboardingPatchModel.activityLevelDiff(
-                            controller.user.activityLevel,
-                            _baseline,
-                          );
-                          if (patch.isEmpty) {
-                            AppSnackbar.info(
-                              'No changes to save.',
-                              title: 'Nothing changed',
-                            );
-                            return;
-                          }
+                ],
+              ),
+              action: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: selected == null
+                          ? null
+                          : () async {
+                              controller.notifyGoalConsumers();
+                              if (fromProfile || returnToDailyGoal) {
+                                var didSaveProfile = false;
+                                if (fromProfile) {
+                                  final patch =
+                                      OnboardingPatchModel.activityLevelDiff(
+                                        controller.user.activityLevel,
+                                        _baseline,
+                                      );
+                                  if (patch.isEmpty) {
+                                    AppSnackbar.info(
+                                      'No changes to save.',
+                                      title: 'Nothing changed',
+                                    );
+                                    return;
+                                  }
 
-                          final error =
-                              await controller.patchOnboarding(patch);
-                          if (error != null) {
-                            AppSnackbar.error(error, title: 'Save failed');
-                            return;
-                          }
-                          didSaveProfile = true;
-                        }
-                        Get.back();
-                        if (didSaveProfile) {
-                          AppSnackbar.success('Activity level updated.');
-                        }
-                      } else {
-                        controller.finishSetup();
-                      }
-                    },
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          fromProfile || returnToDailyGoal
-                              ? 'Save'
-                              : 'Continue',
-                        ),
-                        if (!fromProfile && !returnToDailyGoal) ...[
-                          const SizedBox(width: 6),
-                          Icon(Icons.arrow_forward_rounded, size: 20),
+                                  final error = await controller
+                                      .patchOnboarding(patch);
+                                  if (error != null) {
+                                    AppSnackbar.error(
+                                      error,
+                                      title: 'Save failed',
+                                    );
+                                    return;
+                                  }
+                                  didSaveProfile = true;
+                                }
+                                Get.back();
+                                if (didSaveProfile) {
+                                  AppSnackbar.success(
+                                    'Activity level updated.',
+                                  );
+                                }
+                              } else {
+                                controller.finishSetup();
+                              }
+                            },
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            fromProfile || returnToDailyGoal
+                                ? 'Save'
+                                : 'Continue',
+                          ),
+                          if (!fromProfile && !returnToDailyGoal) ...[
+                            const SizedBox(width: 6),
+                            Icon(Icons.arrow_forward_rounded, size: 20),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(height: r.scale(12)),
-                const _SettingsNote(),
-              ],
-            ),
-          );
-        },
+                  SizedBox(height: r.scale(12)),
+                  const _SettingsNote(),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -313,14 +344,12 @@ class _ActivityCard extends StatelessWidget {
 }
 
 class _SelectionIndicator extends StatelessWidget {
-
   const _SelectionIndicator({required this.selected});
 
   final bool selected;
 
   @override
   Widget build(BuildContext context) {
-
     if (selected) {
       return Container(
         width: 24,
@@ -351,12 +380,10 @@ class _SettingsNote extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = context.responsive;
 
-    return Row
-    (
+    return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-
-              Icon(
+        Icon(
           Icons.verified_user_outlined,
           size: r.scale(14),
           color: AppColors.primary,

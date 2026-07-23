@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,37 +47,48 @@ class SettingsController extends GetxController {
   final RxInt waterReminderIntervalHours = 2.obs;
   final RxInt waterGoalMl = defaultWaterGoalMl.obs;
 
+  Completer<void>? _settingsReady;
+
+  Future<void> get settingsReady => _settingsReady?.future ?? Future.value();
+
   @override
   void onInit() {
     super.onInit();
+    _settingsReady = Completer<void>();
     _loadSettings();
   }
 
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    pushNotifications.value = prefs.getBool(_pushNotificationsKey) ?? true;
-    mealReminders.value = prefs.getBool(_mealRemindersKey) ?? true;
-    waterReminders.value = prefs.getBool(_waterRemindersKey) ?? true;
-    goalProgressAlerts.value = prefs.getBool(_goalProgressAlertsKey) ?? true;
-    streakReminders.value = prefs.getBool(_streakRemindersKey) ?? true;
-    weeklyReport.value = prefs.getBool(_weeklyReportKey) ?? false;
-    appUpdates.value = prefs.getBool(_appUpdatesKey) ?? false;
-    useMetricUnits.value = prefs.getBool(_useMetricUnitsKey) ?? true;
-    breakfastReminder.value = _timeFromMinutes(
-      prefs.getInt(_breakfastReminderKey),
-      fallback: breakfastReminder.value,
-    );
-    lunchReminder.value = _timeFromMinutes(
-      prefs.getInt(_lunchReminderKey),
-      fallback: lunchReminder.value,
-    );
-    dinnerReminder.value = _timeFromMinutes(
-      prefs.getInt(_dinnerReminderKey),
-      fallback: dinnerReminder.value,
-    );
-    waterReminderIntervalHours.value =
-        (prefs.getInt(_waterIntervalHoursKey) ?? 2).clamp(1, 4);
-    waterGoalMl.value = _resolveWaterGoalMl(prefs);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      pushNotifications.value = prefs.getBool(_pushNotificationsKey) ?? true;
+      mealReminders.value = prefs.getBool(_mealRemindersKey) ?? true;
+      waterReminders.value = prefs.getBool(_waterRemindersKey) ?? true;
+      goalProgressAlerts.value = prefs.getBool(_goalProgressAlertsKey) ?? true;
+      streakReminders.value = prefs.getBool(_streakRemindersKey) ?? true;
+      weeklyReport.value = prefs.getBool(_weeklyReportKey) ?? false;
+      appUpdates.value = prefs.getBool(_appUpdatesKey) ?? false;
+      useMetricUnits.value = prefs.getBool(_useMetricUnitsKey) ?? true;
+      breakfastReminder.value = _timeFromMinutes(
+        prefs.getInt(_breakfastReminderKey),
+        fallback: breakfastReminder.value,
+      );
+      lunchReminder.value = _timeFromMinutes(
+        prefs.getInt(_lunchReminderKey),
+        fallback: lunchReminder.value,
+      );
+      dinnerReminder.value = _timeFromMinutes(
+        prefs.getInt(_dinnerReminderKey),
+        fallback: dinnerReminder.value,
+      );
+      waterReminderIntervalHours.value =
+          (prefs.getInt(_waterIntervalHoursKey) ?? 2).clamp(1, 4);
+      waterGoalMl.value = _resolveWaterGoalMl(prefs);
+    } finally {
+      if (_settingsReady != null && !_settingsReady!.isCompleted) {
+        _settingsReady!.complete();
+      }
+    }
   }
 
   /// Reads the ml goal, migrating from the legacy glasses setting if needed.
@@ -110,6 +123,7 @@ class SettingsController extends GetxController {
     await _saveBool(_goalProgressAlertsKey, value);
   }
 
+  // Streak unused by push pipeline for now — keep toggle for Settings UI.
   Future<void> toggleStreakReminders(bool value) async {
     streakReminders.value = value;
     await _saveBool(_streakRemindersKey, value);

@@ -131,6 +131,30 @@ class UserModel {
 
   double get weightChangeKg => goalWeightKg - weightKg;
 
+  /// Onboarding API timeline: `1week` | `2week` | `1month` | `custom`.
+  String get goalTimeline {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(targetDate.year, targetDate.month, targetDate.day);
+    final days = target.difference(today).inDays;
+    final weeks = (days / 7).round().clamp(1, 520);
+    return switch (weeks) {
+      1 => '1week',
+      2 => '2week',
+      4 => '1month',
+      _ => 'custom',
+    };
+  }
+
+  /// Required by the API when [goalTimeline] is `custom`.
+  String? get goalTimelineCustomDate {
+    if (goalTimeline != 'custom') return null;
+    final year = targetDate.year.toString().padLeft(4, '0');
+    final month = targetDate.month.toString().padLeft(2, '0');
+    final day = targetDate.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
+
   /// Suggested daily macro targets (grams) from API plan or calorie goal.
   int get proteinGoalG =>
       nutritionPlanProteinG ?? (dailyCalorieGoal * 0.30 / 4).round();

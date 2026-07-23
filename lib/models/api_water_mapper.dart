@@ -210,8 +210,17 @@ abstract final class ApiWaterMapper {
   }
 
   /// Converts millilitres to API request fields.
-  static Map<String, dynamic> requestBodyFromMl(int ml) => {
-        'quantity': ml,
-        'unit': 'ml',
-      };
+  static Map<String, dynamic> requestBodyFromMl(
+    int ml, {
+    DateTime? date,
+  }) {
+    final body = <String, dynamic>{
+      'quantity': ml,
+      'unit': 'ml',
+    };
+    if (date != null) {
+      body['date'] = MealEntry.dateToKey(date);
+    }
+    return body;
+  }
 }

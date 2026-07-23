@@ -120,6 +120,10 @@ class StreakView extends GetView<StreakController> {
               ],
               SizedBox(height: r.scale(16)),
               _MilestonesSection(currentStreak: stats.currentStreak),
+              SizedBox(
+                height: MediaQuery.viewPaddingOf(context).bottom +
+                    r.scale(16),
+              ),
             ],
           );
         }),

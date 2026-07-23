@@ -7,7 +7,7 @@ import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import 'training_icon.dart';
 
-/// Steps & exercise quick actions for the Home screen Calories Burn area.
+/// Steps quick actions for the Calories Burn area.
 class CaloriesBurnBanner extends StatelessWidget {
   const CaloriesBurnBanner({super.key});
 
@@ -17,12 +17,14 @@ class CaloriesBurnBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    if (!Get.isRegistered<TrackerController>()) {
+      return const SizedBox.shrink();
+    }
     final tracker = Get.find<TrackerController>();
 
     return Obx(() {
-      final burned = tracker.todayCaloriesBurned;
+      final burned = tracker.stepsCalories;
       final steps = tracker.todaySteps;
-      final exerciseMin = tracker.todayExerciseMinutes;
       final _ = tracker.activityRevision.value;
 
       return Container(
@@ -52,15 +54,16 @@ class CaloriesBurnBanner extends StatelessWidget {
                     children: [
                       TrainingIcon(size: r.scale(24)),
                       SizedBox(width: r.scale(8)),
-                      Text(
-                        'Calories Burn',
-                        style: TextStyle(
-                          fontSize: r.scale(14),
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
+                      Expanded(
+                        child: Text(
+                          'Calories Burned',
+                          style: TextStyle(
+                            fontSize: r.scale(14),
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                       ),
-                      const Spacer(),
                       Text(
                         '$burned kcal',
                         style: TextStyle(
@@ -77,28 +80,47 @@ class CaloriesBurnBanner extends StatelessWidget {
                     ],
                   ),
                   SizedBox(height: r.scale(12)),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _QuickStat(
-                          icon: Icons.directions_walk_rounded,
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: r.scale(10),
+                      vertical: r.scale(10),
+                    ),
+                    decoration: BoxDecoration(
+                      color: _stepsBlue.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.directions_walk_rounded,
                           color: _stepsBlue,
-                          label: 'Steps',
-                          value: _formatSteps(steps),
-                          onTap: () => Get.toNamed(AppRoutes.caloriesBurn),
+                          size: r.scale(18),
                         ),
-                      ),
-                      SizedBox(width: r.scale(8)),
-                      Expanded(
-                        child: _QuickStat(
-                          iconWidget: TrainingIcon(size: r.scale(18)),
-                          color: _burnOrange,
-                          label: 'Exercise',
-                          value: '${exerciseMin}m',
-                          onTap: () => Get.toNamed(AppRoutes.caloriesBurn),
+                        SizedBox(width: r.scale(8)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Steps',
+                                style: TextStyle(
+                                  fontSize: r.scale(11),
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              Text(
+                                _formatSteps(steps),
+                                style: TextStyle(
+                                  fontSize: r.scale(14),
+                                  fontWeight: FontWeight.w700,
+                                  color: _stepsBlue,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -115,71 +137,5 @@ class CaloriesBurnBanner extends StatelessWidget {
       return '${thousands.toStringAsFixed(thousands >= 10 ? 0 : 1)}k';
     }
     return '$steps';
-  }
-}
-
-class _QuickStat extends StatelessWidget {
-  const _QuickStat({
-    this.icon,
-    this.iconWidget,
-    required this.color,
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-
-  final IconData? icon;
-  final Widget? iconWidget;
-  final Color color;
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Material(
-      color: color.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: r.scale(10),
-            vertical: r.scale(10),
-          ),
-          child: Row(
-            children: [
-              iconWidget ?? Icon(icon, color: color, size: r.scale(18)),
-              SizedBox(width: r.scale(8)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: r.scale(11),
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: r.scale(14),
-                        fontWeight: FontWeight.w700,
-                        color: color,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

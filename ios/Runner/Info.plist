@@ -7,7 +7,7 @@
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
-		<string>Calorie Ai</string>
+		<string>Fit Buddy AI</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 		<key>CFBundleInfoDictionaryVersion</key>
 		<string>6.0</string>
 		<key>CFBundleName</key>
-		<string>calorie_ai</string>
+		<string>Fit Buddy AI</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
@@ -48,9 +48,9 @@
 			</dict>
 		</dict>
 		<key>NSCameraUsageDescription</key>
-		<string>Calorie AI uses the camera to scan food and barcodes.</string>
+		<string>Fit Buddy AI uses the camera to scan food and barcodes.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>Calorie AI uses your photo library to select food images.</string>
+		<string>Fit Buddy AI uses your photo library to select food images.</string>
 		<key>UIApplicationSupportsIndirectInputEvents</key>
 		<true/>
 		<key>UILaunchStoryboardName</key>

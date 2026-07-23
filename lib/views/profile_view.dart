@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
-import '../controllers/theme_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
@@ -17,40 +16,38 @@ class ProfileView extends GetView<UserController> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
-      final _ = Get.find<ThemeController>().themeMode.value;
-      AppColors.syncFromContext(context);
+    AppColors.syncFromContext(context);
 
-      final r = context.responsive;
-      final horizontalPadding = r.scale(20, tablet: 28, desktop: 32);
+    final r = context.responsive;
+    final horizontalPadding = r.scale(20, tablet: 28, desktop: 32);
 
-      return ColoredBox(
-        color: AppColors.background,
-        child: GetBuilder<UserController>(
-          builder: (ctrl) {
-            return SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _ProfileHeader(
-                    user: ctrl.user,
-                    onAvatarTap: () => ctrl.showProfilePhotoOptions(context),
+    return ColoredBox(
+      color: AppColors.background,
+      child: GetBuilder<UserController>(
+        builder: (ctrl) {
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _ProfileHeader(
+                  user: ctrl.user,
+                  onAvatarTap: () => ctrl.showProfilePhotoOptions(context),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    r.scale(18),
+                    horizontalPadding,
+                    r.scale(28),
                   ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      horizontalPadding,
-                      r.scale(18),
-                      horizontalPadding,
-                      r.scale(28),
-                    ),
-                    child: Column(
-                      children: [
-                        _ProfileMenuRow(
-                          icon: Icons.person_outline_rounded,
-                          title: 'Personal Information',
-                          onTap: () =>
-                              Get.toNamed(AppRoutes.personalInformation),
-                        ),
+                  child: Column(
+                    children: [
+                      _ProfileMenuRow(
+                        icon: Icons.person_outline_rounded,
+                        title: 'Personal Information',
+                        onTap: () =>
+                            Get.toNamed(AppRoutes.personalInformation),
+                      ),
                         _ProfileMenuRow(
                           icon: Icons.track_changes_rounded,
                           title: 'My Goals',
@@ -132,8 +129,7 @@ class ProfileView extends GetView<UserController> {
             );
           },
         ),
-      );
-    });
+    );
   }
 
   String _healthConcernsSummary(UserModel user) {
@@ -150,7 +146,7 @@ class ProfileView extends GetView<UserController> {
         title: const Text('Terms of Service'),
         content: const SingleChildScrollView(
           child: Text(
-            'By using Calorie AI, you agree to track nutrition and health '
+            'By using Fit Buddy AI, you agree to track nutrition and health '
             'data responsibly. Do not use this app as a substitute for '
             'professional medical advice. You are responsible for the '
             'accuracy of the information you enter.',
@@ -168,7 +164,7 @@ class ProfileView extends GetView<UserController> {
   }
 
   void _shareApp(BuildContext context) {
-    const message = 'Check out Calorie AI — your smart nutrition tracker!';
+    const message = 'Check out Fit Buddy AI — your smart nutrition tracker!';
     Clipboard.setData(const ClipboardData(text: message));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('App link copied to clipboard')),

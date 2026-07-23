@@ -1,4 +1,4 @@
-package com.example.calorie_ai
+package com.srhsoftwares.fitbuddyai
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

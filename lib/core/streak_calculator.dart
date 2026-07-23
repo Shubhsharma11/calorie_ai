@@ -201,7 +201,7 @@ abstract final class StreakCalculator {
     int calendarDays = 30,
     int storedLongest = 0,
     DateTime? asOf,
-  }) {
+  }) { 
     return computeFromDates(
       loggedDatesFrom(entries),
       calendarDays: calendarDays,

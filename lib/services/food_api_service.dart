@@ -58,7 +58,7 @@ class FoodApiService {
 
   FoodItem _parseProduct(Map<String, dynamic> item) {
     final nutriments = item['nutriments'] as Map<String, dynamic>? ?? {};
-
+ 
     return FoodItem(
       name: (item['product_name'] as String?)?.trim() ?? 'Unknown',
       caloriesPer100g: (nutriments['energy-kcal_100g'] as num?)?.round() ?? 0,

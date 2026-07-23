@@ -67,5 +67,11 @@ class OnboardingSetupLoadingController extends GetxController {
     });
   }
 
-  void goBack() => Get.back();
+  void goBack() {
+    unawaited(
+      Get.find<UserController>().goToPreviousOnboardingStep(
+        AppRoutes.nutritionPlanLoading,
+      ),
+    );
+  }
 }

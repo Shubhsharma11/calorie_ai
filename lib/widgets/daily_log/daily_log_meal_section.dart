@@ -78,8 +78,7 @@ class DailyLogMealBlock extends GetView<FoodController> {
                           ],
                         ),
                       ),
-                      if (controller.isViewingToday)
-                        TextButton(
+                      TextButton(
                           onPressed: () {
                             controller.setSelectedMeal(meal);
                             Get.toNamed(AppRoutes.addFood);
@@ -107,23 +106,20 @@ class DailyLogMealBlock extends GetView<FoodController> {
                 ),
 
                 child: logged.isEmpty
-                    ? (controller.isViewingToday
-                          ? Text(
-                              'Tap + Add to log your first item.',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: r.scale(13),
-                              ),
-                            )
-                          : const SizedBox.shrink())
+                    ? Text(
+                        'Tap + Add to log your first item.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: r.scale(13),
+                        ),
+                      )
                     : Column(
                         children: grouped
                             .map(
                               (group) => _LoggedRow(
                                 group: group,
-                                canEdit: controller.isViewingToday,
+                                canEdit: true,
                                 onTap: () => onEditEntry(group.representative),
-
                                 onDelete: () =>
                                     controller.removeEntry(group.lastEntry),
                               ),

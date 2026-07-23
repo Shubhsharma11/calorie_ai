@@ -1,6 +1,6 @@
 import '../routes/app_routes.dart';
 
-/// Supported push notification categories for Calorie AI.
+/// Supported push notification categories for Fit Buddy AI.
 enum NotificationType {
   breakfastReminder('breakfast_reminder'),
   lunchReminder('lunch_reminder'),
@@ -135,7 +135,7 @@ enum NotificationType {
       case NotificationType.motivational:
         return 'Daily motivational messages';
       case NotificationType.unknown:
-        return 'General Calorie AI notifications';
+        return 'General Fit Buddy AI notifications';
     }
   }
 }

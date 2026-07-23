@@ -15,6 +15,7 @@ class WeeklyProgressChart extends StatelessWidget {
     this.onMetricChanged,
     this.showMetricSelector = true,
     this.chartHeight = 140,
+    this.bottomLabels,
   });
 
   final List<DailyNutrition> days;
@@ -23,6 +24,9 @@ class WeeklyProgressChart extends StatelessWidget {
   final ValueChanged<NutritionTrendMetric>? onMetricChanged;
   final bool showMetricSelector;
   final double chartHeight;
+
+  /// Optional x-axis labels. When null, weekday abbreviations are used.
+  final List<String>? bottomLabels;
 
   static const double _valueLabelHeight = 18;
   static const double _dayLabelHeight = 22;
@@ -60,12 +64,13 @@ class WeeklyProgressChart extends StatelessWidget {
                       Positioned(
                         left: 0,
                         right: 0,
-                        bottom: (calorieGoal! / maxValue * barAreaHeight)
-                            .clamp(0.0, barAreaHeight - 1),
+                        bottom: (calorieGoal! / maxValue * barAreaHeight).clamp(
+                          0.0,
+                          barAreaHeight - 1,
+                        ),
                         child: Container(
                           height: 1.5,
-                          color:
-                              AppColors.textSecondary.withValues(alpha: 0.5),
+                          color: AppColors.textSecondary.withValues(alpha: 0.5),
                         ),
                       ),
                     Positioned.fill(
@@ -75,8 +80,9 @@ class WeeklyProgressChart extends StatelessWidget {
                           final day = days[index];
                           final value = values[index];
                           final hasValue = day.hasData && value > 0;
-                          final labelHeight =
-                              hasValue ? _valueLabelHeight : 0.0;
+                          final labelHeight = hasValue
+                              ? _valueLabelHeight
+                              : 0.0;
                           final availableBarHeight =
                               barAreaHeight - labelHeight;
                           final barHeight = maxValue > 0
@@ -87,9 +93,11 @@ class WeeklyProgressChart extends StatelessWidget {
                               : 2.0;
 
                           return Expanded(
+                            key: ValueKey('w-bar-$index-$value'),
                             child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 3,
+                              ),
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
@@ -115,18 +123,16 @@ class WeeklyProgressChart extends StatelessWidget {
                                     height: barHeight,
                                     child: Align(
                                       alignment: Alignment.bottomCenter,
-                                      child: AnimatedContainer(
-                                        duration: const Duration(
-                                          milliseconds: 300,
-                                        ),
+                                      child: Container(
                                         width: double.infinity,
                                         height: barHeight,
                                         decoration: BoxDecoration(
                                           color: day.hasData
                                               ? _metricColor(metric)
                                               : AppColors.border,
-                                          borderRadius:
-                                              BorderRadius.circular(6),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -147,19 +153,29 @@ class WeeklyProgressChart extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: List.generate(days.length, (index) {
                     final day = days[index];
+                    final customLabel =
+                        bottomLabels != null && index < bottomLabels!.length
+                        ? bottomLabels![index]
+                        : null;
+                    final label =
+                        customLabel ?? DateFormat('E').format(day.date);
+                    final highlightToday =
+                        customLabel == null && _isToday(day.date);
                     return Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 3),
                         child: Text(
-                          DateFormat('E').format(day.date),
+                          label,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: customLabel != null && days.length > 7
+                                ? 9
+                                : 11,
                             height: 1.1,
-                            fontWeight: _isToday(day.date)
+                            fontWeight: highlightToday
                                 ? FontWeight.bold
                                 : FontWeight.normal,
-                            color: _isToday(day.date)
+                            color: highlightToday
                                 ? AppColors.primary
                                 : AppColors.textSecondary,
                           ),
@@ -181,10 +197,7 @@ class WeeklyProgressChart extends StatelessWidget {
             Flexible(
               child: Text(
                 'Avg: ${_formatValue(avg)} ${metric.unit}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                ),
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
             ),
             if (metric == NutritionTrendMetric.calories && calorieGoal != null)
@@ -215,11 +228,11 @@ class WeeklyProgressChart extends StatelessWidget {
   }
 
   Color _metricColor(NutritionTrendMetric metric) => switch (metric) {
-        NutritionTrendMetric.calories => AppColors.primary,
-        NutritionTrendMetric.protein => Colors.blue,
-        NutritionTrendMetric.carbs => Colors.orange,
-        NutritionTrendMetric.fat => Colors.purple,
-      };
+    NutritionTrendMetric.calories => AppColors.primary,
+    NutritionTrendMetric.protein => Colors.blue,
+    NutritionTrendMetric.carbs => Colors.orange,
+    NutritionTrendMetric.fat => Colors.purple,
+  };
 
   String _formatValue(double value) {
     if (metric == NutritionTrendMetric.calories) {

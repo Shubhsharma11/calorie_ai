@@ -3,7 +3,7 @@ import 'food_item.dart';
 import 'meal_type.dart';
 import 'saved_meal_item.dart';
 
-/// Maps custom meal templates to/from `POST /api/v1/meals/custom`.
+/// Maps custom meal templates to/from `/api/v1/my-meals`.
 abstract final class ApiCustomMealMapper {
   static Map<String, dynamic> toCreateRequestBody(CustomMealPreset preset) {
     return {
@@ -12,6 +12,29 @@ abstract final class ApiCustomMealMapper {
       'visibility': _visibilityToApi(preset.visibility),
       'items': preset.items.map(_itemToApiJson).toList(),
     };
+  }
+
+  /// Body for `PATCH /api/v1/my-meals/:myMealId`.
+  static Map<String, dynamic> toPatchRequestBody({
+    required CustomMealPreset preset,
+    String? imageUrl,
+  }) {
+    final body = <String, dynamic>{
+      'name': preset.name.trim(),
+      'mealTime': _mealTimeToApi(preset.meal),
+      'visibility': _visibilityToApi(preset.visibility),
+      'calories': preset.totalCalories,
+      'protein': _roundMacro(preset.totalProtein),
+      'carbs': _roundMacro(preset.totalCarbs),
+      'fat': _roundMacro(preset.totalFat),
+    };
+
+    final image = imageUrl?.trim() ?? '';
+    if (image.isNotEmpty) {
+      body['image'] = image;
+    }
+
+    return body;
   }
 
   static CustomMealPreset presetFromResponse(
@@ -25,10 +48,37 @@ abstract final class ApiCustomMealMapper {
       id: parsed.id,
       name: parsed.name,
       meal: parsed.meal,
-      items: parsed.items.isNotEmpty ? parsed.items : source.items,
+      items: parsed.items.isNotEmpty
+          ? _preserveServingMetadata(parsed.items, source.items)
+          : source.items,
       visibility: parsed.visibility,
       createdAt: parsed.createdAt,
     );
+  }
+
+  static List<SavedMealItem> _preserveServingMetadata(
+    List<SavedMealItem> parsed,
+    List<SavedMealItem> source,
+  ) {
+    return parsed.map((item) {
+      SavedMealItem? matchingSource;
+      for (final candidate in source) {
+        if (candidate.food.name.trim().toLowerCase() ==
+            item.food.name.trim().toLowerCase()) {
+          matchingSource = candidate;
+          break;
+        }
+      }
+      if (matchingSource == null) return item;
+      return item.copyWith(
+        servingQuantity: matchingSource.servingQuantity,
+        servingUnit: matchingSource.servingUnit,
+        nutritionBasisQuantity: matchingSource.nutritionBasisQuantity,
+        basisCarbs: matchingSource.basisCarbs,
+        basisProtein: matchingSource.basisProtein,
+        basisFat: matchingSource.basisFat,
+      );
+    }).toList();
   }
 
   static List<CustomMealPreset> presetsFromResponse(dynamic decoded) {
@@ -71,7 +121,7 @@ abstract final class ApiCustomMealMapper {
     final name = json['name'] as String?;
     if (name == null || name.trim().isEmpty) return null;
 
-    final id = json['id']?.toString() ?? json['_id']?.toString();
+    final id = _readId(json);
     if (id == null || id.isEmpty) return null;
 
     final meal = _mealTimeFromApi(
@@ -100,18 +150,17 @@ abstract final class ApiCustomMealMapper {
   }
 
   static Map<String, dynamic> _itemToApiJson(SavedMealItem item) {
-    final protein = item.food.macroForGrams(item.food.protein, item.grams);
-    final fat = item.food.macroForGrams(item.food.fat, item.grams);
-    final carbs = item.food.macroForGrams(item.food.carbs, item.grams);
+    final quantity = item.hasServingNutrition
+        ? item.displayedServingQuantity
+        : item.grams;
+    final unit = item.hasServingNutrition
+        ? (item.servingUnit.trim().isEmpty ? 'g' : item.servingUnit.trim())
+        : 'g';
 
     return {
       'name': item.food.name,
-      'quantity': item.grams,
-      'unit': 'gm',
-      'calories': item.calories,
-      'protein': _roundMacro(protein),
-      'fat': _roundMacro(fat),
-      'carbs': _roundMacro(carbs),
+      'quantity': quantity is int ? quantity : _roundMacro(quantity.toDouble()),
+      'unit': unit == 'gm' ? 'g' : unit,
     };
   }
 
@@ -164,7 +213,16 @@ abstract final class ApiCustomMealMapper {
     );
   }
 
-  static String _mealTimeToApi(String meal) => meal.toLowerCase();
+  static String _mealTimeToApi(String meal) {
+    final normalized = meal.trim().toLowerCase();
+    return switch (normalized) {
+      'breakfast' => 'breakfast',
+      'lunch' => 'lunch',
+      'dinner' => 'dinner',
+      'snack' || 'snacks' => 'snack',
+      _ => normalized.isEmpty ? 'lunch' : normalized,
+    };
+  }
 
   static String? _mealTimeFromApi(dynamic raw) {
     if (raw is! String || raw.trim().isEmpty) return null;
@@ -199,9 +257,36 @@ abstract final class ApiCustomMealMapper {
 
   static Map<String, dynamic> _unwrapData(Map<String, dynamic> json) {
     final data = json['data'];
-    if (data is Map<String, dynamic>) return data;
-    if (data is Map) return Map<String, dynamic>.from(data);
+    if (data is Map) {
+      final map = Map<String, dynamic>.from(data);
+      final nested = map['meal'] ?? map['myMeal'] ?? map['template'];
+      if (nested is Map) {
+        return Map<String, dynamic>.from(nested);
+      }
+      return map;
+    }
+    final topNested = json['meal'] ?? json['myMeal'] ?? json['template'];
+    if (topNested is Map) {
+      return Map<String, dynamic>.from(topNested);
+    }
     return json;
+  }
+
+  static String? _readId(Map<String, dynamic> json) {
+    for (final key in ['id', '_id', 'myMealId', 'mealId']) {
+      final raw = json[key];
+      if (raw == null) continue;
+      if (raw is String && raw.trim().isNotEmpty) return raw.trim();
+      if (raw is num) return raw.toString();
+      if (raw is Map) {
+        final oid = raw[r'$oid'] ?? raw['oid'] ?? raw['id'];
+        if (oid != null) {
+          final value = oid.toString().trim();
+          if (value.isNotEmpty) return value;
+        }
+      }
+    }
+    return null;
   }
 
   static DateTime? _readDate(dynamic raw) {

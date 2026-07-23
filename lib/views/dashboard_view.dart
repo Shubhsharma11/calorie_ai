@@ -3,8 +3,7 @@ import 'package:get/get.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
-import '../controllers/main_controller.dart';
-import '../controllers/streak_controller.dart';
+// import '../controllers/streak_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/dashboard_actions.dart';
@@ -17,9 +16,11 @@ import '../theme/app_colors.dart';
 import '../widgets/calorie_overview_card.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/macro_nutrition_card.dart';
+import '../widgets/past_date_banner.dart';
 import '../widgets/responsive_page.dart';
-import '../widgets/streak_badge.dart';
+// import '../widgets/streak_badge.dart';
 import '../widgets/water_intake_banner.dart';
+import '../widgets/weight_tracker_banner.dart';
 import '../widgets/meal_type_icon.dart';
 import '../widgets/weekly_progress_chart.dart';
 
@@ -27,18 +28,14 @@ class DashboardView extends GetView<DashboardController> {
   const DashboardView({super.key});
 
   @override
-  Widget build(BuildContext context) 
-  {
-
+  Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final user = Get.find<UserController>().user;
     final food = Get.find<FoodController>();
     final r = context.responsive;
 
     return RefreshIndicator(
-
-
       onRefresh: food.refreshMealsFromApi,
-      
       color: AppColors.primary,
       child: ResponsivePage(
         scrollable: true,
@@ -53,14 +50,32 @@ class DashboardView extends GetView<DashboardController> {
               onNotifications: () =>
                   DashboardActions.openNotifications(context),
             ),
-            SizedBox(height: r.scale(10)),
-            const _StreakSection(),
-            SizedBox(height: r.scale(20)),
+            Obx(() {
+              food.selectedLogDate.value;
+              if (controller.isViewingToday) {
+                return SizedBox(height: r.scale(10));
+              }
+              return Column(
+                children: [
+                  SizedBox(height: r.scale(12)),
+                  PastDateBanner(
+                    dateLabel: formatLogDateLabel(controller.viewingDate),
+                    onBackToToday: controller.backToToday,
+                  ),
+                  SizedBox(height: r.scale(10)),
+                ],
+              );
+            }),
+            // Streak badge temporarily disabled on home.
+            // const _StreakSection(),
+            // SizedBox(height: r.scale(20)),
             const _CalorieSection(),
             SizedBox(height: r.scale(20)),
             const _MacroSection(),
             SizedBox(height: r.scale(12)),
             const WaterIntakeBanner(),
+            SizedBox(height: r.scale(12)),
+            const WeightTrackerBanner(),
             SizedBox(height: r.scale(28)),
             const _SecondarySection(),
           ],
@@ -70,23 +85,23 @@ class DashboardView extends GetView<DashboardController> {
   }
 }
 
-class _StreakSection extends GetView<DashboardController> {
-  const _StreakSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      if (Get.isRegistered<StreakController>()) {
-        Get.find<StreakController>().revision.value;
-      }
-      return StreakBadge(
-        streakDays: controller.loggingStreak,
-        isAtRisk: controller.isStreakAtRisk,
-        onTap: () => Get.toNamed(AppRoutes.streak),
-      );
-    });
-  }
-}
+// class _StreakSection extends GetView<DashboardController> {
+//   const _StreakSection();
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Obx(() {
+//       if (Get.isRegistered<StreakController>()) {
+//         Get.find<StreakController>().revision.value;
+//       }
+//       return StreakBadge(
+//         streakDays: controller.loggingStreak,
+//         isAtRisk: controller.isStreakAtRisk,
+//         onTap: () => Get.toNamed(AppRoutes.streak),
+//       );
+//     });
+//   }
+// }
 
 class _CalorieSection extends GetView<DashboardController> {
   const _CalorieSection();
@@ -97,6 +112,7 @@ class _CalorieSection extends GetView<DashboardController> {
 
     return Obx(() {
       food.entriesRevision.value;
+      food.selectedLogDate.value;
       if (Get.isRegistered<TrackerController>()) {
         Get.find<TrackerController>().activityRevision.value;
       }
@@ -131,13 +147,15 @@ class _MacroSection extends GetView<DashboardController> {
 
     return Obx(() {
       food.entriesRevision.value;
+      food.selectedLogDate.value;
       Get.find<UserController>().calorieGoalRevision.value;
+      final nutrition = controller.viewingNutrition;
 
       return MacroNutritionCard(
         macros: [
           MacroNutritionData(
             label: 'Carbs',
-            currentG: food.totalCarbs.round(),
+            currentG: nutrition.carbs.round(),
             goalG: user.carbsGoalG,
             progress: controller.carbsProgress,
             color: const Color(0xFF2196F3),
@@ -148,7 +166,7 @@ class _MacroSection extends GetView<DashboardController> {
           ),
           MacroNutritionData(
             label: 'Fat',
-            currentG: food.totalFat.round(),
+            currentG: nutrition.fat.round(),
             goalG: user.fatGoalG,
             progress: controller.fatProgress,
             color: const Color(0xFF9C27B0),
@@ -160,7 +178,7 @@ class _MacroSection extends GetView<DashboardController> {
           ),
           MacroNutritionData(
             label: 'Protein',
-            currentG: food.totalProtein.round(),
+            currentG: nutrition.protein.round(),
             goalG: user.proteinGoalG,
             progress: controller.proteinProgress,
             color: const Color(0xFF4CAF50),
@@ -183,6 +201,7 @@ class _SecondarySection extends GetView<DashboardController> {
 
     return Obx(() {
       food.entriesRevision.value;
+      food.selectedLogDate.value;
       final goal = controller.calorieGoal;
       final weeklyMetric = controller.weeklyMetric.value;
 
@@ -192,6 +211,8 @@ class _SecondarySection extends GetView<DashboardController> {
         weeklyMetric: weeklyMetric,
         weeklyNutrition: controller.weeklyNutrition,
         onMetricChanged: controller.setWeeklyMetric,
+        dateLabel: formatLogDateLabel(controller.viewingDate),
+        viewingToday: controller.isViewingToday,
       );
     });
   }
@@ -204,6 +225,8 @@ class _SecondaryContent extends StatelessWidget {
     required this.weeklyMetric,
     required this.weeklyNutrition,
     required this.onMetricChanged,
+    required this.dateLabel,
+    required this.viewingToday,
   });
 
   final FoodController food;
@@ -211,6 +234,8 @@ class _SecondaryContent extends StatelessWidget {
   final NutritionTrendMetric weeklyMetric;
   final List<DailyNutrition> weeklyNutrition;
   final ValueChanged<NutritionTrendMetric> onMetricChanged;
+  final String dateLabel;
+  final bool viewingToday;
 
   @override
   Widget build(BuildContext context) {
@@ -219,6 +244,7 @@ class _SecondaryContent extends StatelessWidget {
       fontSize: r.scale(18, tablet: 19, desktop: 20),
       fontWeight: FontWeight.w600,
     );
+    final meals = food.selectedDateMeals;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,16 +259,18 @@ class _SecondaryContent extends StatelessWidget {
           chartHeight: r.scale(140, tablet: 160, desktop: 180),
         ),
         SizedBox(height: r.scale(28)),
-        Text('Today', style: sectionTitle),
+        Text(viewingToday ? 'Today' : dateLabel, style: sectionTitle),
         SizedBox(height: r.scale(12)),
-        if (food.todayMeals.isEmpty)
-          const _MealPreview(
-            meal: 'Breakfast',
-            hint: 'Tap "Add your first meal" above or use + Add Food',
+        if (meals.isEmpty)
+          _MealPreview(
+            meal: 'Meals',
+            hint: viewingToday
+                ? 'Tap "Add your first meal" above or use + Add Food'
+                : 'Nothing was logged this day',
           )
         else
           Column(
-            children: food.todayMeals
+            children: meals
                 .take(3)
                 .map(
                   (e) => _MealPreview(
@@ -253,24 +281,13 @@ class _SecondaryContent extends StatelessWidget {
                 .toList(),
           ),
         SizedBox(height: r.scale(12)),
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            TextButton.icon(
-              onPressed: () => Get.toNamed(AppRoutes.addFood),
-              icon: Icon(Icons.add, color: AppColors.primary),
-              label: Text(
-                'Add Food',
-                style: TextStyle(color: AppColors.primary),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => Get.find<MainController>().changeTab(2),
-              icon: Icon(Icons.camera_alt, color: AppColors.primary),
-              label: Text('Scan', style: TextStyle(color: AppColors.primary)),
-            ),
-          ],
+        TextButton.icon(
+          onPressed: () => Get.toNamed(AppRoutes.addFood),
+          icon: Icon(Icons.add, color: AppColors.primary),
+          label: Text(
+            'Add Food',
+            style: TextStyle(color: AppColors.primary),
+          ),
         ),
       ],
     );

@@ -53,7 +53,7 @@ class MacroNutritionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: AppColors.shadowColor,
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
@@ -107,18 +107,21 @@ class _MacroColumn extends StatelessWidget {
                   child: SizedBox(
                     width: innerSize,
                     height: innerSize,
-                    child: Transform.scale(
-                      scale: data.lottieScale,
-                      alignment: data.lottieAlignment,
-                      child: Lottie.asset(
-                        data.lottieAsset!,
-                        width: innerSize,
-                        height: innerSize,
-                        fit: data.lottieFit,
-                        repeat: true,
-                        errorBuilder: (_, __, ___) => Text(
-                          data.emoji,
-                          style: TextStyle(fontSize: r.scale(24)),
+                    child: ColoredBox(
+                      color: AppColors.card,
+                      child: Transform.scale(
+                        scale: data.lottieScale,
+                        alignment: data.lottieAlignment,
+                        child: Lottie.asset(
+                          data.lottieAsset!,
+                          width: innerSize,
+                          height: innerSize,
+                          fit: data.lottieFit,
+                          repeat: true,
+                          errorBuilder: (_, __, ___) => Text(
+                            data.emoji,
+                            style: TextStyle(fontSize: r.scale(24)),
+                          ),
                         ),
                       ),
                     ),

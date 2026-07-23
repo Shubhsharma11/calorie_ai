@@ -7,9 +7,9 @@ enum BmiCategory {
 
 extension BmiCategoryLabel on BmiCategory {
   String get title => switch (this) {
-        BmiCategory.underweight => 'Underweight',
+        BmiCategory.underweight => 'Underweight', 
         BmiCategory.normal => 'Normal',
-        BmiCategory.overweight => 'Overweight',
+        BmiCategory.overweight => 'Overweight', 
         BmiCategory.obese => 'Obese',
       };
 

@@ -99,11 +99,24 @@ abstract final class ApiWeightMapper {
         fallbackDate;
     if (date == null) return null;
 
+    final loggedAt = _readDateTime(json['createdAt']) ??
+        _readDateTime(json['created_at']) ??
+        _readDateTime(json['updatedAt']) ??
+        _readDateTime(json['updated_at']) ??
+        _readDateTime(json['recordedAt']) ??
+        _readDateTime(json['recorded_at']);
+
     return WeightEntry(
       id: json['id']?.toString() ?? json['_id']?.toString(),
       date: MealEntry.normalizeDate(date),
       kg: kg,
+      loggedAt: loggedAt,
     );
+  }
+
+  static DateTime? _readDateTime(dynamic value) {
+    if (value is! String || value.isEmpty) return null;
+    return DateTime.tryParse(value.trim());
   }
 
   static List<dynamic> _readEntryMaps(Map<String, dynamic> data) {

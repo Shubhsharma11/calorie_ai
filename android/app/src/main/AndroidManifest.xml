@@ -12,7 +12,7 @@
 
     <application
 
-        android:label="calorie_ai"
+        android:label="Fit Buddy AI"
 
         android:name="${applicationName}"
 
@@ -78,6 +78,12 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Ucrop.CropTheme"
+            android:exported="false" />
 
         <!-- Don't delete the meta-data below.
 

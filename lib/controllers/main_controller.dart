@@ -1,40 +1,56 @@
-import 'dart:async';
-
+import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 
-import '../controllers/tracker_controller.dart';
-import '../controllers/user_controller.dart';
-import '../services/notification_service.dart';
+import '../controllers/scan_controller.dart';
 
 class MainController extends GetxController {
   final RxInt tabIndex = 0.obs;
 
+  static const int homeTabIndex = 0;
+  static const int diaryTabIndex = 1;
+  static const int scanTabIndex = 2;
+  static const int statsTabIndex = 3;
+
   @override
-  void onInit() {
-    super.onInit();
-    unawaited(_uploadFcmTokenOnHome());
+  void onReady() {
+    super.onReady();
+    // IndexedStack keeps Scan mounted — leave camera off until that tab is open.
+    _scheduleSyncScanCamera(tabIndex.value);
   }
 
-  Future<void> _uploadFcmTokenOnHome() async {
-    if (!Get.isRegistered<UserController>()) return;
-
-    final userController = Get.find<UserController>();
-    if (!userController.isLoggedIn || userController.accessToken.isEmpty) {
-      return;
-    }
-
-    await NotificationService.instance.syncTokenWithBackend(
-      accessToken: userController.accessToken,
-    );
-
-    if (Get.isRegistered<TrackerController>()) {
-      await Get.find<TrackerController>().refreshWaterFromApi();
-    }
+  void changeTab(int index) {
+    if (tabIndex.value == index) return;
+    tabIndex.value = index;
+    // Defer camera Obx updates until after IndexedStack finishes rebuilding,
+    // otherwise Flutter can hit `_elements.contains(element)` assertions.
+    _scheduleSyncScanCamera(index);
   }
 
-  void changeTab(int index) => tabIndex.value = index;
+  void resetToHomeTab() {
+    if (tabIndex.value != homeTabIndex) {
+      tabIndex.value = homeTabIndex;
+    }
+    _scheduleSyncScanCamera(homeTabIndex);
+  }
 
-  void resetToHomeTab() => tabIndex.value = 0;
+  void _scheduleSyncScanCamera(int index) {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (isClosed) return;
+      // Tab may have changed again before this frame callback runs.
+      if (tabIndex.value != index) return;
+      _syncScanCamera(index);
+    });
+  }
+
+  void _syncScanCamera(int index) {
+    if (!Get.isRegistered<ScanController>()) return;
+    final scan = Get.find<ScanController>();
+    if (index == scanTabIndex) {
+      scan.resumeBarcodeScan();
+    } else {
+      scan.pauseBarcodeScan();
+    }
+  }
 
   static void resetHomeTabIfRegistered() {
     if (Get.isRegistered<MainController>()) {

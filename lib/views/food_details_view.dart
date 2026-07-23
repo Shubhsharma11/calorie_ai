@@ -51,8 +51,8 @@ class FoodDetailsView extends GetView<FoodController> {
                 );
                 AppSnackbar.success(
                   isFavorite
-                      ? 'Removed from quick meals.'
-                      : 'Added to quick meals.',
+                      ? 'Removed from favourites.'
+                      : 'Added to favourites.',
                   title: isFavorite ? 'Removed' : 'Saved',
                 );
               },
@@ -164,18 +164,16 @@ class FoodDetailsView extends GetView<FoodController> {
             const SizedBox(height: 32),
             PrimaryButton(
               label: 'Add to Log',
-             onPressed: () {
-  controller.addToLog(food);
+              onPressed: () {
+                // Logs to the currently selected diary day (Today or a past day).
+                controller.addToLog(food);
 
-  // Switch the diary back to today's date.
-  controller.setSelectedLogDate(DateTime.now());
-
-  if (Get.previousRoute == AppRoutes.addFood) {
-    Get.close(2);
-  } else {
-    Get.back();
-  }
-},
+                if (Get.previousRoute == AppRoutes.addFood) {
+                  Get.close(2);
+                } else {
+                  Get.back();
+                }
+              },
             ),
             SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
           ],

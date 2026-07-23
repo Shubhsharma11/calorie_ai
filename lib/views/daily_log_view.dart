@@ -13,7 +13,7 @@ import '../models/meal_type.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/daily_log/daily_log_meal_section.dart';
-import '../widgets/daily_log/daily_log_quick_banner.dart';
+import '../widgets/past_date_banner.dart';
 import '../widgets/responsive_page.dart';
 
 class DailyLogView extends GetView<FoodController> {
@@ -34,13 +34,13 @@ class DailyLogView extends GetView<FoodController> {
       final nutrition = controller.nutritionForDate(logDate);
       final user = Get.find<UserController>().user;
       final dateLabel = formatLogDateLabel(logDate);
-      final suggestion = controller.breakfastSuggestion;
-      final lastMeals = controller.getLastLoggedMeals();
-      
-final showRepeat =
-    controller.canRepeatYesterday &&
-    controller.showRepeatYesterdayCard.value;
-    
+      final viewingToday = controller.isViewingToday;
+
+      final showRepeat =
+          viewingToday &&
+          controller.canRepeatYesterday &&
+          controller.showRepeatYesterdayCard.value;
+
       final mealGap = r.scale(16);
 
       return ResponsivePage(
@@ -76,23 +76,37 @@ final showRepeat =
                         vertical: r.scale(6),
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
+                        color: viewingToday
+                            ? AppColors.surface
+                            : const Color(0xFFFFF3E0),
                         borderRadius: BorderRadius.circular(20),
+                        border: viewingToday
+                            ? null
+                            : Border.all(
+                                color: const Color(0xFFFF9800)
+                                    .withValues(alpha: 0.45),
+                              ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            Icons.calendar_today_rounded,
+                            viewingToday
+                                ? Icons.calendar_today_rounded
+                                : Icons.history_rounded,
                             size: 16,
-                            color: AppColors.primary,
+                            color: viewingToday
+                                ? AppColors.primary
+                                : const Color(0xFFE65100),
                           ),
                           SizedBox(width: r.scale(6)),
                           Text(
                             dateLabel,
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
+                              color: viewingToday
+                                  ? AppColors.primary
+                                  : const Color(0xFFE65100),
                               fontSize: r.scale(13),
                             ),
                           ),
@@ -102,6 +116,16 @@ final showRepeat =
                   ),
                 ],
               ),
+              if (!viewingToday) ...[
+                SizedBox(height: r.scale(12)),
+                PastDateBanner(
+                  dateLabel: dateLabel,
+                  message: 'Showing this day\'s diary. Tap Today to go back.',
+                  onBackToToday: () {
+                    Get.find<DashboardController>().backToToday();
+                  },
+                ),
+              ],
               SizedBox(height: r.scale(20)),
               _CalorieSummaryCard(
                 eaten: eaten,
@@ -115,7 +139,7 @@ final showRepeat =
                 carbsGoalG: user.carbsGoalG,
                 fatGoalG: user.fatGoalG,
               ),
-              if (showRepeat || suggestion != null) ...[
+              if (showRepeat) ...[
                 SizedBox(height: r.scale(14)),
                 // _QuickActions(
                 //   showRepeat: showRepeat,
@@ -149,24 +173,23 @@ final showRepeat =
                         ),
                       )
                     : RepeatYesterdayCard(
-  mealCount: controller.lastLoggedMealCount,
-  calories: controller.lastLoggedCalories,
-  dayLabel: controller.lastLoggedDayLabel,
-  onRepeat: () {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const RepeatYesterdayBottomSheet(),
-    );
-  },
- onDismiss: () async {
-  await controller.dismissRepeatYesterdayCard();
-},
-),
+                        mealCount: controller.lastLoggedMealCount,
+                        calories: controller.lastLoggedCalories,
+                        dayLabel: controller.lastLoggedDayLabel,
+                        onRepeat: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (_) =>
+                                const RepeatYesterdayBottomSheet(),
+                          );
+                        },
+                        onDismiss: () async {
+                          await controller.dismissRepeatYesterdayCard();
+                        },
+                      ),
               ],
-              if (suggestion != null)
-                DailyLogQuickBanner(suggestion: suggestion),
               SizedBox(height: mealGap),
               for (var i = 0; i < MealType.all.length; i++) ...[
                 DailyLogMealBlock(

@@ -43,7 +43,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
       question: 'How does food scanning work?',
       answer:
           'Open the Scan tab and point your camera at a product barcode. '
-          'Calorie AI looks up nutrition data from Open Food Facts and lets '
+          'Fit Buddy AI looks up nutrition data from Open Food Facts and lets '
           'you add it to your log.',
     ),
     (
@@ -198,7 +198,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
               icon: Icons.bug_report_outlined,
               title: 'Report a Problem',
               subtitle: 'Found a bug or issue?',
-              detail: 'Help us improve Calorie AI',
+              detail: 'Help us improve Fit Buddy AI',
               actionLabel: 'Send Report',
               onAction: () => _showMessage(
                 context,
@@ -208,12 +208,15 @@ class _HelpSupportViewState extends State<HelpSupportView> {
             SizedBox(height: r.scale(16)),
             Center(
               child: Text(
-                'Calorie AI v1.0.0',
+                'Fit Buddy AI v1.0.0',
                 style: TextStyle(
                   fontSize: r.scale(12),
                   color: AppColors.textSecondaryOf(context),
                 ),
               ),
+            ),
+            SizedBox(
+              height: MediaQuery.viewPaddingOf(context).bottom + r.scale(16),
             ),
           ],
         ),

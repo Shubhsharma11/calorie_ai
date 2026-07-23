@@ -1,12 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:lottie/lottie.dart';
 
 import '../controllers/food_controller.dart';
 import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
+import '../models/custom_food_preset.dart';
 import '../models/custom_meal_preset.dart';
 import '../models/food_item.dart';
+import '../models/meal_type.dart';
 import '../models/saved_meal_item.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
@@ -17,6 +22,7 @@ import '../widgets/food_emoji_avatar.dart';
 import '../widgets/log_history_sheet.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
+import 'create_custom_food_view.dart';
 
 class AddFoodView extends StatefulWidget {
   const AddFoodView({super.key});
@@ -35,6 +41,7 @@ class _AddFoodViewState extends State<AddFoodView> {
     super.initState();
     _searchFocusNode = FocusNode();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Quick items from meals; catalog lists load when their tabs are opened.
       _food.refreshQuickItemsFromApi();
     });
   }
@@ -47,9 +54,11 @@ class _AddFoodViewState extends State<AddFoodView> {
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: const AppAppBar(title: 'Add Food'),
       body: ResponsivePage(
         scrollable: false,
@@ -58,16 +67,12 @@ class _AddFoodViewState extends State<AddFoodView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Obx(
-              () => Text(
-                'Adding to ${_food.selectedMeal.value}',
-                style: TextStyle(
-                  fontSize: r.scale(13, tablet: 14),
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
-                ),
+              () => _MealSelector(
+                selectedMeal: _food.selectedMeal.value,
+                onSelected: _food.setSelectedMeal,
               ),
             ),
-            SizedBox(height: r.scale(8)),
+            SizedBox(height: r.scale(10)),
             _SearchBar(focusNode: _searchFocusNode),
             SizedBox(height: r.scale(12)),
             Expanded(
@@ -85,12 +90,27 @@ class _AddFoodViewState extends State<AddFoodView> {
                 return _FoodBrowseList(
                   selectedMeal: _food.selectedMeal.value,
                   catalogTab: _catalogTab,
-                  onCatalogTabChanged: (tab) =>
-                      setState(() => _catalogTab = tab),
+                  onCatalogTabChanged: (tab) {
+                    setState(() => _catalogTab = tab);
+                    switch (tab) {
+                      case _FoodCatalogTab.myMeals:
+                        unawaited(_food.refreshCustomMealsFromApi());
+                      case _FoodCatalogTab.customFood:
+                        unawaited(_food.refreshMyFoodsFromApi());
+                      case _FoodCatalogTab.favourites:
+                        unawaited(_food.refreshFavouritesFromApi());
+                      case _FoodCatalogTab.all:
+                        break;
+                    }
+                  },
                   onCreateMeal: () => showCreateMealSheet(
                     context,
                     initialMeal: _food.selectedMeal.value,
                   ),
+                  onFindFavourite: () {
+                    setState(() => _catalogTab = _FoodCatalogTab.all);
+                    _searchFocusNode.requestFocus();
+                  },
                 );
               }),
             ),
@@ -101,7 +121,134 @@ class _AddFoodViewState extends State<AddFoodView> {
   }
 }
 
-enum _FoodCatalogTab { all, myMeals }
+class _MealSelector extends StatelessWidget {
+  const _MealSelector({
+    required this.selectedMeal,
+    required this.onSelected,
+  });
+
+  final String selectedMeal;
+  final ValueChanged<String> onSelected;
+
+  Future<void> _openPicker(BuildContext context) async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        final r = sheetContext.responsive;
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              r.scale(20),
+              r.scale(16),
+              r.scale(20),
+              r.scale(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Add to meal',
+                  style: TextStyle(
+                    fontSize: r.scale(18),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                SizedBox(height: r.scale(10)),
+                ...MealType.all.map((meal) {
+                  final isSelected = meal == selectedMeal;
+                  return ListTile(
+                    onTap: () => Navigator.pop(sheetContext, meal),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: r.scale(4),
+                    ),
+                    leading: Icon(
+                      _mealIcon(meal),
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.textSecondary,
+                    ),
+                    title: Text(
+                      meal,
+                      style: TextStyle(
+                        fontSize: r.scale(15),
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.textPrimary,
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? Icon(
+                            Icons.check_circle_rounded,
+                            color: AppColors.primary,
+                          )
+                        : null,
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (selected != null && selected != selectedMeal) {
+      onSelected(selected);
+    }
+  }
+
+  static IconData _mealIcon(String meal) => switch (meal) {
+        MealType.breakfast => Icons.free_breakfast_rounded,
+        MealType.lunch => Icons.lunch_dining_rounded,
+        MealType.dinner => Icons.dinner_dining_rounded,
+        MealType.snacks => Icons.cookie_rounded,
+        _ => Icons.restaurant_rounded,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return InkWell(
+      onTap: () => _openPicker(context),
+      borderRadius: BorderRadius.circular(r.scale(8)),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: r.scale(2)),
+        child: Row(
+          children: [
+            Text(
+              'Adding to ',
+              style: TextStyle(
+                fontSize: r.scale(13, tablet: 14),
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            Text(
+              selectedMeal,
+              style: TextStyle(
+                fontSize: r.scale(13, tablet: 14),
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: r.scale(20),
+              color: AppColors.primary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _FoodCatalogTab { all, myMeals, customFood, favourites }
 
 class _FoodBrowseList extends GetView<FoodController> {
   const _FoodBrowseList({
@@ -109,12 +256,14 @@ class _FoodBrowseList extends GetView<FoodController> {
     required this.catalogTab,
     required this.onCatalogTabChanged,
     required this.onCreateMeal,
+    required this.onFindFavourite,
   });
 
   final String selectedMeal;
   final _FoodCatalogTab catalogTab;
   final ValueChanged<_FoodCatalogTab> onCatalogTabChanged;
   final VoidCallback onCreateMeal;
+  final VoidCallback onFindFavourite;
 
   @override
   Widget build(BuildContext context) {
@@ -127,40 +276,104 @@ class _FoodBrowseList extends GetView<FoodController> {
       controller.apiMeals.length;
       final quickItems = controller.recentQuickMeals;
       final customMeals = controller.customMealPresets.toList();
+      final favorites = controller.favoriteMeals.toList();
 
       return ListView(
         key: ValueKey('$revision-${catalogTab.name}'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewPaddingOf(context).bottom + r.scale(16),
+        ),
         children: [
-          Row(
-            children: [
-              FilterChipPill(
-                label: 'All',
-                selected: catalogTab == _FoodCatalogTab.all,
-                onTap: () => onCatalogTabChanged(_FoodCatalogTab.all),
-                fontSize: r.scale(13),
-              ),
-              SizedBox(width: r.scale(10)),
-              FilterChipPill(
-                label: 'My Meals',
-                selected: catalogTab == _FoodCatalogTab.myMeals,
-                onTap: () => onCatalogTabChanged(_FoodCatalogTab.myMeals),
-                fontSize: r.scale(13),
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                FilterChipPill(
+                  label: 'All',
+                  selected: catalogTab == _FoodCatalogTab.all,
+                  onTap: () => onCatalogTabChanged(_FoodCatalogTab.all),
+                  fontSize: r.scale(13),
+                ),
+                SizedBox(width: r.scale(10)),
+                FilterChipPill(
+                  label: 'My Meals',
+                  selected: catalogTab == _FoodCatalogTab.myMeals,
+                  onTap: () => onCatalogTabChanged(_FoodCatalogTab.myMeals),
+                  fontSize: r.scale(13),
+                ),
+                SizedBox(width: r.scale(10)),
+                FilterChipPill(
+                  label: 'My Food',
+                  selected: catalogTab == _FoodCatalogTab.customFood,
+                  onTap: () => onCatalogTabChanged(_FoodCatalogTab.customFood),
+                  fontSize: r.scale(13),
+                ),
+                SizedBox(width: r.scale(10)),
+                FilterChipPill(
+                  label: 'Favourite',
+                  selected: catalogTab == _FoodCatalogTab.favourites,
+                  onTap: () => onCatalogTabChanged(_FoodCatalogTab.favourites),
+                  fontSize: r.scale(13),
+                ),
+              ],
+            ),
           ),
           SizedBox(height: r.scale(16)),
-          if (catalogTab == _FoodCatalogTab.all)
-            ..._buildQuickItemsSection(
-              context,
-              quickItems: quickItems,
-              isLoading: isLoading,
-              apiError: apiError,
-            )
-          else
-            ..._buildMyMealsSection(context, customMeals: customMeals),
+          ...switch (catalogTab) {
+            _FoodCatalogTab.all => _buildQuickItemsSection(
+                context,
+                quickItems: quickItems,
+                isLoading: isLoading,
+                apiError: apiError,
+              ),
+            _FoodCatalogTab.myMeals =>
+              _buildMyMealsSection(context, customMeals: customMeals),
+            _FoodCatalogTab.customFood => [const _CustomFoodCreator()],
+            _FoodCatalogTab.favourites =>
+              _buildFavoritesSection(context, favorites: favorites),
+          },
         ],
       );
     });
+  }
+
+  List<Widget> _buildFavoritesSection(
+    BuildContext context, {
+    required List<SavedMealItem> favorites,
+  }) {
+    final r = context.responsive;
+
+    if (favorites.isEmpty) {
+      return [
+        _FavoritesEmptyState(onAdd: onFindFavourite),
+      ];
+    }
+
+    return [
+      Text(
+        'Favourite',
+        style: TextStyle(
+          fontSize: r.scale(18, tablet: 19),
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      SizedBox(height: r.scale(4)),
+      Text(
+        'Tap the star to remove from favourites',
+        style: TextStyle(
+          fontSize: r.scale(12, tablet: 13),
+          color: AppColors.textSecondary,
+        ),
+      ),
+      SizedBox(height: r.scale(10)),
+      ..._savedMealTiles(
+        context,
+        items: favorites,
+        selectedMeal: selectedMeal,
+        allowUnfavorite: true,
+      ),
+    ];
   }
 
   List<Widget> _buildQuickItemsSection(
@@ -179,14 +392,6 @@ class _FoodBrowseList extends GetView<FoodController> {
           fontWeight: FontWeight.w700,
         ),
       ),
-      SizedBox(height: r.scale(4)),
-      Text(
-        'Your last 5 meals from history',
-        style: TextStyle(
-          fontSize: r.scale(12, tablet: 13),
-          color: AppColors.textSecondary,
-        ),
-      ),
       SizedBox(height: r.scale(10)),
       if (isLoading && quickItems.isEmpty)
         Padding(
@@ -194,11 +399,9 @@ class _FoodBrowseList extends GetView<FoodController> {
           child: const Center(child: CircularProgressIndicator()),
         )
       else if (quickItems.isEmpty)
-        _emptyState(
-          context,
-          icon: Icons.bolt_rounded,
+        _AllFoodsEmptyState(
           message: apiError ??
-              'Log a meal and your recent foods will appear here.',
+              'Search and log a food to start building your recent items.',
         )
       else
         ..._savedMealTiles(
@@ -214,6 +417,10 @@ class _FoodBrowseList extends GetView<FoodController> {
     required List<CustomMealPreset> customMeals,
   }) {
     final r = context.responsive;
+
+    if (customMeals.isEmpty) {
+      return [_MyMealsEmptyState(onCreate: onCreateMeal)];
+    }
 
     return [
       CreateMealPromoCard(onTap: onCreateMeal),
@@ -234,42 +441,8 @@ class _FoodBrowseList extends GetView<FoodController> {
         ),
       ),
       SizedBox(height: r.scale(10)),
-      if (customMeals.isEmpty)
-        _emptyState(
-          context,
-          icon: Icons.bookmark_border_rounded,
-          message: 'Your saved meal templates will appear here.',
-        )
-      else
-        ..._customMealTiles(context, presets: customMeals),
+      ..._customMealTiles(context, presets: customMeals),
     ];
-  }
-
-  Widget _emptyState(
-    BuildContext context, {
-    required IconData icon,
-    required String message,
-  }) {
-    final r = context.responsive;
-
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: r.scale(16)),
-      child: Row(
-        children: [
-          Icon(icon, size: r.scale(28), color: AppColors.textSecondary),
-          SizedBox(width: r.scale(12)),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: r.scale(13),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   List<Widget> _customMealTiles(
@@ -292,15 +465,22 @@ class _FoodBrowseList extends GetView<FoodController> {
             leading: Container(
               width: r.scale(44),
               height: r.scale(44),
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(r.scale(12)),
               ),
-              child: Icon(
-                Icons.restaurant_menu_rounded,
-                color: AppColors.primary,
-                size: r.scale(22),
-              ),
+              child: preset.imageBytes != null
+                  ? Image.memory(
+                      preset.imageBytes!,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                    )
+                  : Icon(
+                      Icons.restaurant_menu_rounded,
+                      color: AppColors.primary,
+                      size: r.scale(22),
+                    ),
             ),
             title: Row(
               children: [
@@ -443,38 +623,48 @@ class _FoodBrowseList extends GetView<FoodController> {
     required CustomMealPreset preset,
     required String action,
   }) async {
-    switch (action) {
-      case 'log':
-        await showCustomMealLogSheet(context, preset: preset);
-      case 'edit':
-        await Get.toNamed(AppRoutes.createMeal, arguments: preset);
-      case 'delete':
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Delete meal?'),
-            content: Text(
-              'Remove "${preset.name}" from My Meals? This cannot be undone.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Delete'),
-              ),
-            ],
+    if (action == 'log') {
+      await showCustomMealLogSheet(context, preset: preset);
+      return;
+    }
+    if (action == 'edit') {
+      await Get.toNamed(AppRoutes.createMeal, arguments: preset);
+      return;
+    }
+    if (action != 'delete') return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete meal?'),
+        content: Text(
+          'Remove "${preset.name}" from My Meals? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
           ),
-        );
-        if (confirmed == true) {
-          await controller.removeCustomMealPreset(preset.id);
-          AppSnackbar.success(
-            '${preset.name} was removed.',
-            title: 'Deleted',
-          );
-        }
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await controller.removeCustomMealPreset(preset.id);
+      AppSnackbar.success(
+        '${preset.name} was removed.',
+        title: 'Deleted',
+      );
+    } catch (error) {
+      AppSnackbar.error(
+        error.toString(),
+        title: 'Delete failed',
+      );
     }
   }
 
@@ -496,6 +686,7 @@ class _FoodBrowseList extends GetView<FoodController> {
     required List<SavedMealItem> items,
     required String selectedMeal,
     bool showCreatedDate = false,
+    bool allowUnfavorite = false,
   }) {
     final r = context.responsive;
 
@@ -515,29 +706,17 @@ class _FoodBrowseList extends GetView<FoodController> {
             ),
             contentPadding: EdgeInsets.symmetric(vertical: r.scale(4)),
             leading: FoodEmojiAvatar(emoji: item.food.emoji, size: 44),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    item.food.name,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: r.scale(15),
-                    ),
-                  ),
-                ),
-                if (isFavorite)
-                  const Icon(
-                    Icons.star_rounded,
-                    size: 18,
-                    color: Color(0xFFFFB800),
-                  ),
-              ],
+            title: Text(
+              item.food.name,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: r.scale(15),
+              ),
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${item.grams}g · ${item.meal}'),
+                Text('${item.servingDescription} · ${item.meal}'),
                 if (createdDate != null)
                   Text(
                     'Created $createdDate',
@@ -548,13 +727,42 @@ class _FoodBrowseList extends GetView<FoodController> {
                   ),
               ],
             ),
-            trailing: Text(
-              '${item.calories} kcal',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w700,
-                fontSize: r.scale(14),
-              ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (allowUnfavorite)
+                  IconButton(
+                    tooltip: 'Remove from favourites',
+                    onPressed: () async {
+                      await controller.removeFavorite(item);
+                      AppSnackbar.success(
+                        '${item.food.name} removed from favourites.',
+                        title: 'Removed',
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.star_rounded,
+                      color: Color(0xFFFFB800),
+                    ),
+                  )
+                else if (isFavorite)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 4),
+                    child: Icon(
+                      Icons.star_rounded,
+                      size: 18,
+                      color: Color(0xFFFFB800),
+                    ),
+                  ),
+                Text(
+                  '${item.calories} kcal',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: r.scale(14),
+                  ),
+                ),
+              ],
             ),
           ),
           if (!isLast) Divider(height: 1, color: AppColors.border),
@@ -562,6 +770,560 @@ class _FoodBrowseList extends GetView<FoodController> {
       );
     });
   }
+}
+
+class _CustomFoodCreator extends StatefulWidget {
+  const _CustomFoodCreator();
+
+  @override
+  State<_CustomFoodCreator> createState() => _CustomFoodCreatorState();
+}
+
+class _CustomFoodCreatorState extends State<_CustomFoodCreator> {
+  late final FoodController _food = Get.find<FoodController>();
+
+  void _edit(CustomFoodPreset preset) {
+    Get.to<void>(
+      () => const CreateCustomFoodView(),
+      arguments: preset,
+    );
+  }
+
+  SavedMealItem _savedItem(CustomFoodPreset preset) {
+    return SavedMealItem(
+      food: preset.food,
+      grams: preset.defaultGrams,
+      meal: _food.selectedMeal.value,
+      servingQuantity: preset.servingQuantity,
+      servingUnit: preset.servingUnit,
+      nutritionBasisQuantity: preset.nutritionBasisQuantity,
+      basisCarbs: preset.food.carbs,
+      basisProtein: preset.food.protein,
+      basisFat: preset.food.fat,
+    );
+  }
+
+  Future<void> _open(CustomFoodPreset preset) {
+    return showLogHistorySheet(
+      context,
+      item: _savedItem(preset),
+      initialMeal: _food.selectedMeal.value,
+      myFood: preset,
+    );
+  }
+
+  Future<void> _delete(CustomFoodPreset preset) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete food?'),
+        content: Text('Remove "${preset.food.name}" from My Food?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _food.removeCustomFoodPreset(preset.id);
+      AppSnackbar.success(
+        '${preset.food.name} was removed.',
+        title: 'Deleted',
+      );
+    } catch (error) {
+      AppSnackbar.error(
+        error.toString(),
+        title: 'Delete failed',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Obx(() {
+      final presets = _food.customFoodPresets.toList();
+      if (presets.isEmpty) {
+        return _MyFoodEmptyState(
+          onAdd: () => Get.to<void>(
+            () => const CreateCustomFoodView(),
+          ),
+        );
+      }
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CreateMealPromoCard(
+            onTap: () => Get.to<void>(
+              () => const CreateCustomFoodView(),
+            ),
+            title: 'Create Food',
+            description: 'Create and save food for faster logging.',
+            actionLabel: 'Create New Food',
+            illustrationAsset: 'assets/image/Cooking_imagery.json',
+          ),
+          SizedBox(height: r.scale(18)),
+          Text(
+            'My foods',
+            style: TextStyle(
+              fontSize: r.scale(18, tablet: 19),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          SizedBox(height: r.scale(4)),
+          Text(
+            'Foods you created and saved',
+            style: TextStyle(
+              fontSize: r.scale(12, tablet: 13),
+              color: AppColors.textSecondary,
+            ),
+          ),
+          SizedBox(height: r.scale(10)),
+          ...presets.map((preset) {
+            final item = _savedItem(preset);
+            return Padding(
+              padding: EdgeInsets.only(bottom: r.scale(8)),
+              child: Material(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(r.scale(12)),
+                clipBehavior: Clip.antiAlias,
+                child: ListTile(
+                  onTap: () => _open(preset),
+                  leading: preset.imageBytes != null
+                      ? Container(
+                          width: r.scale(42),
+                          height: r.scale(42),
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(r.scale(12)),
+                          ),
+                          child: Image.memory(
+                            preset.imageBytes!,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                          ),
+                        )
+                      : FoodEmojiAvatar(
+                          emoji: preset.food.emoji,
+                          size: r.scale(42),
+                        ),
+                  title: Text(
+                    preset.food.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '${item.servingDescription} · ${item.calories} kcal',
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (action) {
+                      if (action == 'log') {
+                        _open(preset);
+                      } else if (action == 'edit') {
+                        _edit(preset);
+                      } else if (action == 'delete') {
+                        _delete(preset);
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'log',
+                        child: Text('Log food'),
+                      ),
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Delete'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      );
+    });
+  }
+}
+
+class _AllFoodsEmptyState extends StatelessWidget {
+  const _AllFoodsEmptyState({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return SizedBox(
+      height: r.scale(500),
+      child: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          Positioned(
+            top: r.scale(40),
+            left: -r.scale(36),
+            right: -r.scale(36),
+            bottom: 0,
+            child: ClipPath(
+              clipper: _MyFoodEmptyClipper(),
+              child: ColoredBox(color: AppColors.card),
+            ),
+          ),
+          Positioned(
+            top: r.scale(90),
+            child: Lottie.asset(
+              'assets/image/all_food.json',
+              width: r.scale(250),
+              height: r.scale(250),
+              fit: BoxFit.contain,
+              repeat: true,
+              errorBuilder: (context, error, stackTrace) => Icon(
+                Icons.fastfood_rounded,
+                size: r.scale(72),
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          Positioned(
+            top: r.scale(355),
+            left: r.scale(24),
+            right: r.scale(24),
+            child: Column(
+              children: [
+                Text(
+                  'Find your next food',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: r.scale(22),
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: r.scale(10)),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: r.scale(13),
+                    height: 1.45,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FavoritesEmptyState extends StatelessWidget {
+  const _FavoritesEmptyState({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return SizedBox(
+      height: r.scale(560),
+      child: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          Positioned(
+            top: r.scale(40),
+            left: -r.scale(36),
+            right: -r.scale(36),
+            bottom: 0,
+            child: ClipPath(
+              clipper: _MyFoodEmptyClipper(),
+              child: ColoredBox(color: AppColors.card),
+            ),
+          ),
+          Positioned(
+            top: r.scale(120),
+            child: Lottie.asset(
+              'assets/image/Star_Success.json',
+              width: r.scale(220),
+              height: r.scale(220),
+              fit: BoxFit.contain,
+              repeat: true,
+              errorBuilder: (context, error, stackTrace) => Icon(
+                Icons.star_rounded,
+                size: r.scale(88),
+                color: const Color(0xFFFFB800),
+              ),
+            ),
+          ),
+          Positioned(
+            top: r.scale(330),
+            left: r.scale(24),
+            right: r.scale(24),
+            child: Column(
+              children: [
+                Text(
+                  'No favourites yet',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: r.scale(22),
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: r.scale(10)),
+                Text(
+                  'Search for a food and tap the star to save it here '
+                  'for faster logging.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: r.scale(13),
+                    height: 1.45,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                SizedBox(height: r.scale(18)),
+                FilledButton.icon(
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.star_rounded),
+                  label: const Text('Add favourite'),
+                  style: FilledButton.styleFrom(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: r.scale(24),
+                      vertical: r.scale(12),
+                    ),
+                    minimumSize: Size(0, r.scale(46)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(r.scale(24)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MyMealsEmptyState extends StatelessWidget {
+  const _MyMealsEmptyState({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return SizedBox(
+      height: r.scale(550),
+      child: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          Positioned(
+            top: r.scale(40),
+            left: -r.scale(36),
+            right: -r.scale(36),
+            bottom: 0,
+            child: ClipPath(
+              clipper: _MyFoodEmptyClipper(),
+              child: ColoredBox(color: AppColors.card),
+            ),
+          ),
+          Positioned(
+            top: r.scale(110),
+            child: Lottie.asset(
+              'assets/image/my_meal.json',
+              width: r.scale(250),
+              height: r.scale(250),
+              fit: BoxFit.contain,
+              repeat: true,
+              errorBuilder: (context, error, stackTrace) => Icon(
+                Icons.restaurant_menu_rounded,
+                size: r.scale(72),
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          Positioned(
+            top: r.scale(380),
+            left: r.scale(24),
+            right: r.scale(24),
+            child: Column(
+              children: [
+                Text(
+                  'Build meals your way',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: r.scale(22),
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: r.scale(10)),
+                Text(
+                  'Combine your favorite foods into a meal and save it '
+                  'for faster logging.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: r.scale(13),
+                    height: 1.45,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                SizedBox(height: r.scale(18)),
+                _AddMyFoodButton(
+                  onPressed: onCreate,
+                  label: 'Create Meal',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MyFoodEmptyState extends StatelessWidget {
+  const _MyFoodEmptyState({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return SizedBox(
+      height: r.scale(550
+      ),
+      child: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          Positioned(
+            top: r.scale(40),
+            left: -r.scale(36),
+            right: -r.scale(36),
+            bottom: 0,
+            child: ClipPath(
+              clipper: _MyFoodEmptyClipper(),
+              child: ColoredBox(color: AppColors.card),
+            ),
+          ),
+          Positioned(
+            top: r.scale(110),
+            child: Lottie.asset(
+              'assets/image/pizza.json',
+              width: r.scale(250),
+              height: r.scale(250),
+              fit: BoxFit.contain,
+              repeat: true,
+              errorBuilder: (context, error, stackTrace) => Icon(
+                Icons.local_pizza_rounded,
+                size: r.scale(64),
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          Positioned(
+            top: r.scale(380),
+            left: r.scale(24),
+            right: r.scale(24),
+            child: Column(
+              children: [
+                Text(
+                  'Your foods, your way',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: r.scale(22),
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: r.scale(10)),
+                Text(
+                  'Can’t find it in search? Create your own food once '
+                  'and log it anytime.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: r.scale(13),
+                    height: 1.45,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                SizedBox(height: r.scale(18)),
+                _AddMyFoodButton(onPressed: onAdd),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddMyFoodButton extends StatelessWidget {
+  const _AddMyFoodButton({
+    required this.onPressed,
+    this.label = 'Add Food',
+  });
+
+  final VoidCallback onPressed;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.add_rounded),
+      label: Text(label),
+      style: FilledButton.styleFrom(
+        padding: EdgeInsets.symmetric(
+          horizontal: r.scale(24),
+          vertical: r.scale(12),
+        ),
+        minimumSize: Size(0, r.scale(46)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(r.scale(24)),
+        ),
+      ),
+    );
+  }
+}
+
+class _MyFoodEmptyClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    return Path()
+      ..moveTo(0, 150)
+      ..quadraticBezierTo(size.width / 2, -110, size.width, 150)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(_MyFoodEmptyClipper oldClipper) => false;
 }
 
 class _SearchResultsList extends StatelessWidget {

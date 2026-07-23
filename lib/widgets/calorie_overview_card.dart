@@ -63,7 +63,6 @@ class CalorieOverviewCard extends StatelessWidget {
     final accentColor = message.isOverGoal
         ? AppColors.warning
         : AppColors.primary;
-    final cta = _resolveCta();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -79,6 +78,7 @@ class CalorieOverviewCard extends StatelessWidget {
             .min(maxRing, contentWidth - minPanelWidth - gap)
             .clamp(108.0, maxRing);
         final compact = contentWidth < 340;
+        final cta = _resolveCta(compact: compact);
 
         final ring = _AnimatedRing(
           eaten: eaten,
@@ -106,7 +106,7 @@ class CalorieOverviewCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
+                color: AppColors.shadowColor,
                 blurRadius: 20,
                 offset: const Offset(0, 6),
               ),
@@ -173,9 +173,12 @@ class CalorieOverviewCard extends StatelessWidget {
     );
   }
 
-  _CtaConfig _resolveCta() {
+  _CtaConfig _resolveCta({required bool compact}) {
     if (eaten == 0) {
-      return _CtaConfig(label: 'Add your first meal', action: onAddFood);
+      return _CtaConfig(
+        label: compact ? 'Add a meal' : 'Add your first meal',
+        action: onAddFood,
+      );
     }
     if (isOverGoal || progressPercent >= 100) {
       return _CtaConfig(
@@ -343,12 +346,11 @@ class _PanelActionButton extends StatelessWidget {
     final iconSize = r.scale(compact ? 15 : 16);
     final radius = BorderRadius.circular(12);
     final padding = EdgeInsets.symmetric(
-      horizontal: r.scale(compact ? 12 : 14),
+      horizontal: r.scale(compact ? 10 : 14),
       vertical: r.scale(compact ? 9 : 10),
     );
 
     final child = Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
           _icon,
@@ -356,7 +358,7 @@ class _PanelActionButton extends StatelessWidget {
           color: emphasized ? AppColors.onPrimary : accentColor,
         ),
         SizedBox(width: r.scale(6)),
-        Flexible(
+        Expanded(
           child: Text(
             label,
             maxLines: 1,
@@ -369,19 +371,21 @@ class _PanelActionButton extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(width: r.scale(4)),
-        Icon(
-          Icons.chevron_right_rounded,
-          size: r.scale(compact ? 16 : 18),
-          color: emphasized
-              ? AppColors.onPrimary.withValues(alpha: 0.9)
-              : accentColor.withValues(alpha: 0.75),
-        ),
+        if (!compact) ...[
+          SizedBox(width: r.scale(4)),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: r.scale(18),
+            color: emphasized
+                ? AppColors.onPrimary.withValues(alpha: 0.9)
+                : accentColor.withValues(alpha: 0.75),
+          ),
+        ],
       ],
     );
 
-    return Align(
-      alignment: Alignment.centerLeft,
+    return SizedBox(
+      width: double.infinity,
       child: Material(
         color: emphasized ? accentColor : accentColor.withValues(alpha: 0.1),
         borderRadius: radius,
@@ -526,9 +530,9 @@ class _AnimatedRing extends StatelessWidget {
                   Text(
                     'kcal',
                     style: TextStyle(
-                      fontSize: r.scale(compact ? 10 : 12),
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
+                    fontSize: r.scale(compact ? 12 : 14),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -644,9 +648,9 @@ class _StatTile extends StatelessWidget {
       letterSpacing: -0.2,
     );
     final unitStyle = TextStyle(
-      fontSize: r.scale(11),
-      fontWeight: FontWeight.w600,
-      color: valueColor ?? AppColors.textSecondary,
+      fontSize: r.scale(12),
+      fontWeight: FontWeight.w700,
+      color: valueColor ?? AppColors.textPrimary,
     );
 
     final tile = Container(
@@ -689,9 +693,9 @@ class _StatTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: r.scale(10),
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w500,
+                    fontSize: r.scale(12),
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],

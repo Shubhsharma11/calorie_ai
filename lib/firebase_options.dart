@@ -58,19 +58,19 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyCd7ujYg_75XV-lFg6jDXFTfZ3MtfZZ9rA',
-    appId: '1:950645223660:android:b9843bac3bf84d57a0b5c9',
+    appId: '1:950645223660:android:3bdeb2c4053e65d9a0b5c9',
     messagingSenderId: '950645223660',
     projectId: 'calorie-ai-2cbb0',
     storageBucket: 'calorie-ai-2cbb0.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDM3eMJNwR1bzMs_LzbFyN3RD7pBCEDpos',
-    appId: '1:950645223660:ios:4ed68dd79ab5e896a0b5c9',
+    appId: '1:950645223660:ios:133d01920a94f2cda0b5c9',
     messagingSenderId: '950645223660',
     projectId: 'calorie-ai-2cbb0',
     storageBucket: 'calorie-ai-2cbb0.firebasestorage.app',
     androidClientId: '950645223660-jd5s1vk7jmt7sakg097bn3kg0o8m0sl0.apps.googleusercontent.com',
-    iosClientId: '950645223660-8vth06aobvau1jviupkuhe60bg5r6kg3.apps.googleusercontent.com',
-    iosBundleId: 'com.example.calorieAi',
+    iosClientId: '950645223660-qtfou8pqripkm5fduu7s44s9s1bumdbk.apps.googleusercontent.com',
+    iosBundleId: 'com.srhsoftwares.fitbuddyai',
   );
 }

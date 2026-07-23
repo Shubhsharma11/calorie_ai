@@ -107,7 +107,10 @@ class SetupScreenLayout extends StatelessWidget {
     );
 
     if (scrollable) {
-      body = SingleChildScrollView(child: body);
+      body = SingleChildScrollView(
+        clipBehavior: Clip.none,
+        child: body,
+      );
     } else {
       body = Align(alignment: contentAlignment, child: body);
     }

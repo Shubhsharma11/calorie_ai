@@ -25,7 +25,7 @@ class LoginView extends GetView<AuthController> {
         title: const Text('Terms of Service'),
         content: const SingleChildScrollView(
           child: Text(
-            'By using Calorie AI, you agree to track nutrition and health '
+            'By using Fit Buddy AI, you agree to track nutrition and health '
             'data responsibly. Do not use this app as a substitute for '
             'professional medical advice. You are responsible for the '
             'accuracy of the information you enter.',
@@ -49,7 +49,7 @@ class LoginView extends GetView<AuthController> {
         title: const Text('Privacy Policy'),
         content: const SingleChildScrollView(
           child: Text(
-            'Calorie AI stores your profile, goals, and food logs on your '
+            'Fit Buddy AI stores your profile, goals, and food logs on your '
             'device to personalize your experience. We do not sell your '
             'personal data. You can update or clear your information from '
             'the app settings at any time.',

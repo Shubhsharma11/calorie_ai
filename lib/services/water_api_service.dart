@@ -72,8 +72,9 @@ class WaterApiService {
   Future<WaterLogResponse> logWater({
     required String accessToken,
     required int amountMl,
+    DateTime? date,
   }) async {
-    final body = ApiWaterMapper.requestBodyFromMl(amountMl);
+    final body = ApiWaterMapper.requestBodyFromMl(amountMl, date: date);
 
     debugPrint(
       'WaterApiService: POST ${ApiEndpoints.waterUrl} $body '

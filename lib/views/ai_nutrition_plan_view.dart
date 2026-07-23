@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 
 import '../controllers/nutrition_plan_controller.dart';
+import '../controllers/settings_controller.dart';
+import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/responsive.dart';
+import '../core/weight_chart_data.dart';
+import '../models/goal_type.dart';
+import '../models/user_model.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
@@ -29,7 +35,7 @@ class _AiNutritionPlanViewState extends State<AiNutritionPlanView> {
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
-    final user = Get.find<UserController>().user;
+    final userController = Get.find<UserController>();
     final r = context.responsive;
     final planController = Get.isRegistered<NutritionPlanController>()
         ? Get.find<NutritionPlanController>()
@@ -50,15 +56,27 @@ class _AiNutritionPlanViewState extends State<AiNutritionPlanView> {
       body: ResponsivePage(
         scrollable: true,
         child: Obx(() {
+          final user = userController.user;
           final plan = planController?.plan.value;
           final isLoading = planController?.isLoading.value ?? false;
           final _ = planController?.revision.value;
+          if (Get.isRegistered<TrackerController>()) {
+            Get.find<TrackerController>().weightRevision.value;
+          }
+          final useMetric = Get.isRegistered<SettingsController>()
+              ? Get.find<SettingsController>().useMetricUnits.value
+              : true;
 
           final calories = plan?.calories ?? user.dailyCalorieGoal;
           final protein = plan?.proteinG ?? user.proteinGoalG;
           final carbs = plan?.carbsG ?? user.carbsGoalG;
           final fat = plan?.fatG ?? user.fatGoalG;
           final tips = plan?.tips ?? const <String>[];
+          final weightGoalLine = _weightGoalSummary(
+            user: user,
+            planTargetKg: plan?.targetWeightKg,
+            useMetricUnits: useMetric,
+          );
 
           if (isLoading && plan == null) {
             return Padding(
@@ -76,6 +94,7 @@ class _AiNutritionPlanViewState extends State<AiNutritionPlanView> {
                 protein: protein,
                 carbs: carbs,
                 fat: fat,
+                weightGoalLine: weightGoalLine,
               ),
               SizedBox(height: r.scale(16)),
               const _SectionHeader(title: 'AI Tips for You'),
@@ -120,12 +139,38 @@ class _AiNutritionPlanViewState extends State<AiNutritionPlanView> {
                   ),
                 ],
               ),
-              SizedBox(height: r.scale(12)),
+              SizedBox(
+                height: MediaQuery.viewPaddingOf(context).bottom +
+                    r.scale(16),
+              ),
             ],
           );
         }),
       ),
     );
+  }
+
+  String _weightGoalSummary({
+    required UserModel user,
+    required double? planTargetKg,
+    required bool useMetricUnits,
+  }) {
+    final currentKg = Get.isRegistered<TrackerController>()
+        ? Get.find<TrackerController>().currentWeight.value
+        : user.weightKg.toDouble();
+    final targetKg = planTargetKg ?? user.goalWeightKg;
+    final deltaKg = targetKg - currentKg;
+
+    if (user.goal == GoalType.maintainWeight || deltaKg.abs() < 0.1) {
+      return 'Maintain current weight';
+    }
+
+    final amount = WeightChartData.formatWeight(deltaKg.abs(), useMetricUnits);
+    final byDate = DateFormat('dd MMM').format(user.targetDate);
+    if (deltaKg < 0) {
+      return 'Lose $amount · by $byDate';
+    }
+    return 'Gain $amount · by $byDate';
   }
 }
 
@@ -135,12 +180,14 @@ class _PlanSummaryCard extends StatelessWidget {
     required this.protein,
     required this.carbs,
     required this.fat,
+    required this.weightGoalLine,
   });
 
   final int calories;
   final int protein;
   final int carbs;
   final int fat;
+  final String weightGoalLine;
 
   @override
   Widget build(BuildContext context) {
@@ -185,10 +232,19 @@ class _PlanSummaryCard extends StatelessWidget {
                       ),
                       SizedBox(height: r.scale(4)),
                       Text(
+                        weightGoalLine,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          fontSize: r.scale(13, tablet: 14),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      SizedBox(height: r.scale(2)),
+                      Text(
                         'Based on your profile and goal',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.86),
-                          fontSize: r.scale(12, tablet: 13),
+                          color: Colors.white.withValues(alpha: 0.75),
+                          fontSize: r.scale(11, tablet: 12),
                           fontWeight: FontWeight.w600,
                         ),
                       ),

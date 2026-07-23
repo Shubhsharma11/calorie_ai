@@ -6,14 +6,14 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart' as intl;
 
 import '../controllers/tracker_controller.dart'
-    show TrackerController, WeightDeleteStatus, WeightLogStatus;
+    show TrackerController, WeightDeleteStatus;
 import '../controllers/settings_controller.dart';
-import '../controllers/user_controller.dart';
 import '../core/app_snackbar.dart';
 import '../core/weight_chart_data.dart';
 import '../models/meal_entry.dart';
 import '../models/weight_entry.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/weight_tracker/weight_log_sheet.dart';
 import '../theme/app_colors.dart';
 
 class WeightTrackerView extends GetView<TrackerController> {
@@ -112,15 +112,8 @@ class _WeightTrackerBodyState extends State<_WeightTrackerBody> {
     final controller = widget.controller;
 
     return Scaffold(
-      appBar: AppAppBar(
+      appBar: const AppAppBar(
         title: 'Weight Tracker',
-        actions: [
-          IconButton(
-            onPressed: () => _pickDateAndLogWeight(context),
-            icon: const Icon(Icons.calendar_month_outlined, color: AppColors.primary),
-            tooltip: 'Log weight',
-          ),
-        ],
       ),
       body: SafeArea(
         child: Obx(() {
@@ -147,11 +140,16 @@ class _WeightTrackerBodyState extends State<_WeightTrackerBody> {
           );
         }),
       ),
+      
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showLogWeightSheet(
-          context,
-          controller.currentWeight.value,
-        ),
+        onPressed: () {
+          unawaited(
+            showWeightLogSheet(
+              context,
+              initialWeight: controller.currentWeight.value,
+            ),
+          );
+        },
         icon: const Icon(Icons.add_rounded),
         label: const Text(
           'Add Weight',
@@ -161,232 +159,6 @@ class _WeightTrackerBodyState extends State<_WeightTrackerBody> {
         foregroundColor: AppColors.onPrimary,
         elevation: 4,
       ),
-    );
-  }
-
-  Future<void> _pickDateAndLogWeight(BuildContext context) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now(),
-      helpText: 'Select log date',
-    );
-    if (picked == null || !context.mounted) return;
-    final weight = await widget.controller.resolveWeightForDate(
-      picked,
-      widget.controller.currentWeight.value,
-    );
-    if (!context.mounted) return;
-    _showLogWeightSheet(context, weight, date: picked);
-  }
-
-  void _showLogWeightSheet(
-    BuildContext context,
-    double weight, {
-    DateTime? date,
-  }) {
-    var draftWeight = weight;
-    final weightController = TextEditingController(
-  text: draftWeight.toStringAsFixed(1),
-);
-    var logDate = MealEntry.normalizeDate(date ?? DateTime.now());
-
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            Future<void> pickLogDate() async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: logDate,
-                firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                lastDate: DateTime.now(),
-                helpText: 'Select log date',
-              );
-              if (picked == null || !context.mounted) return;
-              final normalized = MealEntry.normalizeDate(picked);
-              final resolved = await widget.controller.resolveWeightForDate(
-                normalized,
-                draftWeight,
-              );
-              if (!context.mounted) return;
-              setSheetState(() {
-                logDate = normalized;
-                draftWeight = resolved;
-              });
-            }
-
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      ' Weight information',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    // const SizedBox(height: 18),
-                    // Material(
-                    //   color: AppColors.surface,
-                    //   borderRadius: BorderRadius.circular(14),
-                    //   child: InkWell(
-                    //     onTap: pickLogDate,
-                    //     borderRadius: BorderRadius.circular(14),
-                    //     child: Padding(
-                    //       padding: const EdgeInsets.symmetric(
-                    //         horizontal: 14,
-                    //         vertical: 12,
-                    //       ),
-                    //       child: Row(
-                    //         mainAxisAlignment: MainAxisAlignment.center,
-                    //         children: [
-                    //           Icon(
-                    //             Icons.calendar_today_rounded,
-                    //             size: 18,
-                    //             color: AppColors.primary,
-                    //           ),
-                    //           const SizedBox(width: 8),
-                    //           Text(
-                    //             intl.DateFormat('EEE, MMM d, yyyy')
-                    //                 .format(logDate),
-                    //             style: TextStyle(
-                    //               color: AppColors.textPrimary,
-                    //               fontWeight: FontWeight.w700,
-                    //               fontSize: 15,
-                    //             ),
-                    //           ),
-                    //           const SizedBox(width: 4),
-                    //           Icon(
-                    //             Icons.edit_calendar_outlined,
-                    //             size: 18,
-                    //             color: AppColors.textSecondary,
-                    //           ),
-                    //         ],
-                    //       ),
-                    //     ),
-                    //   ),
-                    // ),
-                    const SizedBox(height: 20),
-
-// Text(
-//   'Weight',
-//   style: TextStyle(
-//     color: AppColors.textSecondary,
-//     fontWeight: FontWeight.w600,
-//     fontSize: 14,
-//   ),
-// ),
-
-const SizedBox(height: 8),
-
-TextFormField(
-  controller: weightController,
-  keyboardType: const TextInputType.numberWithOptions(
-    decimal: true,
-  ),
-  textInputAction: TextInputAction.done,
-  autofocus: true,
-  decoration: InputDecoration(
-    hintText: 'Enter weight',
-    suffixText: 'kg',
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(
-        color: AppColors.primary,
-        width: 2,
-      ),
-    ),
-  ),
-  onChanged: (value) {
-    final parsed = double.tryParse(value);
-
-    if (parsed != null) {
-      draftWeight = parsed;
-    }
-  },
-),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: () async {
-                        final userController = Get.find<UserController>();
-                        final baseline =
-                            userController.captureProfileSyncSnapshot();
-                            final enteredWeight = double.tryParse(weightController.text);
-
-if (enteredWeight == null) {
-  AppSnackbar.error('Please enter a valid weight.');
-  return;
-}
-
-draftWeight = enteredWeight;
-                        final outcome = await widget.controller.logCurrentWeight(
-                          date: logDate,
-                          weightKg: draftWeight,
-                        );
-
-                        final today = MealEntry.normalizeDate(DateTime.now());
-                        final isToday = logDate == today;
-                        String? profileSyncError;
-                        if (isToday &&
-                            outcome.status == WeightLogStatus.savedAndSynced &&
-                            !outcome.profileUpdated) {
-                          profileSyncError = await userController
-                              .patchPersonalDetailsIfChanged(baseline);
-                        }
-
-                        if (!context.mounted) return;
-                        Navigator.pop(context);
-
-                        switch (outcome.status) {
-                          case WeightLogStatus.savedAndSynced:
-                            if (profileSyncError != null) {
-                              AppSnackbar.info(
-                                'Weight saved, but profile sync needs another try.',
-                                title: 'Weight saved',
-                              );
-                            } else {
-                              AppSnackbar.success('Weight saved.');
-                            }
-                          case WeightLogStatus.failed:
-                            AppSnackbar.error(
-                              widget.controller.weightApiErrorMessage.value ??
-                                  'Weight could not be saved. Please try again.',
-                              title: 'Save failed',
-                            );
-                          case WeightLogStatus.unchanged:
-                            AppSnackbar.info(
-                              'Weight is already logged for this date.',
-                              title: 'Already logged',
-                            );
-                        }
-                      },
-                      child: const Text('Save Weight'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }
@@ -572,16 +344,6 @@ class _WeightChartCard extends StatelessWidget {
                     onBack: () => Navigator.pop(sheetContext),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Swipe or tap delete to remove an entry',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
                   if (visibleEntries.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 24),
@@ -622,18 +384,11 @@ class _WeightChartCard extends StatelessWidget {
                             ),
                             child: ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: Container(
+                              leading: SizedBox(
                                 width: 42,
                                 height: 42,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  shape: BoxShape.circle,
-                                ),
-                                padding: const EdgeInsets.all(9),
                                 child: SvgPicture.asset(
-                                  'assets/image/scale.svg',
+                                  'assets/image/gym.svg',
                                   fit: BoxFit.contain,
                                 ),
                               ),

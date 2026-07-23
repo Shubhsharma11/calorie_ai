@@ -3,12 +3,7 @@ import 'package:get/get.dart';
 
 import '../theme/app_colors.dart';
 
-/// App-wide, overlay-based toast helper.
-///
-/// Uses GetX's overlay snackbar so the message stays visible even after the
-/// current screen is popped (e.g. showing a success toast right after
-/// `Get.back()`), and matches the app theme instead of Material's default
-/// dark bar.
+/// App-wide toast helper — same top snackbar on every screen.
 abstract final class AppSnackbar {
   static void success(String message, {String title = 'Saved'}) {
     _show(

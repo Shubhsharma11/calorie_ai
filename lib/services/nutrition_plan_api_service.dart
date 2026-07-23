@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/api_timezone.dart';
 import '../models/nutrition_plan_model.dart';
 import 'api_client.dart';
 import 'api_endpoints.dart';
@@ -30,7 +31,7 @@ class NutritionPlanApiService {
 
     final response = await _apiClient.post(
       ApiEndpoints.nutritionPlan,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
     );
 
     return _parsePlanResponse(response);
@@ -43,7 +44,7 @@ class NutritionPlanApiService {
 
     final response = await _apiClient.get(
       ApiEndpoints.nutritionPlan,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
     );
 
     return _parsePlanResponse(response);

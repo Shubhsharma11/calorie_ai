@@ -28,6 +28,10 @@ class NotificationService {
 
   final NotificationRepository _repository;
   final FirebaseMessaging? _messagingOverride;
+  String? _lastSyncedFcmToken;
+  DateTime? _lastSyncedFcmAt;
+  Future<void>? _syncTokenInFlight;
+  static const Duration _fcmSyncCooldown = Duration(hours: 12);
   final FlutterLocalNotificationsPlugin _localNotifications;
 
   FirebaseMessaging get _messaging =>
@@ -87,18 +91,43 @@ class NotificationService {
     }
   }
 
-  Future<void> syncTokenWithBackend({String? accessToken}) async {
+  Future<void> syncTokenWithBackend({String? accessToken}) {
+    if (_syncTokenInFlight != null) {
+      return _syncTokenInFlight!;
+    }
+
+    _syncTokenInFlight = _syncTokenWithBackend(accessToken: accessToken)
+        .whenComplete(() {
+      _syncTokenInFlight = null;
+    });
+    return _syncTokenInFlight!;
+  }
+
+  Future<void> _syncTokenWithBackend({String? accessToken}) async {
     final token = _currentToken ?? await _messaging.getToken();
     if (token == null || token.isEmpty) return;
+    _currentToken = token;
 
     final authToken = accessToken ?? _readAccessToken();
     if (authToken == null || authToken.isEmpty) return;
+
+    final now = DateTime.now();
+    if (_lastSyncedFcmToken == token &&
+        _lastSyncedFcmAt != null &&
+        now.difference(_lastSyncedFcmAt!) < _fcmSyncCooldown) {
+      if (kDebugMode) {
+        debugPrint('FCM token upload skipped (already synced recently)');
+      }
+      return;
+    }
 
     try {
       final response = await _repository.uploadFcmToken(
         accessToken: authToken,
         request: NotificationTokenRequest(fcmToken: token),
       );
+      _lastSyncedFcmToken = token;
+      _lastSyncedFcmAt = DateTime.now();
       if (kDebugMode) {
         debugPrint(
           'FCM token uploaded: success=${response.success} '
@@ -117,6 +146,8 @@ class NotificationService {
   }
 
   Future<void> clearBackendToken({String? accessToken}) async {
+    _lastSyncedFcmToken = null;
+    _lastSyncedFcmAt = null;
     final authToken = accessToken ?? _readAccessToken();
     if (authToken == null || authToken.isEmpty) return;
 
@@ -253,12 +284,18 @@ class NotificationService {
   }
 
   Future<void> _handleTokenRefresh(String token) async {
+    if (token.isEmpty) return;
+    if (_currentToken == token && _lastSyncedFcmToken == token) {
+      return;
+    }
     _currentToken = token;
     if (kDebugMode) {
       debugPrint('═══════════════════════════════════════');
       debugPrint('FCM TOKEN REFRESHED: $token');
       debugPrint('═══════════════════════════════════════');
     }
+    // Force upload when FCM rotates the token.
+    _lastSyncedFcmAt = null;
     await syncTokenWithBackend();
   }
 
@@ -359,9 +396,9 @@ class NotificationService {
       case NotificationType.aiNutritionTips:
         return 'AI nutrition tip';
       case NotificationType.motivational:
-        return 'Calorie AI';
+        return 'Fit Buddy AI';
       case NotificationType.unknown:
-        return 'Calorie AI';
+        return 'Fit Buddy AI';
     }
   }
 

@@ -39,6 +39,17 @@ void main() {
     });
     expect(json['goal'], 'loseWeight');
     expect(json['activityLevel'], 'moderatelyActive');
+    expect(json['goalWeight'], 65);
+    expect(json['goalWeightUnit'], 'kg');
+    expect(
+      json['goalTimeline'],
+      anyOf('1week', '2week', '1month', 'custom'),
+    );
+    if (json['goalTimeline'] == 'custom') {
+      expect(json['goalTimelineCustomDate'], '2026-09-23');
+    } else {
+      expect(json.containsKey('goalTimelineCustomDate'), isFalse);
+    }
     expect(json['healthProblems'], [
       {
         'category': 'diabetes',
@@ -285,7 +296,42 @@ void main() {
     expect(json['goalWeight'], 62);
     expect(json['goalWeightUnit'], 'kg');
     expect(json['targetDate'], '2026-09-23');
+    expect(
+      json['goalTimeline'],
+      anyOf('1week', '2week', '1month', 'custom'),
+    );
+    if (json['goalTimeline'] == 'custom') {
+      expect(json['goalTimelineCustomDate'], '2026-09-23');
+    }
     expect(json.containsKey('goal'), isFalse);
+  });
+
+  test('goalTimeline maps presets and custom dates for onboarding API', () {
+    final today = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
+
+    final twoWeekUser = UserModel()
+      ..targetDate = today.add(const Duration(days: 14));
+    expect(twoWeekUser.goalTimeline, '2week');
+    expect(twoWeekUser.goalTimelineCustomDate, isNull);
+
+    final oneMonthUser = UserModel()
+      ..targetDate = today.add(const Duration(days: 28));
+    expect(oneMonthUser.goalTimeline, '1month');
+    expect(oneMonthUser.goalTimelineCustomDate, isNull);
+
+    final customUser = UserModel()
+      ..targetDate = today.add(const Duration(days: 45));
+    expect(customUser.goalTimeline, 'custom');
+    expect(
+      customUser.goalTimelineCustomDate,
+      '${customUser.targetDate.year.toString().padLeft(4, '0')}-'
+      '${customUser.targetDate.month.toString().padLeft(2, '0')}-'
+      '${customUser.targetDate.day.toString().padLeft(2, '0')}',
+    );
   });
 
   test('OnboardingPatchModel.goalDiff skips unchanged goal', () {

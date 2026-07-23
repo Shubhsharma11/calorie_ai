@@ -28,7 +28,7 @@ class NutritionMetricSelector extends StatelessWidget {
             ),
           );
         }).toList(),
-      ),  
+      ),
     );
   }
 }

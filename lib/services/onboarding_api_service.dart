@@ -3,6 +3,7 @@ import 'dart:developer';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/api_timezone.dart';
 import '../models/onboarding_request_model.dart';
 import '../models/onboarding_response_model.dart';
 import 'api_client.dart';
@@ -53,7 +54,7 @@ class OnboardingApiService {
 
     final response = await _apiClient.get(
       ApiEndpoints.onboarding,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
     );
 
     final body = response.body.trim();
@@ -98,12 +99,12 @@ class OnboardingApiService {
         ? await _apiClient.patch(
             ApiEndpoints.onboarding,
             body: payload,
-            headers: {'Authorization': 'Bearer $accessToken'},
+            headers: apiAuthHeaders(accessToken),
           )
         : await _apiClient.put(
             ApiEndpoints.onboarding,
             body: payload,
-            headers: {'Authorization': 'Bearer $accessToken'},
+            headers: apiAuthHeaders(accessToken),
           );
 
     final body = response.body.trim();

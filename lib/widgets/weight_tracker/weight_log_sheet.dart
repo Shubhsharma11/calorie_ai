@@ -1,256 +1,376 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart' as intl;
 
 import '../../controllers/tracker_controller.dart';
 import '../../controllers/user_controller.dart';
 import '../../core/app_snackbar.dart';
+import '../../core/dashboard_actions.dart';
 import '../../core/responsive.dart';
 import '../../models/meal_entry.dart';
 import '../../theme/app_colors.dart';
-import '../weight_ruler_slider.dart';
 
-const double _logWeightMinKg = 40;
-const double _logWeightMaxKg = 150;
+const double _logWeightMinKg = 30;
+const double _logWeightMaxKg = 300;
 
+class _WeightLogSheetResult {
+  const _WeightLogSheetResult({
+    required this.outcome,
+    this.profileSyncError,
+  });
+
+  final WeightLogOutcome outcome;
+  final String? profileSyncError;
+}
+
+/// Opens the log-weight sheet — date picker + manual kg entry.
 Future<void> showWeightLogSheet(
   BuildContext context, {
   required double initialWeight,
   DateTime? date,
-}) {
-  var draftWeight = initialWeight.clamp(_logWeightMinKg, _logWeightMaxKg);
-  var logDate = MealEntry.normalizeDate(date ?? DateTime.now());
-
-  return showModalBottomSheet<void>(
+}) async {
+  final result = await showModalBottomSheet<_WeightLogSheetResult>(
     context: context,
+    useRootNavigator: false,
     showDragHandle: true,
     isScrollControlled: true,
+    backgroundColor: AppColors.card,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (context) {
-      final r = context.responsive;
-
-      return StatefulBuilder(
-        builder: (context, setSheetState) {
-          void setWeight(double value) {
-            setSheetState(
-              () => draftWeight = value.clamp(_logWeightMinKg, _logWeightMaxKg),
-            );
-          }
-
-          Future<void> pickLogDate() async {
-            final picked = await showDatePicker(
-              context: context,
-              initialDate: logDate,
-              firstDate: DateTime.now().subtract(const Duration(days: 365)),
-              lastDate: DateTime.now(),
-              helpText: 'Select log date',
-            );
-            if (picked == null || !context.mounted) return;
-
-            final controller = Get.find<TrackerController>();
-            final normalized = MealEntry.normalizeDate(picked);
-            final resolved = await controller.resolveWeightForDate(
-              normalized,
-              draftWeight,
-            );
-            if (!context.mounted) return;
-
-            setSheetState(() {
-              logDate = normalized;
-              draftWeight = resolved;
-            });
-          }
-
-          return SafeArea(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(24, 8, 24, 24 + r.scale(8)),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Log New Weight',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  SizedBox(height: r.scale(18)),
-                  Material(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      onTap: pickLogDate,
-                      borderRadius: BorderRadius.circular(14),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.calendar_today_rounded,
-                              size: 18,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              intl.DateFormat('EEE, MMM d, yyyy').format(logDate),
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: r.scale(16)),
-                  Row(
-                    children: [
-                      _CircleStepButton(
-                        icon: Icons.remove,
-                        onPressed: draftWeight > _logWeightMinKg
-                            ? () => setWeight(draftWeight - 0.5)
-                            : null,
-                      ),
-                      Expanded(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              draftWeight.toStringAsFixed(1),
-                              style: TextStyle(
-                                fontSize: r.scale(44, tablet: 48),
-                                fontWeight: FontWeight.w900,
-                                height: 1,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'kg',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      _CircleStepButton(
-                        icon: Icons.add,
-                        onPressed: draftWeight < _logWeightMaxKg
-                            ? () => setWeight(draftWeight + 0.5)
-                            : null,
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: r.scale(20)),
-                  WeightRulerSlider(
-                    value: draftWeight,
-                    min: _logWeightMinKg,
-                    max: _logWeightMaxKg,
-                    onChanged: setWeight,
-                  ),
-                  SizedBox(height: r.scale(20)),
-                  ElevatedButton(
-                    onPressed: () async {
-                      final controller = Get.find<TrackerController>();
-                      final userController = Get.find<UserController>();
-                      final baseline =
-                          userController.captureProfileSyncSnapshot();
-
-                      final outcome = await controller.logCurrentWeight(
-                        date: logDate,
-                        weightKg: draftWeight,
-                      );
-
-                      final today = MealEntry.normalizeDate(DateTime.now());
-                      final isToday = logDate == today;
-                      String? profileSyncError;
-                      if (isToday &&
-                          outcome.status == WeightLogStatus.savedAndSynced &&
-                          !outcome.profileUpdated) {
-                        profileSyncError = await userController
-                            .patchPersonalDetailsIfChanged(baseline);
-                      }
-
-                      if (!context.mounted) return;
-                      Navigator.pop(context);
-
-                      switch (outcome.status) {
-                        case WeightLogStatus.savedAndSynced:
-                          if (profileSyncError != null) {
-                            AppSnackbar.info(
-                              'Weight saved, but profile sync needs another try.',
-                              title: 'Weight saved',
-                            );
-                          } else {
-                            AppSnackbar.success('Weight saved.');
-                          }
-                        case WeightLogStatus.failed:
-                          AppSnackbar.error(
-                            controller.weightApiErrorMessage.value ??
-                                'Weight could not be saved. Please try again.',
-                            title: 'Save failed',
-                          );
-                        case WeightLogStatus.unchanged:
-                          AppSnackbar.info(
-                            'Weight is already logged for this date.',
-                            title: 'Already logged',
-                          );
-                      }
-                    },
-                    child: const Text('Save Weight'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    },
+    builder: (sheetContext) => _ManualWeightLogSheet(
+      initialWeight: initialWeight.clamp(_logWeightMinKg, _logWeightMaxKg),
+      initialDate: MealEntry.normalizeDate(date ?? DateTime.now()),
+    ),
   );
+
+  if (result == null) return;
+  await WidgetsBinding.instance.endOfFrame;
+  _showWeightLogSnackbar(result);
 }
 
-class _CircleStepButton extends StatelessWidget {
-  const _CircleStepButton({
-    required this.icon,
-    required this.onPressed,
+class _ManualWeightLogSheet extends StatefulWidget {
+  const _ManualWeightLogSheet({
+    required this.initialWeight,
+    required this.initialDate,
   });
 
-  final IconData icon;
-  final VoidCallback? onPressed;
+  final double initialWeight;
+  final DateTime initialDate;
+
+  @override
+  State<_ManualWeightLogSheet> createState() => _ManualWeightLogSheetState();
+}
+
+class _ManualWeightLogSheetState extends State<_ManualWeightLogSheet> {
+  late final TextEditingController _weightController = TextEditingController(
+    text: widget.initialWeight.toStringAsFixed(1),
+  );
+  late double _draftWeight = widget.initialWeight;
+  late DateTime _logDate = widget.initialDate;
+  var _manualWeightError = false;
+  var _isSaving = false;
+
+  @override
+  void dispose() {
+    _weightController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickLogDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      useRootNavigator: false,
+      initialDate: _logDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+      helpText: 'Select log date',
+    );
+    if (picked == null || !mounted) return;
+
+    final controller = Get.find<TrackerController>();
+    final normalized = MealEntry.normalizeDate(picked);
+    final resolved = await controller.resolveWeightForDate(
+      normalized,
+      _draftWeight,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _logDate = normalized;
+      _draftWeight = resolved.clamp(_logWeightMinKg, _logWeightMaxKg);
+      _manualWeightError = false;
+      _weightController.text = _draftWeight.toStringAsFixed(1);
+    });
+  }
+
+  Future<void> _saveWeight() async {
+    if (_isSaving || _manualWeightError) return;
+
+    final enteredWeight = double.tryParse(_weightController.text.trim());
+    if (enteredWeight == null ||
+        enteredWeight < _logWeightMinKg ||
+        enteredWeight > _logWeightMaxKg) {
+      setState(() => _manualWeightError = true);
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    _draftWeight = enteredWeight;
+
+    final controller = Get.find<TrackerController>();
+    final userController = Get.find<UserController>();
+    final baseline = userController.captureProfileSyncSnapshot();
+    final today = MealEntry.normalizeDate(DateTime.now());
+    final isToday = _logDate == today;
+
+    final outcome = await controller.logCurrentWeight(
+      date: _logDate,
+      weightKg: _draftWeight,
+    );
+
+    String? profileSyncError;
+    if (isToday &&
+        outcome.status == WeightLogStatus.savedAndSynced &&
+        !outcome.profileUpdated) {
+      profileSyncError = await userController.patchPersonalDetailsIfChanged(
+        baseline,
+      );
+      controller.updateWeight(_draftWeight);
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pop(
+      _WeightLogSheetResult(
+        outcome: outcome,
+        profileSyncError: profileSyncError,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: onPressed,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Icon(
-            icon,
-            color: onPressed == null
-                ? AppColors.textSecondary.withValues(alpha: 0.4)
-                : AppColors.primary,
-          ),
+    final r = context.responsive;
+    AppColors.syncFromContext(context);
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 4,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Log Weight',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: r.scale(24),
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.3,
+              ),
+            ),
+            SizedBox(height: r.scale(12)),
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                GestureDetector(
+                  onTap: _isSaving ? null : _pickLogDate,
+                  child: Text(
+                    formatLogDateLabel(_logDate),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: r.scale(15),
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    onPressed: _isSaving ? null : _pickLogDate,
+                    tooltip: 'Select date',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
+                    icon: SvgPicture.asset(
+                      'assets/image/calendar.svg',
+                      width: r.scale(26),
+                      height: r.scale(26),
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: r.scale(20)),
+            Text(
+              'Weight',
+              style: TextStyle(
+                fontSize: r.scale(13),
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SizedBox(height: r.scale(8)),
+            
+            TextField(
+              controller: _weightController,
+              enabled: !_isSaving,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              textInputAction: TextInputAction.done,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(
+                  RegExp(r'^\d{0,3}(\.\d{0,1})?$'),
+                ),
+              ],
+              style: TextStyle(
+                fontSize: r.scale(16),
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Enter weight',
+                hintStyle: TextStyle(
+                  fontSize: r.scale(16),
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                ),
+                suffixText: 'kg',
+                suffixStyle: TextStyle(
+                  fontSize: r.scale(15),
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+                filled: true,
+                fillColor: AppColors.surface,
+                errorText: _manualWeightError ? 'Enter 30–300 kg' : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: AppColors.error),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(
+                    color: AppColors.error,
+                    width: 1.5,
+                  ),
+                ),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: r.scale(14),
+                  vertical: r.scale(16),
+                ),
+              ),
+              onChanged: (text) {
+                final parsed = double.tryParse(text);
+                final isValid =
+                    parsed != null &&
+                    parsed >= _logWeightMinKg &&
+                    parsed <= _logWeightMaxKg;
+                setState(() {
+                  _manualWeightError = !isValid;
+                  if (isValid) _draftWeight = parsed;
+                });
+              },
+              onSubmitted: (_) {
+                if (!_isSaving) _saveWeight();
+              },
+              onTap: () => _weightController.selection = TextSelection(
+                baseOffset: 0,
+                extentOffset: _weightController.text.length,
+              ),
+            ),
+            SizedBox(height: r.scale(20)),
+            SizedBox(
+              height: r.scale(52),
+              child: FilledButton(
+                onPressed: _manualWeightError || _isSaving ? null : _saveWeight,
+                style: FilledButton.styleFrom(
+                  elevation: 0,
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.onPrimary,
+                  disabledBackgroundColor: AppColors.primary.withValues(
+                    alpha: 0.5,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: AppColors.onPrimary,
+                        ),
+                      )
+                    : Text(
+                        'Save',
+                        style: TextStyle(
+                          fontSize: r.scale(16),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
     );
+  }
+}
+
+void _showWeightLogSnackbar(_WeightLogSheetResult result) {
+  switch (result.outcome.status) {
+    case WeightLogStatus.savedAndSynced:
+      if (result.profileSyncError != null) {
+        AppSnackbar.info(
+          'Weight saved, but profile sync needs another try.',
+          title: 'Weight saved',
+        );
+      } else {
+        AppSnackbar.success('Weight saved.');
+      }
+    case WeightLogStatus.failed:
+      final message = Get.isRegistered<TrackerController>()
+          ? Get.find<TrackerController>().weightApiErrorMessage.value
+          : null;
+      AppSnackbar.error(
+        message ?? 'Weight could not be saved. Please try again.',
+        title: 'Save failed',
+      );
+    case WeightLogStatus.unchanged:
+      AppSnackbar.info(
+        'Weight is already logged for this date.',
+        title: 'Already logged',
+      );
   }
 }

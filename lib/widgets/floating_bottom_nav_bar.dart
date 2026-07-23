@@ -16,9 +16,14 @@ class FloatingBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: 8),
+    // Scaffold often clears MediaQuery.padding for bottomNavigationBar, so
+    // SafeArea alone can sit on top of the system gesture / nav bar.
+    // Always lift using viewPadding (home indicator / Android nav).
+    final systemBottom = MediaQuery.viewPaddingOf(context).bottom;
+    final bottomGap = (systemBottom > 0 ? systemBottom : 8.0) + 10;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomGap),
       child: SizedBox(
         height: 100,
         child: Padding(

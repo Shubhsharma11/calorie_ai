@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/api_timezone.dart';
 import 'api_client.dart';
 import 'api_endpoints.dart';
 
@@ -59,7 +60,7 @@ class AuthApiService {
 
     final response = await _apiClient.delete(
       ApiEndpoints.deleteAccount,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
     );
 
     final body = response.body.trim();

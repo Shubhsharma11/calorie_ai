@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:lottie/lottie.dart';
 
 import '../controllers/daily_summary_controller.dart';
 import '../controllers/food_controller.dart';
@@ -7,9 +8,9 @@ import '../controllers/main_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../core/dashboard_actions.dart';
 import '../core/responsive.dart';
-import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/past_date_banner.dart';
 import '../widgets/rotating_motivation_text.dart';
 
 class DailySummaryView extends GetView<DailySummaryController> {
@@ -17,10 +18,9 @@ class DailySummaryView extends GetView<DailySummaryController> {
 
   static const _blue = Color(0xFF007AFF);
   static const _orange = Color(0xFFFF9500);
-  static const _purple = Color(0xFF8B5CF6);
 
   static const _headlineMessages = [
-    "You're doing great! 🎉",
+    "You're doing great!",
     'Stay focused and healthy!',
     'Keep moving toward your goal.',
     'Every meal counts — keep it up!',
@@ -38,22 +38,35 @@ class DailySummaryView extends GetView<DailySummaryController> {
         actions: [
           IconButton(
             icon: const Icon(Icons.calendar_today_rounded),
+            tooltip: 'View another day',
             onPressed: () => DashboardActions.openCalendar(context),
           ),
         ],
       ),
       body: Obx(() {
-        final _ = food.entriesRevision.value;
-        Get.find<TrackerController>().waterGlasses;
+        food.entriesRevision.value;
+        food.selectedLogDate.value;
+        Get.find<TrackerController>().waterByDate.length;
+        Get.find<TrackerController>().activityRevision.value;
+
+        final viewingToday = controller.isViewingToday;
 
         return ListView(
           padding: EdgeInsets.fromLTRB(
             r.scale(16),
-            0,
+            r.scale(8),
             r.scale(16),
-            r.scale(24),
+            MediaQuery.paddingOf(context).bottom + r.scale(24),
           ),
           children: [
+            if (!viewingToday) ...[
+              PastDateBanner(
+                dateLabel: controller.dateLabel,
+                message: 'Showing this day\'s summary. Tap Today to go back.',
+                onBackToToday: controller.backToToday,
+              ),
+              SizedBox(height: r.scale(14)),
+            ],
             _MotivationBanner(),
             SizedBox(height: r.scale(20)),
             _TodayOverviewCard(
@@ -66,12 +79,6 @@ class DailySummaryView extends GetView<DailySummaryController> {
             _AchievementsSection(),
             SizedBox(height: r.scale(20)),
             _SmartInsightsSection(),
-            SizedBox(height: r.scale(20)),
-            _WeeklyProgressSection(),
-            SizedBox(height: r.scale(20)),
-            _NextGoalCard(),
-            SizedBox(height: r.scale(20)),
-            _BottomStatsRow(),
           ],
         );
       }),
@@ -79,9 +86,12 @@ class DailySummaryView extends GetView<DailySummaryController> {
   }
 }
 
-class _MotivationBanner extends StatelessWidget {
+class _MotivationBanner extends GetView<DailySummaryController> {
   @override
   Widget build(BuildContext context) {
+    final r = context.responsive;
+    final viewingToday = controller.isViewingToday;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -91,17 +101,18 @@ class _MotivationBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.18),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.emoji_events_rounded,
-              color: Color(0xFFFFB800),
-              size: 28,
+          SizedBox(
+            width: r.scale(56),
+            height: r.scale(56),
+            child: Lottie.asset(
+              'assets/image/Trophy.json',
+              fit: BoxFit.contain,
+              repeat: true,
+              errorBuilder: (context, error, stackTrace) => Icon(
+                Icons.emoji_events_rounded,
+                color: const Color(0xFFFFB800),
+                size: r.scale(32),
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -109,17 +120,27 @@ class _MotivationBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                RotatingMotivationText(
-                  messages: DailySummaryView._headlineMessages,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                if (viewingToday)
+                  RotatingMotivationText(
+                    messages: DailySummaryView._headlineMessages,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  )
+                else
+                  Text(
+                    controller.motivationTitle,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
                 const SizedBox(height: 4),
                 Text(
-                  'Keep moving toward your goal.',
+                  controller.motivationSubtitle,
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -141,12 +162,10 @@ class _TodayOverviewCard extends GetView<DailySummaryController> {
 
   @override
   Widget build(BuildContext context) {
-    final percent = controller.progressPercent;
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
         boxShadow: [
@@ -162,98 +181,44 @@ class _TodayOverviewCard extends GetView<DailySummaryController> {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  "Today's Overview",
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                  '${controller.dayPossessive} Overview',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               TextButton(
                 onPressed: onViewDetails,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
                 child: const Text('View Details >'),
               ),
             ],
           ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    _OverviewRow(
-                      color: AppColors.primary,
-                      label: 'Calories Goal',
-                      value: '${controller.calorieGoal} kcal',
-                    ),
-                    const SizedBox(height: 10),
-                    _OverviewRow(
-                      color: DailySummaryView._blue,
-                      label: 'Consumed',
-                      value: '${controller.consumed} kcal',
-                    ),
-                    const SizedBox(height: 10),
-                    _OverviewRow(
-                      color: DailySummaryView._orange,
-                      label: 'Remaining',
-                      value: '${controller.remaining} kcal',
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                children: [
-                  SizedBox(
-                    width: 88,
-                    height: 88,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          value: percent / 100,
-                          strokeWidth: 8,
-                          backgroundColor: AppColors.surface,
-                          color: AppColors.primary,
-                        ),
-                        Text(
-                          '$percent%',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Goal Progress',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: percent / 100,
-              minHeight: 8,
-              backgroundColor: AppColors.surface,
-              color: AppColors.primary,
-            ),
+          const SizedBox(height: 12),
+          _OverviewRow(
+            color: AppColors.primary,
+            label: 'Calories Goal',
+            value: '${controller.calorieGoal} kcal',
           ),
           const SizedBox(height: 10),
-          Text(
-            "You're $percent% closer to your calorie goal today.",
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.textSecondary,
-            ),
+          _OverviewRow(
+            color: DailySummaryView._blue,
+            label: 'Consumed',
+            value: '${controller.consumed} kcal',
+          ),
+          const SizedBox(height: 10),
+          _OverviewRow(
+            color: DailySummaryView._orange,
+            label: 'Remaining',
+            value: '${controller.remaining} kcal',
           ),
         ],
       ),
@@ -300,6 +265,8 @@ class _OverviewRow extends StatelessWidget {
 class _AchievementsSection extends GetView<DailySummaryController> {
   @override
   Widget build(BuildContext context) {
+    final achievements = controller.unlockedAchievements;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -314,7 +281,9 @@ class _AchievementsSection extends GetView<DailySummaryController> {
             TextButton(
               onPressed: () => Get.snackbar(
                 'Achievements',
-                'You have ${controller.totalAchievements} total achievements!',
+                achievements.isEmpty
+                    ? 'Complete goals to unlock achievements.'
+                    : 'You have ${achievements.length} unlocked!',
               ),
               child: const Text('See All >'),
             ),
@@ -323,41 +292,37 @@ class _AchievementsSection extends GetView<DailySummaryController> {
         const SizedBox(height: 8),
         SizedBox(
           height: 110,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              _AchievementChip(
-                icon: Icons.water_drop_rounded,
-                color: DailySummaryView._blue,
-                title: 'Water Goal Completed',
-                subtitle: controller.waterGoalCompleted
-                    ? controller.waterMlOverGoal > 0
-                        ? '+${controller.waterMlOverGoal} ml over goal'
-                        : 'Great job!'
-                    : '${controller.waterMlRemaining} ml left',
-                onTap: () => Get.toNamed(AppRoutes.waterTracker),
-              ),
-              const SizedBox(width: 10),
-              _AchievementChip(
-                icon: Icons.restaurant_rounded,
-                color: AppColors.primary,
-                title: 'Logged All Meals Today',
-                subtitle: controller.allMealsLogged ? 'Awesome!' : 'Keep logging',
-                onTap: () {
-                  Get.find<MainController>().changeTab(1);
-                  Get.back();
-                },
-              ),
-              const SizedBox(width: 10),
-              _AchievementChip(
-                icon: Icons.local_fire_department_rounded,
-                color: DailySummaryView._orange,
-                title: '${controller.loggingStreak}-Day Streak',
-                subtitle: controller.streakSubtitle,
-                onTap: () => Get.toNamed(AppRoutes.streak),
-              ),
-            ],
-          ),
+          child: achievements.isEmpty
+              ? _AchievementChip(
+                  icon: Icons.emoji_events_outlined,
+                  color: AppColors.textSecondary,
+                  title: 'No achievements yet',
+                  subtitle: 'Keep logging to unlock',
+                )
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: achievements.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final item = achievements[index];
+                    return _AchievementChip(
+                      icon: item.icon,
+                      color: item.color,
+                      title: item.title,
+                      subtitle: item.subtitle,
+                      onTap: () {
+                        if (item.openFoodTab) {
+                          Get.find<MainController>().changeTab(1);
+                          Get.back();
+                          return;
+                        }
+                        if (item.route != null) {
+                          Get.toNamed(item.route!);
+                        }
+                      },
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -423,9 +388,7 @@ class _AchievementChip extends StatelessWidget {
 class _SmartInsightsSection extends GetView<DailySummaryController> {
   @override
   Widget build(BuildContext context) {
-    final proteinGap = controller.proteinGap;
-    final waterLeftMl = controller.waterMlRemaining;
-    final weeklyChange = controller.weeklyCalorieChangePercent;
+    final insights = controller.smartInsights;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -435,40 +398,45 @@ class _SmartInsightsSection extends GetView<DailySummaryController> {
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 10),
-        if (proteinGap > 0)
+        if (insights.isEmpty)
           _InsightTile(
-            icon: Icons.bar_chart_rounded,
-            iconColor: DailySummaryView._purple,
-            text: 'Your protein intake is ',
-            bold: '${proteinGap}g below',
-            suffix: ' target. Try adding more protein-rich foods.',
-            onTap: () => Get.toNamed(AppRoutes.addFood),
+            icon: Icons.lightbulb_outline_rounded,
+            iconColor: AppColors.primary,
+            text: 'Keep logging meals and water to unlock ',
+            bold: 'personal insights',
+            suffix: controller.isViewingToday
+                ? ' for today.'
+                : ' for this day.',
+            onTap: () {
+              Get.find<MainController>().changeTab(1);
+              Get.back();
+            },
+          )
+        else
+          ...insights.map(
+            (insight) => _InsightTile(
+              icon: insight.icon,
+              iconColor: insight.iconColor,
+              text: insight.text,
+              bold: insight.bold,
+              suffix: insight.suffix,
+              onTap: () {
+                if (insight.openFoodTab) {
+                  Get.find<MainController>().changeTab(1);
+                  Get.back();
+                  return;
+                }
+                if (insight.openAnalyticsTab) {
+                  Get.find<MainController>().changeTab(3);
+                  Get.back();
+                  return;
+                }
+                if (insight.route != null) {
+                  Get.toNamed(insight.route!);
+                }
+              },
+            ),
           ),
-        if (waterLeftMl > 0)
-          _InsightTile(
-            icon: Icons.water_drop_rounded,
-            iconColor: DailySummaryView._blue,
-            text: 'Drink ',
-            bold: '$waterLeftMl ml more',
-            suffix: ' water to complete today\'s hydration goal.',
-            onTap: () => Get.toNamed(AppRoutes.waterTracker),
-          ),
-        _InsightTile(
-          icon: Icons.trending_up_rounded,
-          iconColor: AppColors.primary,
-          text: weeklyChange <= 0
-              ? 'You are eating '
-              : 'You are eating ',
-          bold: weeklyChange <= 0
-              ? '${weeklyChange.abs()}% fewer'
-              : '$weeklyChange% more',
-          suffix: ' calories than earlier this week. '
-              '${weeklyChange <= 0 ? 'Great consistency!' : 'Stay mindful of your goal.'}',
-          onTap: () {
-            Get.find<MainController>().changeTab(3);
-            Get.back();
-          },
-        ),
       ],
     );
   }
@@ -534,254 +502,6 @@ class _InsightTile extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _WeeklyProgressSection extends GetView<DailySummaryController> {
-  @override
-  Widget build(BuildContext context) {
-    final bars = controller.weeklyBars;
-    final maxBarHeight = 120.0;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Weekly Progress',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Row(
-                  children: [
-                    Text(
-                      'This Week',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: maxBarHeight + 36,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: bars.map((bar) {
-                final h = bar.hasData
-                    ? (bar.percent / 100 * maxBarHeight).clamp(8.0, maxBarHeight)
-                    : 8.0;
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        if (bar.hasData)
-                          Text(
-                            '${bar.percent}%',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          )
-                        else
-                          const Text('—', style: TextStyle(fontSize: 9)),
-                        const SizedBox(height: 4),
-                        Container(
-                          height: h,
-                          decoration: BoxDecoration(
-                            color: bar.hasData
-                                ? AppColors.primary
-                                : AppColors.border,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          bar.day,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NextGoalCard extends GetView<DailySummaryController> {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.flag_rounded, color: AppColors.primary, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  controller.nextGoalTitle,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
-                ),
-                Text(
-                  "You're almost there!",
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFB800).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 16),
-                SizedBox(width: 4),
-                Text(
-                  '+50 XP',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BottomStatsRow extends GetView<DailySummaryController> {
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _StatMiniCard(
-          icon: Icons.military_tech_rounded,
-          color: DailySummaryView._purple,
-          value: '${controller.totalAchievements}',
-          label: 'Total Achievements',
-          subtitle: 'Keep going!',
-        ),
-        const SizedBox(width: 8),
-        _StatMiniCard(
-          icon: Icons.local_fire_department_rounded,
-          color: DailySummaryView._orange,
-          value: '${controller.loggingStreak}',
-          label: 'Day Streak',
-          subtitle: 'Amazing!',
-        ),
-        const SizedBox(width: 8),
-        _StatMiniCard(
-          icon: Icons.favorite_rounded,
-          color: DailySummaryView._blue,
-          value: '${controller.healthScore}/100',
-          label: 'Health Score',
-          subtitle: 'Good',
-        ),
-      ],
-    );
-  }
-}
-
-class _StatMiniCard extends StatelessWidget {
-  const _StatMiniCard({
-    required this.icon,
-    required this.color,
-    required this.value,
-    required this.label,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String value;
-  final String label;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
-            ),
-            Text(
-              subtitle,
-              style: TextStyle(fontSize: 9, color: color),
-            ),
-          ],
         ),
       ),
     );

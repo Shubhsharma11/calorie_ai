@@ -59,10 +59,8 @@ class AppAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    AppColors.syncFromContext(context);
-
     return AppBar(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: AppColors.background,
       foregroundColor: AppColors.textPrimary,
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -73,7 +71,15 @@ class AppAppBar extends StatelessWidget implements PreferredSizeWidget {
           : null,
       title: title.isEmpty
           ? null
-          : Text(title, style: titleStyle(context)),
+          : Text(
+              title,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+                color: AppColors.textPrimary,
+              ),
+            ),
       actions: actions,
     );
   }

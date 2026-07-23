@@ -200,13 +200,14 @@ class WeightChartData {
     final calendarEnd = window.end;
     final windowDayCount = calendarEnd.difference(calendarStart).inDays + 1;
 
-    final allValid = _dedupeByDayLatest(
+    final allValid = WeightEntry.collapseToLatestPerDay(
       entries
           .map(
             (entry) => WeightEntry(
               id: entry.id,
               date: MealEntry.normalizeDate(entry.date),
               kg: entry.kg,
+              loggedAt: entry.loggedAt,
             ),
           )
           .where((entry) => !entry.date.isAfter(today))
@@ -300,16 +301,6 @@ class WeightChartData {
       start: today.subtract(Duration(days: dayCount - 1)),
       end: today,
     );
-  }
-
-  static List<WeightEntry> _dedupeByDayLatest(List<WeightEntry> entries) {
-    final byDay = <DateTime, WeightEntry>{};
-    for (final entry in entries) {
-      byDay[entry.date] = entry;
-    }
-
-    return byDay.values.toList()
-      ..sort((left, right) => left.date.compareTo(right.date));
   }
 
   static List<WeightChartPoint> _buildPoints({

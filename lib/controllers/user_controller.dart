@@ -26,7 +26,7 @@ import '../services/onboarding_api_service.dart';
 import 'dashboard_controller.dart';
 import 'main_controller.dart';
 import 'nutrition_plan_controller.dart';
-import 'streak_controller.dart';
+// import 'streak_controller.dart';
 import 'tracker_controller.dart';
 
 class UserController extends GetxController {
@@ -60,10 +60,33 @@ class UserController extends GetxController {
   Map<String, dynamic> backendLoginResponse = {};
   final calorieGoalRevision = 0.obs;
   Completer<void>? _localProfileReady;
+  Timer? _onboardingDraftSaveTimer;
+  bool hasOnboardingDraft = false;
+  bool personalDetailsComplete = false;
+
+  /// Goal weight the user entered during onboarding (before AI recommendation).
+  double? userOnboardingGoalWeightKg;
+
+  /// AI / plan recommended target weight (does not replace the user's goal).
+  double? aiRecommendedGoalWeightKg;
+
+  /// Which target is currently driving the nutrition plan.
+  final weightTargetSource = WeightTargetSource.user.obs;
+  final isRefreshingWeightTarget = false.obs;
 
   static const int calorieStep = 50;
   static const int minDailyCalories = 1200;
   static const int maxDailyCalories = 4000;
+
+  static const _setupRouteOrder = <String>[
+    AppRoutes.personalDetails,
+    AppRoutes.goalSetup,
+    AppRoutes.goalAmount,
+    AppRoutes.activityLevel,
+    AppRoutes.healthProblem,
+    AppRoutes.nutritionPlanLoading,
+    AppRoutes.dailyCalorieGoal,
+  ];
 
   @override
   void onInit() {
@@ -343,6 +366,7 @@ class UserController extends GetxController {
       user.manualGoalWeightKg = null;
     }
     update();
+    scheduleOnboardingDraftSave();
   }
 
   /// Sets [user.goal] from how [targetKg] compares to current weight.
@@ -367,11 +391,13 @@ class UserController extends GetxController {
       user.manualGoalWeightKg = null;
     }
     update();
+    scheduleOnboardingDraftSave();
   }
 
   void useRecommendedGoalWeight() {
     user.manualGoalWeightKg = null;
     update();
+    scheduleOnboardingDraftSave();
   }
 
   void onProfileUpdated() {
@@ -454,6 +480,7 @@ class UserController extends GetxController {
   void selectActivity(ActivityLevel level) {
     user.activityLevel = level;
     update();
+    scheduleOnboardingDraftSave();
   }
 
   Future<void> saveHealthConcerns(List<HealthConcern> concerns) async {
@@ -528,6 +555,8 @@ class UserController extends GetxController {
   }
 
   Future<void> applyNutritionPlan(NutritionPlanModel plan) async {
+    _captureUserOnboardingGoalWeightIfNeeded();
+
     if (plan.calories > 0) {
       user.nutritionPlanBaseCalories = plan.calories;
       user.nutritionPlanDailyCalories = plan.calories;
@@ -539,12 +568,153 @@ class UserController extends GetxController {
     if (plan.carbsG > 0) user.nutritionPlanCarbsG = plan.carbsG;
     if (plan.fatG > 0) user.nutritionPlanFatG = plan.fatG;
     if (plan.targetWeightKg != null) {
-      user.manualGoalWeightKg = plan.targetWeightKg;
+      _storeAiRecommendedGoalWeight(plan.targetWeightKg!);
     }
 
     await _persistNutritionTargets();
     update();
     _notifyCalorieGoalChanged();
+  }
+
+  void _captureUserOnboardingGoalWeightIfNeeded() {
+    if (userOnboardingGoalWeightKg != null) return;
+    if (user.goal == GoalType.maintainWeight) {
+      userOnboardingGoalWeightKg = user.weightKg.toDouble();
+      return;
+    }
+    if (user.manualGoalWeightKg != null) {
+      userOnboardingGoalWeightKg = user.manualGoalWeightKg;
+    }
+  }
+
+  void _storeAiRecommendedGoalWeight(double kg) {
+    aiRecommendedGoalWeightKg = kg.clamp(40.0, 200.0);
+    // Keep the user's onboarding target active by default.
+    if (userOnboardingGoalWeightKg != null &&
+        weightTargetSource.value == WeightTargetSource.user) {
+      user.manualGoalWeightKg = userOnboardingGoalWeightKg;
+    }
+  }
+
+  bool get shouldShowWeightTargetChoice {
+    final goal = user.goal;
+    if (goal == null || goal == GoalType.maintainWeight) return false;
+
+    final userKg = resolvedUserGoalWeightKg;
+    final aiKg = resolvedAiGoalWeightKg;
+    if (userKg == null || aiKg == null) return false;
+    return (userKg - aiKg).abs() >= 0.5;
+  }
+
+  double? get resolvedUserGoalWeightKg =>
+      userOnboardingGoalWeightKg ?? user.manualGoalWeightKg;
+
+  double? get resolvedAiGoalWeightKg =>
+      aiRecommendedGoalWeightKg ??
+      (user.goal == null || user.goal == GoalType.maintainWeight
+          ? null
+          : user.recommendedGoalWeightKg);
+
+  Future<void> _ensurePlanMatchesSelectedWeightTarget({
+    required String accessToken,
+  }) async {
+    if (!shouldShowWeightTargetChoice) return;
+    if (weightTargetSource.value != WeightTargetSource.user) return;
+
+    final targetKg = resolvedUserGoalWeightKg;
+    if (targetKg == null) return;
+
+    // If AI target is already effectively the same, no second create needed.
+    final aiKg = resolvedAiGoalWeightKg;
+    if (aiKg != null && (aiKg - targetKg).abs() < 0.5) return;
+
+    final patchError = await patchOnboarding(
+      OnboardingPatchModel.goalWeightOnly(
+        targetKg,
+        goalTimeline: user.goalTimeline,
+        goalTimelineCustomDate: user.goalTimelineCustomDate,
+      ),
+    );
+    if (patchError != null) {
+      debugPrint(
+        'UserController: could not sync user goal weight for plan: $patchError',
+      );
+      return;
+    }
+
+    user.manualGoalWeightKg = targetKg.clamp(40.0, 200.0);
+    await _nutritionPlanRepository.createPlan(accessToken: accessToken);
+    final refreshed = await _nutritionPlanRepository.fetchPlan(
+      accessToken: accessToken,
+    );
+    await applyNutritionPlan(refreshed);
+    _syncNutritionPlanController(refreshed);
+  }
+
+  Future<String?> selectWeightTarget(WeightTargetSource source) async {
+    if (isRefreshingWeightTarget.value) return null;
+    if (weightTargetSource.value == source) return null;
+
+    final targetKg = switch (source) {
+      WeightTargetSource.user => resolvedUserGoalWeightKg,
+      WeightTargetSource.ai => resolvedAiGoalWeightKg,
+    };
+    if (targetKg == null) {
+      return 'Unable to update your weight target.';
+    }
+
+    final previousSource = weightTargetSource.value;
+    final previousWeight = user.manualGoalWeightKg;
+
+    isRefreshingWeightTarget.value = true;
+    weightTargetSource.value = source;
+    user.manualGoalWeightKg = targetKg.clamp(40.0, 200.0);
+    update();
+
+    try {
+      final token = await resolveAccessToken();
+      if (token == null || token.isEmpty) {
+        throw const OnboardingApiException('Please sign in again.');
+      }
+
+      final patchError = await patchOnboarding(
+        OnboardingPatchModel.goalWeightOnly(
+          user.manualGoalWeightKg!,
+          goalTimeline: user.goalTimeline,
+          goalTimelineCustomDate: user.goalTimelineCustomDate,
+        ),
+      );
+      if (patchError != null) {
+        weightTargetSource.value = previousSource;
+        user.manualGoalWeightKg = previousWeight;
+        update();
+        return patchError;
+      }
+
+      await _nutritionPlanRepository.createPlan(accessToken: token);
+      final plan = await _nutritionPlanRepository.fetchPlan(accessToken: token);
+      await applyNutritionPlan(plan);
+      _syncNutritionPlanController(plan);
+      return null;
+    } on NutritionPlanApiException catch (error) {
+      weightTargetSource.value = previousSource;
+      user.manualGoalWeightKg = previousWeight;
+      update();
+      return error.message;
+    } on OnboardingApiException catch (error) {
+      weightTargetSource.value = previousSource;
+      user.manualGoalWeightKg = previousWeight;
+      update();
+      return error.message;
+    } catch (error) {
+      weightTargetSource.value = previousSource;
+      user.manualGoalWeightKg = previousWeight;
+      update();
+      return 'Unable to update your plan. Please try again.';
+    } finally {
+      isRefreshingWeightTarget.value = false;
+      update();
+    }
   }
 
   void finishSetup() {
@@ -555,16 +725,29 @@ class UserController extends GetxController {
   static const _resumeableSetupRoutes = <String>{
     AppRoutes.personalDetails,
     AppRoutes.goalSetup,
+    AppRoutes.goalAmount,
     AppRoutes.activityLevel,
     AppRoutes.healthProblem,
     AppRoutes.nutritionPlanLoading,
     AppRoutes.dailyCalorieGoal,
   };
 
+  void resetPersonalDetailsForOnboarding() {
+    user.age = 0;
+    user.gender = '';
+    user.heightCm = 0;
+    user.weightKg = 0;
+  }
+
+  void markPersonalDetailsComplete() {
+    personalDetailsComplete = true;
+  }
+
   Map<String, dynamic> _onboardingDraftFromUser() {
     final target = user.targetDate;
     return {
       'userId': userId,
+      'personalDetailsComplete': personalDetailsComplete,
       'age': user.age,
       'gender': user.gender,
       'heightCm': user.heightCm,
@@ -579,18 +762,41 @@ class UserController extends GetxController {
     };
   }
 
-  void _applyOnboardingDraft(Map<String, dynamic> draft) {
+  void _applyPersonalDetailsFromDraft(Map<String, dynamic> draft) {
+    if (draft['personalDetailsComplete'] == true) {
+      personalDetailsComplete = true;
+      final age = draft['age'];
+      if (age is num) user.age = age.round();
+
+      final gender = draft['gender'];
+      if (gender is String && gender.isNotEmpty) user.gender = gender;
+
+      final heightCm = draft['heightCm'];
+      if (heightCm is num) user.heightCm = heightCm.round();
+
+      final weightKg = draft['weightKg'];
+      if (weightKg is num) user.weightKg = weightKg.round();
+      return;
+    }
+
+    personalDetailsComplete = false;
+    resetPersonalDetailsForOnboarding();
+
     final age = draft['age'];
-    if (age is num) user.age = age.round();
+    if (age is num && age > 0) user.age = age.round();
 
     final gender = draft['gender'];
     if (gender is String && gender.isNotEmpty) user.gender = gender;
 
     final heightCm = draft['heightCm'];
-    if (heightCm is num) user.heightCm = heightCm.round();
+    if (heightCm is num && heightCm > 0) user.heightCm = heightCm.round();
 
     final weightKg = draft['weightKg'];
-    if (weightKg is num) user.weightKg = weightKg.round();
+    if (weightKg is num && weightKg > 0) user.weightKg = weightKg.round();
+  }
+
+  void _applyOnboardingDraft(Map<String, dynamic> draft) {
+    _applyPersonalDetailsFromDraft(draft);
 
     final goal = draft['goal'];
     if (goal is String) {
@@ -620,14 +826,57 @@ class UserController extends GetxController {
     }
   }
 
-  Future<void> persistOnboardingStep(String nextRoute) async {
+  Future<void> saveOnboardingDraft() async {
+    _onboardingDraftSaveTimer?.cancel();
     await _storage.saveOnboardingDraft(_onboardingDraftFromUser());
-    await _storage.saveOnboardingStep(nextRoute);
+    hasOnboardingDraft = true;
+  }
+
+  void scheduleOnboardingDraftSave() {
+    if (!isLoggedIn || accessToken.isEmpty) return;
+    _onboardingDraftSaveTimer?.cancel();
+    _onboardingDraftSaveTimer = Timer(const Duration(milliseconds: 350), () {
+      unawaited(saveOnboardingDraft());
+    });
+  }
+
+  Future<void> persistOnboardingStep(String route) async {
+    await saveOnboardingDraft();
+    await _storage.saveOnboardingStep(route);
+  }
+
+  String? previousOnboardingRoute(String currentRoute) {
+    if (currentRoute == AppRoutes.dailyCalorieGoal) {
+      // Skip the loading screen so Back does not re-trigger setup.
+      return AppRoutes.healthProblem;
+    }
+    if (currentRoute == AppRoutes.activityLevel) {
+      final goal = user.goal;
+      if (goal == null || goal == GoalType.maintainWeight) {
+        return AppRoutes.goalSetup;
+      }
+      return AppRoutes.goalAmount;
+    }
+    final index = _setupRouteOrder.indexOf(currentRoute);
+    if (index <= 0) return null;
+    return _setupRouteOrder[index - 1];
+  }
+
+  /// Saves draft, marks the previous step as current, then opens that route.
+  Future<void> goToPreviousOnboardingStep(String currentRoute) async {
+    final previous = previousOnboardingRoute(currentRoute);
+    if (previous == null) return;
+
+    await persistOnboardingStep(previous);
+    // Always navigate by name. Get.back() is unreliable here because the plan
+    // loading screen uses offNamed (stack may not match the intended step),
+    // and PopScope(canPop: false) on setup screens can interfere with pops.
+    Get.offNamed(previous);
   }
 
   Future<void> restoreOnboardingProgress() async {
     final completed = await _storage.isOnboardingCompleted();
-    if (completed || isEmailVerified) return;
+    if (completed) return;
 
     final draft = await _storage.loadOnboardingDraft();
     if (draft == null) return;
@@ -642,21 +891,40 @@ class UserController extends GetxController {
     }
 
     _applyOnboardingDraft(draft);
+    hasOnboardingDraft = true;
   }
 
   Future<String> resolveSetupResumeRoute() async {
     final completed = await _storage.isOnboardingCompleted();
-    if (completed || isEmailVerified) return AppRoutes.main;
+    if (completed) return AppRoutes.main;
 
     final step = await _storage.loadOnboardingStep();
     if (step != null && _resumeableSetupRoutes.contains(step)) {
+      if (step == AppRoutes.goalAmount) {
+        final goal = user.goal;
+        if (goal == null) return AppRoutes.goalSetup;
+        if (goal == GoalType.maintainWeight) return AppRoutes.activityLevel;
+      }
       return step;
     }
+
+    // Verified accounts with no pending step are fully set up.
+    if (isEmailVerified) return AppRoutes.main;
+
     return AppRoutes.personalDetails;
   }
 
   Future<void> clearOnboardingProgress() async {
+    _onboardingDraftSaveTimer?.cancel();
+    hasOnboardingDraft = false;
+    personalDetailsComplete = false;
     await _storage.clearOnboardingProgress();
+  }
+
+  @override
+  void onClose() {
+    _onboardingDraftSaveTimer?.cancel();
+    super.onClose();
   }
 
   String? validateOnboardingPayload() {
@@ -792,6 +1060,7 @@ class UserController extends GetxController {
     onProgress(0, 0);
 
     try {
+      _captureUserOnboardingGoalWeightIfNeeded();
       final request = OnboardingRequestModel.fromUser(user);
       debugPrint(
         'UserController: calling onboarding API with token '
@@ -816,6 +1085,7 @@ class UserController extends GetxController {
       );
       await applyNutritionPlan(plan);
       _syncNutritionPlanController(plan);
+      await _ensurePlanMatchesSelectedWeightTarget(accessToken: accessToken);
       onProgress(1, 3);
 
       return null;
@@ -922,7 +1192,7 @@ class UserController extends GetxController {
         'targetWeight',
       ]);
       if (goalWeight != null) {
-        user.manualGoalWeightKg = goalWeight;
+        _storeAiRecommendedGoalWeight(goalWeight);
       }
     }
 
@@ -1081,9 +1351,10 @@ class UserController extends GetxController {
       ),
     );
 
-    if (Get.isRegistered<StreakController>()) {
-      unawaited(Get.find<StreakController>().onAuthChanged());
-    }
+    // Streak unused — skip streak API on auth change.
+    // if (Get.isRegistered<StreakController>()) {
+    //   unawaited(Get.find<StreakController>().onAuthChanged());
+    // }
   }
 
   Future<void> markOnboardingComplete() async {
@@ -1130,10 +1401,7 @@ class UserController extends GetxController {
       if (accessToken.isEmpty) await loadAuthSession();
 
       if (accessToken.isEmpty) {
-        AppSnackbar.error(
-          'You are not signed in.',
-          title: 'Delete failed',
-        );
+        AppSnackbar.error('You are not signed in.', title: 'Delete failed');
         return false;
       }
 
@@ -1190,10 +1458,7 @@ class UserController extends GetxController {
           title: 'Logged out locally',
         );
       } else {
-        AppSnackbar.success(
-          'Your session was cleared.',
-          title: 'Logged out',
-        );
+        AppSnackbar.success('Your session was cleared.', title: 'Logged out');
       }
     } finally {
       isLoggingOut = false;
@@ -1208,8 +1473,14 @@ class UserController extends GetxController {
     accessToken = '';
     refreshToken = '';
     backendLoginResponse = {};
+    userOnboardingGoalWeightKg = null;
+    aiRecommendedGoalWeightKg = null;
+    weightTargetSource.value = WeightTargetSource.user;
+    isRefreshingWeightTarget.value = false;
   }
 }
+
+enum WeightTargetSource { user, ai }
 
 /// Outcome of [UserController.pickTargetDate].
 enum PickTargetDateStatus { cancelled, unchanged, saved, failed }

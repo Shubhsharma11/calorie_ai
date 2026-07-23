@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'saved_meal_item.dart';
 
 enum MealShareVisibility {
@@ -28,6 +31,7 @@ class CustomMealPreset {
     required this.meal,
     required this.items,
     this.visibility = MealShareVisibility.onlyMe,
+    this.imageBytes,
   });
 
   final String id;
@@ -36,24 +40,24 @@ class CustomMealPreset {
   final String meal;
   final List<SavedMealItem> items;
   final MealShareVisibility visibility;
+  final Uint8List? imageBytes;
 
   int get totalCalories =>
       items.fold(0, (sum, item) => sum + item.calories);
 
   double get totalCarbs => items.fold(
         0.0,
-        (sum, item) => sum + item.food.macroForGrams(item.food.carbs, item.grams),
+        (sum, item) => sum + item.carbs,
       );
 
   double get totalProtein => items.fold(
         0.0,
-        (sum, item) =>
-            sum + item.food.macroForGrams(item.food.protein, item.grams),
+        (sum, item) => sum + item.protein,
       );
 
   double get totalFat => items.fold(
         0.0,
-        (sum, item) => sum + item.food.macroForGrams(item.food.fat, item.grams),
+        (sum, item) => sum + item.fat,
       );
 
   /// Macro calorie split used for ring progress (carbs/protein = 4, fat = 9).
@@ -91,6 +95,7 @@ class CustomMealPreset {
     String? meal,
     List<SavedMealItem>? items,
     MealShareVisibility? visibility,
+    Uint8List? imageBytes,
   }) {
     return CustomMealPreset(
       id: id ?? this.id,
@@ -99,6 +104,7 @@ class CustomMealPreset {
       meal: meal ?? this.meal,
       items: items ?? this.items,
       visibility: visibility ?? this.visibility,
+      imageBytes: imageBytes ?? this.imageBytes,
     );
   }
 
@@ -109,10 +115,20 @@ class CustomMealPreset {
         'meal': meal,
         'items': items.map((item) => item.toJson()).toList(),
         'visibility': visibility.toJson(),
+        if (imageBytes != null) 'imageBase64': base64Encode(imageBytes!),
       };
 
   factory CustomMealPreset.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'] as List<dynamic>;
+    Uint8List? imageBytes;
+    final encodedImage = json['imageBase64'];
+    if (encodedImage is String && encodedImage.isNotEmpty) {
+      try {
+        imageBytes = base64Decode(encodedImage);
+      } on FormatException {
+        imageBytes = null;
+      }
+    }
     return CustomMealPreset(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -124,6 +140,7 @@ class CustomMealPreset {
           )
           .toList(),
       visibility: MealShareVisibility.fromJson(json['visibility'] as String?),
+      imageBytes: imageBytes,
     );
   }
 }

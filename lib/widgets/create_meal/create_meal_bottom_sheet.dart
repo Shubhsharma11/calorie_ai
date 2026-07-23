@@ -124,7 +124,8 @@ Future<void> showCustomMealLogSheet(
                                   ),
                                 ),
                                 Text(
-                                  '${item.grams}g · ${item.calories} kcal',
+                                  '${item.servingDescription} · '
+                                  '${item.calories} kcal',
                                   style: TextStyle(
                                     fontSize: r.scale(12),
                                     color: AppColors.textSecondary,
@@ -145,16 +146,21 @@ Future<void> showCustomMealLogSheet(
                       ),
                     ),
                     SizedBox(height: r.scale(8)),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: MealType.all.map((meal) {
-                        return FilterChipPill(
-                          label: meal,
-                          selected: selectedMeal == meal,
-                          onTap: () => setState(() => selectedMeal = meal),
-                        );
-                      }).toList(),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: MealType.all.map((meal) {
+                          return Padding(
+                            padding: EdgeInsets.only(right: r.scale(8)),
+                            child: FilterChipPill(
+                              label: meal,
+                              selected: selectedMeal == meal,
+                              onTap: () => setState(() => selectedMeal = meal),
+                              fontSize: r.scale(12),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                     ),
                     SizedBox(height: r.scale(20)),
                     SizedBox(
@@ -176,64 +182,9 @@ Future<void> showCustomMealLogSheet(
                       ),
                     ),
                     SizedBox(height: r.scale(8)),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              Navigator.pop(sheetContext);
-                              Get.toNamed(
-                                AppRoutes.createMeal,
-                                arguments: preset,
-                              );
-                            },
-                            child: const Text('Edit meal'),
-                          ),
-                        ),
-                        SizedBox(width: r.scale(10)),
-                        Expanded(
-                          child: TextButton(
-                            onPressed: () async {
-                              final confirmed = await showDialog<bool>(
-                                context: sheetContext,
-                                builder: (dialogContext) => AlertDialog(
-                                  title: const Text('Delete meal?'),
-                                  content: Text(
-                                    'Remove "${preset.name}" from My Meals?',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(dialogContext, false),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () =>
-                                          Navigator.pop(dialogContext, true),
-                                      child: const Text('Delete'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirmed != true) return;
-                              await controller.removeCustomMealPreset(
-                                preset.id,
-                              );
-                              if (sheetContext.mounted) {
-                                Navigator.pop(sheetContext);
-                              }
-                              AppSnackbar.success(
-                                '${preset.name} was removed.',
-                                title: 'Deleted',
-                              );
-                            },
-                            child: const Text(
-                              'Delete',
-                              style: TextStyle(color: AppColors.error),
-                            ),
-                          ),
-                        ),
-                      ],
+                    TextButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child: const Text('Cancel'),
                     ),
                   ],
                 ),

@@ -1,13 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/nutrition_plan_controller.dart';
 import '../controllers/user_controller.dart';
+import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/activity_level.dart';
 import '../models/goal_type.dart';
 import '../models/user_model.dart';
+import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/primary_button.dart';
@@ -23,25 +27,50 @@ class DailyCalorieGoalView extends GetView<UserController> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _pageBg,
-      appBar: const AppAppBar.backOnly(),
-      body: GetBuilder<UserController>(
-        builder: (_) {
-          final user = controller.user;
-          final r = context.responsive;
-          final planController = Get.find<NutritionPlanController>();
-          final goal = user.dailyCalorieGoal;
-          final canDecrease = goal > UserController.minDailyCalories;
-          final canIncrease = goal < UserController.maxDailyCalories;
-          final editing = RouteArgs.isEditingFromProfile;
+    AppColors.syncFromContext(context);
+    final editing = RouteArgs.isEditingFromProfile;
 
-          return Obx(() {
-            if (planController.isLoading.value) {
-              return const Center(child: CircularProgressIndicator());
+    return PopScope(
+      canPop: editing,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        unawaited(
+          controller.goToPreviousOnboardingStep(AppRoutes.dailyCalorieGoal),
+        );
+      },
+      child: Scaffold(
+        backgroundColor: _pageBg,
+        appBar: AppAppBar.backOnly(
+          onBack: () {
+            if (editing) {
+              Get.back<void>();
+              return;
             }
+            unawaited(
+              controller.goToPreviousOnboardingStep(AppRoutes.dailyCalorieGoal),
+            );
+          },
+        ),
+        body: GetBuilder<UserController>(
+          builder: (_) {
+            final user = controller.user;
+            final r = context.responsive;
+            final planController = Get.find<NutritionPlanController>();
+            final goal = user.dailyCalorieGoal;
+            final canDecrease = goal > UserController.minDailyCalories;
+            final canIncrease = goal < UserController.maxDailyCalories;
 
-            return SetupScreenLayout(
+            return Obx(() {
+              if (planController.isLoading.value &&
+                  !controller.isRefreshingWeightTarget.value) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final refreshing = controller.isRefreshingWeightTarget.value;
+              final showWeightChoice =
+                  !editing && controller.shouldShowWeightTargetChoice;
+
+              return SetupScreenLayout(
                 scrollable: true,
                 content: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -59,7 +88,7 @@ class DailyCalorieGoalView extends GetView<UserController> {
                     _PlanTitle(firstName: user.firstName),
                     SizedBox(height: r.scale(8)),
                     Text(
-                      'A personalized plan designed around your goals and lifestyle.',
+                      'Built around your goals and lifestyle.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: r.scale(14, tablet: 15),
@@ -68,18 +97,47 @@ class DailyCalorieGoalView extends GetView<UserController> {
                       ),
                     ),
                     SizedBox(height: r.scale(28)),
-                    _DailyCaloriesCard(
-                      goal: goal,
-                      goalLabel: user.goal?.title ?? 'Maintain Weight',
-                      showAdjusters: editing,
-                      canDecrease: canDecrease,
-                      canIncrease: canIncrease,
-                      onDecrease: () => controller.adjustCalorieGoal(
-                        -UserController.calorieStep,
-                      ),
-                      onIncrease: () => controller.adjustCalorieGoal(
-                        UserController.calorieStep,
-                      ),
+                    Stack(
+                      children: [
+                        _DailyCaloriesCard(
+                          goal: goal,
+                          goalType: user.goal ?? GoalType.maintainWeight,
+                          currentWeightKg: user.weightKg.toDouble(),
+                          targetWeightKg: user.goalWeightKg,
+                          goalExplanation: _WeightTargetSection.planGoalExplanation(
+                            user.goal ?? GoalType.maintainWeight,
+                            user.weightKg.toDouble(),
+                            user.goalWeightKg,
+                          ),
+                          showAdjusters: editing,
+                          canDecrease: canDecrease,
+                          canIncrease: canIncrease,
+                          onDecrease: () => controller.adjustCalorieGoal(
+                            -UserController.calorieStep,
+                          ),
+                          onIncrease: () => controller.adjustCalorieGoal(
+                            UserController.calorieStep,
+                          ),
+                        ),
+                        if (refreshing)
+                          Positioned.fill(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: AppColors.card.withValues(alpha: 0.72),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     SizedBox(height: r.scale(28)),
                     Text(
@@ -92,32 +150,58 @@ class DailyCalorieGoalView extends GetView<UserController> {
                       ),
                     ),
                     SizedBox(height: r.scale(14)),
-                    _MacroNutrientRow(
-                      icon: Icons.eco_rounded,
-                      label: 'Carbohydrates',
-                      grams: user.carbsGoalG,
-                      rangeLabel: '45–65%',
-                      color: _carbsColor,
-                      progress: _macroProgress(user, user.carbsGoalG, 4),
+                    Opacity(
+                      opacity: refreshing ? 0.55 : 1,
+                      child: Column(
+                        children: [
+                          _MacroNutrientRow(
+                            icon: Icons.eco_rounded,
+                            label: 'Carbohydrates',
+                            grams: user.carbsGoalG,
+                            rangeLabel: '45–65%',
+                            color: _carbsColor,
+                            progress: _macroProgress(user, user.carbsGoalG, 4),
+                          ),
+                          SizedBox(height: r.scale(14)),
+                          _MacroNutrientRow(
+                            icon: Icons.fitness_center_rounded,
+                            label: 'Protein',
+                            grams: user.proteinGoalG,
+                            rangeLabel: '20–30%',
+                            color: _proteinColor,
+                            progress:
+                                _macroProgress(user, user.proteinGoalG, 4),
+                          ),
+                          SizedBox(height: r.scale(14)),
+                          _MacroNutrientRow(
+                            icon: Icons.water_drop_outlined,
+                            label: 'Fats',
+                            grams: user.fatGoalG,
+                            rangeLabel: '20–35%',
+                            color: _fatColor,
+                            progress: _macroProgress(user, user.fatGoalG, 9),
+                          ),
+                        ],
+                      ),
                     ),
-                    SizedBox(height: r.scale(14)),
-                    _MacroNutrientRow(
-                      icon: Icons.fitness_center_rounded,
-                      label: 'Protein',
-                      grams: user.proteinGoalG,
-                      rangeLabel: '20–30%',
-                      color: _proteinColor,
-                      progress: _macroProgress(user, user.proteinGoalG, 4),
-                    ),
-                    SizedBox(height: r.scale(14)),
-                    _MacroNutrientRow(
-                      icon: Icons.water_drop_outlined,
-                      label: 'Fats',
-                      grams: user.fatGoalG,
-                      rangeLabel: '20–35%',
-                      color: _fatColor,
-                      progress: _macroProgress(user, user.fatGoalG, 9),
-                    ),
+                    if (showWeightChoice) ...[
+                      SizedBox(height: r.scale(24)),
+                      _WeightTargetSection(
+                        goal: user.goal!,
+                        currentWeightKg: user.weightKg.toDouble(),
+                        userTargetKg: controller.resolvedUserGoalWeightKg!,
+                        aiTargetKg: controller.resolvedAiGoalWeightKg!,
+                        selected: controller.weightTargetSource.value,
+                        enabled: !refreshing,
+                        onSelect: (source) async {
+                          final error =
+                              await controller.selectWeightTarget(source);
+                          if (error != null) {
+                            AppSnackbar.error(error, title: 'Plan update failed');
+                          }
+                        },
+                      ),
+                    ],
                     SizedBox(height: r.scale(24)),
                     _OptimizationBox(
                       goalLabel: user.goal?.summaryLabel ?? 'Maintenance',
@@ -127,18 +211,21 @@ class DailyCalorieGoalView extends GetView<UserController> {
                 ),
                 action: PrimaryButton(
                   label: editing ? 'Save' : 'Start Tracking',
-                  onPressed: () async {
-                    if (editing) {
-                      controller.notifyGoalConsumers();
-                      Get.back();
-                      return;
-                    }
-                    await controller.finishOnboardingSetup();
-                  },
+                  onPressed: refreshing
+                      ? null
+                      : () async {
+                          if (editing) {
+                            controller.notifyGoalConsumers();
+                            Get.back();
+                            return;
+                          }
+                          await controller.finishOnboardingSetup();
+                        },
                 ),
               );
-          });
-        },
+            });
+          },
+        ),
       ),
     );
   }
@@ -160,32 +247,289 @@ class DailyCalorieGoalView extends GetView<UserController> {
   }
 }
 
+class _WeightTargetSection extends StatelessWidget {
+  const _WeightTargetSection({
+    required this.goal,
+    required this.currentWeightKg,
+    required this.userTargetKg,
+    required this.aiTargetKg,
+    required this.selected,
+    required this.enabled,
+    required this.onSelect,
+  });
+
+  final GoalType goal;
+  final double currentWeightKg;
+  final double userTargetKg;
+  final double aiTargetKg;
+  final WeightTargetSource selected;
+  final bool enabled;
+  final ValueChanged<WeightTargetSource> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Container(
+      padding: EdgeInsets.all(r.scale(14)),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Choose your weight target',
+            style: TextStyle(
+              fontSize: r.scale(16, tablet: 17),
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: r.scale(12)),
+          _WeightTargetOptionCard(
+            title: 'Your goal',
+            changeLabel: changeLabel(goal, currentWeightKg, userTargetKg),
+            targetLabel: 'Target ${_formatKg(userTargetKg)} kg',
+            selected: selected == WeightTargetSource.user,
+            enabled: enabled,
+            onTap: () => onSelect(WeightTargetSource.user),
+          ),
+          SizedBox(height: r.scale(10)),
+          _WeightTargetOptionCard(
+            title: 'AI recommended',
+            changeLabel: changeLabel(goal, currentWeightKg, aiTargetKg),
+            targetLabel: 'Target ${_formatKg(aiTargetKg)} kg',
+            helper: 'Steadier pace for your profile',
+            selected: selected == WeightTargetSource.ai,
+            enabled: enabled,
+            onTap: () => onSelect(WeightTargetSource.ai),
+          ),
+          SizedBox(height: r.scale(12)),
+          Text(
+            'Choosing a target updates your calorie plan.',
+            style: TextStyle(
+              fontSize: r.scale(12),
+              color: AppColors.textSecondary,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatKg(double kg) {
+    return kg == kg.roundToDouble()
+        ? kg.toStringAsFixed(0)
+        : kg.toStringAsFixed(1);
+  }
+
+  static String changeLabel(
+    GoalType goal,
+    double currentKg,
+    double targetKg,
+  ) {
+    final delta = (targetKg - currentKg).abs();
+    if (goal == GoalType.maintainWeight || delta < 0.1) {
+      return 'Keep current weight';
+    }
+    final amount = _formatKg(delta);
+    return switch (goal) {
+      GoalType.loseWeight => 'Lose $amount kg',
+      GoalType.gainWeight => 'Gain $amount kg',
+      GoalType.maintainWeight => 'Keep current weight',
+    };
+  }
+
+  /// Longer AI-style copy for the daily calories card.
+  static String planGoalExplanation(
+    GoalType goal,
+    double currentKg,
+    double targetKg,
+  ) {
+    final delta = (targetKg - currentKg).abs();
+    final target = _formatKg(targetKg);
+    if (goal == GoalType.maintainWeight || delta < 0.1) {
+      return 'AI set this daily calorie target to help you maintain '
+          'your weight at $target kg.';
+    }
+    final amount = _formatKg(delta);
+    return switch (goal) {
+      GoalType.loseWeight =>
+        'AI set this daily calorie target to help you lose $amount kg '
+            'and reach $target kg.',
+      GoalType.gainWeight =>
+        'AI set this daily calorie target to help you gain $amount kg '
+            'and reach $target kg.',
+      GoalType.maintainWeight =>
+        'AI set this daily calorie target to help you maintain '
+            'your weight at $target kg.',
+    };
+  }
+}
+
+class _WeightTargetOptionCard extends StatelessWidget {
+  const _WeightTargetOptionCard({
+    required this.title,
+    required this.changeLabel,
+    required this.targetLabel,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+    this.helper,
+  });
+
+  final String title;
+  final String changeLabel;
+  final String targetLabel;
+  final String? helper;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Material(
+      color: selected
+          ? AppColors.primary.withValues(alpha: 0.06)
+          : AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: EdgeInsets.all(r.scale(12)),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? AppColors.primary
+                  : AppColors.border.withValues(alpha: 0.8),
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.only(top: r.scale(2)),
+                child: Icon(
+                  selected
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_off_rounded,
+                  size: r.scale(20),
+                  color: selected ? AppColors.primary : AppColors.textSecondary,
+                ),
+              ),
+              SizedBox(width: r.scale(10)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: r.scale(13),
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        if (selected)
+                          Icon(
+                            Icons.check_circle_rounded,
+                            size: r.scale(18),
+                            color: AppColors.primary,
+                          ),
+                      ],
+                    ),
+                    SizedBox(height: r.scale(4)),
+                    Text(
+                      changeLabel,
+                      style: TextStyle(
+                        fontSize: r.scale(17, tablet: 18),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: r.scale(2)),
+                    Text(
+                      targetLabel,
+                      style: TextStyle(
+                        fontSize: r.scale(13),
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    if (helper != null) ...[
+                      SizedBox(height: r.scale(4)),
+                      Text(
+                        helper!,
+                        style: TextStyle(
+                          fontSize: r.scale(11),
+                          color: AppColors.textSecondary,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HeaderStar extends StatelessWidget {
   const _HeaderStar();
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final glowAlpha = AppColors.isDark(context) ? 0.18 : 0.25;
 
     return Center(
-      child: Container(
-        width: r.scale(52),
-        height: r.scale(52),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: DailyCalorieGoalView._carbsColor.withValues(alpha: 0.12),
-          boxShadow: [
-            BoxShadow(
-              color: DailyCalorieGoalView._carbsColor.withValues(alpha: 0.25),
-              blurRadius: 24,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: Icon(
-          Icons.auto_awesome_rounded,
-          size: r.scale(24),
-          color: DailyCalorieGoalView._carbsColor,
+      child: Padding(
+        // Keep the soft glow inside the scroll clip bounds.
+        padding: EdgeInsets.all(r.scale(10)),
+        child: Container(
+          width: r.scale(52),
+          height: r.scale(52),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: DailyCalorieGoalView._carbsColor.withValues(alpha: 0.12),
+            boxShadow: [
+              BoxShadow(
+                color: DailyCalorieGoalView._carbsColor.withValues(
+                  alpha: glowAlpha,
+                ),
+                blurRadius: 18,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.auto_awesome_rounded,
+            size: r.scale(24),
+            color: DailyCalorieGoalView._carbsColor,
+          ),
         ),
       ),
     );
@@ -200,25 +544,28 @@ class _PlanTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final baseStyle = TextStyle(
+      fontSize: r.scale(26, tablet: 28),
+      fontWeight: FontWeight.w700,
+      color: AppColors.textPrimary,
+      height: 1.3,
+      letterSpacing: -0.5,
+    );
 
-    return RichText(
-      textAlign: TextAlign.center,
-      text: TextSpan(
-        style: TextStyle(
-          fontSize: r.scale(26, tablet: 28),
-          fontWeight: FontWeight.w700,
-          color: AppColors.textPrimary,
-          height: 1.25,
-          letterSpacing: -0.5,
-        ),
+    return Text.rich(
+      TextSpan(
+        style: baseStyle,
         children: [
           const TextSpan(text: 'Your nutrition plan is ready,\n'),
           TextSpan(
             text: '$firstName.',
-            style: TextStyle(color: DailyCalorieGoalView._carbsColor),
+            style: baseStyle.copyWith(
+              color: DailyCalorieGoalView._carbsColor,
+            ),
           ),
         ],
       ),
+      textAlign: TextAlign.center,
     );
   }
 }
@@ -226,7 +573,10 @@ class _PlanTitle extends StatelessWidget {
 class _DailyCaloriesCard extends StatelessWidget {
   const _DailyCaloriesCard({
     required this.goal,
-    required this.goalLabel,
+    required this.goalType,
+    required this.currentWeightKg,
+    required this.targetWeightKg,
+    required this.goalExplanation,
     required this.showAdjusters,
     required this.canDecrease,
     required this.canIncrease,
@@ -235,16 +585,35 @@ class _DailyCaloriesCard extends StatelessWidget {
   });
 
   final int goal;
-  final String goalLabel;
+  final GoalType goalType;
+  final double currentWeightKg;
+  final double targetWeightKg;
+  final String goalExplanation;
   final bool showAdjusters;
   final bool canDecrease;
   final bool canIncrease;
   final VoidCallback onDecrease;
   final VoidCallback onIncrease;
 
+  IconData get _goalIcon => switch (goalType) {
+        GoalType.loseWeight => Icons.trending_down_rounded,
+        GoalType.gainWeight => Icons.trending_up_rounded,
+        GoalType.maintainWeight => Icons.balance_rounded,
+      };
+
+  String _formatKg(double kg) {
+    return kg == kg.roundToDouble()
+        ? kg.toStringAsFixed(0)
+        : kg.toStringAsFixed(1);
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final currentLabel = '${_formatKg(currentWeightKg)} kg';
+    final targetLabel = '${_formatKg(targetWeightKg)} kg';
+    final isMaintain = goalType == GoalType.maintainWeight ||
+        (targetWeightKg - currentWeightKg).abs() < 0.1;
 
     return Container(
       padding: EdgeInsets.all(r.scale(20)),
@@ -312,12 +681,57 @@ class _DailyCaloriesCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: r.scale(14)),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: r.scale(10),
+                    vertical: r.scale(6),
+                  ),
+                  decoration: BoxDecoration(
+                    color: DailyCalorieGoalView._carbsColor.withValues(
+                      alpha: 0.12,
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _goalIcon,
+                        size: r.scale(14),
+                        color: DailyCalorieGoalView._carbsColor,
+                      ),
+                      SizedBox(width: r.scale(5)),
+                      Text(
+                        goalType.title,
+                        style: TextStyle(
+                          fontSize: r.scale(12),
+                          fontWeight: FontWeight.w700,
+                          color: DailyCalorieGoalView._carbsColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: r.scale(10)),
                 Text(
-                  goalLabel,
+                  isMaintain
+                      ? 'Target weight  $targetLabel'
+                      : '$currentLabel  →  $targetLabel',
                   style: TextStyle(
-                    fontSize: r.scale(13),
+                    fontSize: r.scale(14, tablet: 15),
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                SizedBox(height: r.scale(6)),
+                Text(
+                  goalExplanation,
+                  style: TextStyle(
+                    fontSize: r.scale(12, tablet: 13),
                     color: AppColors.textSecondary,
                     fontWeight: FontWeight.w500,
+                    height: 1.4,
                   ),
                 ),
                 if (showAdjusters) ...[
@@ -525,10 +939,16 @@ class _MacroNutrientRow extends StatelessWidget {
           width: r.scale(40),
           height: r.scale(40),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.14),
+            color: color.withValues(
+              alpha: AppColors.isDark(context) ? 0.22 : 0.14,
+            ),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, size: r.scale(20), color: color),
+          child: Icon(
+            icon,
+            size: r.scale(20),
+            color: color,
+          ),
         ),
         SizedBox(width: r.scale(12)),
         Expanded(
@@ -605,6 +1025,7 @@ class _OptimizationBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final isDark = AppColors.isDark(context);
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -612,7 +1033,7 @@ class _OptimizationBox extends StatelessWidget {
         vertical: r.scale(16),
       ),
       decoration: BoxDecoration(
-        color: AppColors.onPrimary.withValues(alpha: 0.7),
+        color: isDark ? AppColors.surface : AppColors.lightSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
       ),
@@ -635,7 +1056,7 @@ class _OptimizationBox extends StatelessWidget {
                       'This plan is optimized for your $goalLabel goal.',
                       style: TextStyle(
                         fontSize: r.scale(12),
-                        color: AppColors.textSecondary,
+                        color: AppColors.textPrimary,
                         height: 1.4,
                       ),
                     ),

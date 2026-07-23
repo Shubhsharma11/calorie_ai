@@ -11,11 +11,17 @@ class MealsRepository {
   Future<List<MealEntry>> fetchMeals({
     required String accessToken,
     DateTime? date,
+    String? period,
+    DateTime? fromDate,
+    DateTime? toDate,
   }) async {
     try {
       return await _apiService.fetchMeals(
         accessToken: accessToken,
         date: date,
+        period: period,
+        fromDate: fromDate,
+        toDate: toDate,
       );
     } on MealsApiException {
       rethrow;

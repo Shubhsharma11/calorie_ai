@@ -36,6 +36,8 @@ class OnboardingGoal {
     required this.targetDate,
     required this.goalWeight,
     required this.goalWeightUnit,
+    required this.goalTimeline,
+    this.goalTimelineCustomDate,
   });
 
   final String type;
@@ -43,6 +45,11 @@ class OnboardingGoal {
   final String targetDate;
   final num goalWeight;
   final String goalWeightUnit;
+  final String goalTimeline;
+  final String? goalTimelineCustomDate;
+
+
+
 
   Map<String, dynamic> toJson() => {
     'type': type,
@@ -50,6 +57,9 @@ class OnboardingGoal {
     'targetDate': targetDate,
     'goalWeight': goalWeight,
     'goalWeightUnit': goalWeightUnit,
+    'goalTimeline': goalTimeline,
+    if (goalTimelineCustomDate != null)
+      'goalTimelineCustomDate': goalTimelineCustomDate,
   };
 }
 
@@ -84,6 +94,8 @@ class OnboardingHealthProblem {
     );
   }
 
+
+
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{
       'category': category,
@@ -102,12 +114,20 @@ class OnboardingRequestModel {
     required this.activityLevel,
     required this.goalType,
     required this.healthProblems,
+    required this.goalWeight,
+    required this.goalWeightUnit,
+    required this.goalTimeline,
+    this.goalTimelineCustomDate,
   });
 
   final OnboardingPersonalDetails personalDetails;
   final String activityLevel;
   final List<OnboardingHealthProblem> healthProblems;
   final String goalType;
+  final num goalWeight;
+  final String goalWeightUnit;
+  final String goalTimeline;
+  final String? goalTimelineCustomDate;
 
   OnboardingHealthProblem? get primaryHealthProblem =>
       healthProblems.isEmpty ? null : healthProblems.first;
@@ -118,6 +138,11 @@ class OnboardingRequestModel {
       'goal': goalType,
       'activityLevel': activityLevel,
       'healthProblems': healthProblems.map((problem) => problem.toJson()).toList(),
+      'goalWeight': goalWeight,
+      'goalWeightUnit': goalWeightUnit,
+      'goalTimeline': goalTimeline,
+      if (goalTimelineCustomDate != null)
+        'goalTimelineCustomDate': goalTimelineCustomDate,
     };
   }
 
@@ -152,7 +177,16 @@ class OnboardingRequestModel {
       healthProblems: concerns
           .map(OnboardingHealthProblem.fromConcern)
           .toList(growable: false),
+      goalWeight: _roundGoalWeight(user.goalWeightKg),
+      goalWeightUnit: 'kg',
+      goalTimeline: user.goalTimeline,
+      goalTimelineCustomDate: user.goalTimelineCustomDate,
     );
+  }
+
+  static num _roundGoalWeight(double kg) {
+    final rounded = double.parse(kg.toStringAsFixed(1));
+    return rounded == rounded.roundToDouble() ? rounded.round() : rounded;
   }
 }
 
@@ -262,6 +296,24 @@ class OnboardingPatchModel {
     );
   }
 
+  factory OnboardingPatchModel.goalWeightOnly(
+    double goalWeightKg, {
+    String? goalTimeline,
+    String? goalTimelineCustomDate,
+  }) {
+    return OnboardingPatchModel._(
+      extraFields: {
+        'goalWeight': goalWeightKg,
+        'goalWeightUnit': 'kg',
+        'isGoalWeightManual': true,
+        if (goalTimeline != null && goalTimeline.isNotEmpty)
+          'goalTimeline': goalTimeline,
+        if (goalTimelineCustomDate != null && goalTimelineCustomDate.isNotEmpty)
+          'goalTimelineCustomDate': goalTimelineCustomDate,
+      },
+    );
+  }
+
   factory OnboardingPatchModel.goal(GoalType goal) {
     return OnboardingPatchModel._(goal: goal.apiValue);
   }
@@ -296,6 +348,17 @@ class OnboardingPatchModel {
     }
     if (!_isSameDate(user.targetDate, baseline.targetDate)) {
       extras['targetDate'] = _formatApiDate(user.targetDate);
+      extras['goalTimeline'] = user.goalTimeline;
+      final customDate = user.goalTimelineCustomDate;
+      if (customDate != null) {
+        extras['goalTimelineCustomDate'] = customDate;
+      }
+    } else if (extras.containsKey('goalWeight')) {
+      extras['goalTimeline'] = user.goalTimeline;
+      final customDate = user.goalTimelineCustomDate;
+      if (customDate != null) {
+        extras['goalTimelineCustomDate'] = customDate;
+      }
     }
 
     return OnboardingPatchModel._(

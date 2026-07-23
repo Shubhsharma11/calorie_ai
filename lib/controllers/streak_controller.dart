@@ -91,7 +91,8 @@ class StreakController extends GetxController {
   Future<void> _bootstrap() async {
     await _ready;
     revision.value++;
-    await refreshFromApi();
+    // Streak unused — do not hit GET /api/v1/meals/streak on startup.
+    // await refreshFromApi();
   }
 
   Future<void> _loadMetadata() async {
@@ -122,6 +123,13 @@ class StreakController extends GetxController {
   }
 
   Future<void> refreshFromApi() async {
+    // Streak is unused in the app — skip GET /api/v1/meals/streak.
+    debugPrint(
+      'StreakController: refreshFromApi skipped (streak feature disabled)',
+    );
+    return;
+
+    // ignore: dead_code
     debugPrint('StreakController: refreshFromApi entered');
     if (_isFetchingApi) {
       _pendingRefresh = true;
@@ -178,6 +186,9 @@ class StreakController extends GetxController {
   }
 
   Future<void> onMealsChanged() async {
+    // Streak unused — do not refresh streak API when meals change.
+    return;
+    // ignore: dead_code
     await _ready;
 
     if (!Get.isRegistered<UserController>()) return;
@@ -192,6 +203,9 @@ class StreakController extends GetxController {
   }
 
   Future<void> onAuthChanged() async {
+    // Streak unused — do not refresh streak API on auth changes.
+    return;
+    // ignore: dead_code
     await _ready;
     revision.value++;
     await refreshFromApi();

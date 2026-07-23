@@ -4,6 +4,14 @@ import 'package:flutter/material.dart';
 abstract final class AppColors {
   static bool _isDark = false;
 
+  /// When set (e.g. Settings open), [syncFromContext] uses this instead of
+  /// [Theme.of] so a deferred shell Theme cannot wipe appearance toggles.
+  static Brightness Function()? _overlayBrightness;
+
+  static void setOverlayBrightnessResolver(Brightness Function()? resolver) {
+    _overlayBrightness = resolver;
+  }
+
   /// Keeps [AppColors] getters in sync with the active [ThemeData].
   static void syncWithBrightness(Brightness brightness) {
     _isDark = brightness == Brightness.dark;
@@ -11,6 +19,11 @@ abstract final class AppColors {
 
   /// Prefer this at the top of a screen build so [AppColors] matches [Theme].
   static void syncFromContext(BuildContext context) {
+    final overlay = _overlayBrightness;
+    if (overlay != null) {
+      syncWithBrightness(overlay());
+      return;
+    }
     syncWithBrightness(Theme.of(context).brightness);
   }
 

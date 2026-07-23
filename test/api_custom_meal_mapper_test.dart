@@ -6,76 +6,141 @@ import 'package:calorie_ai/models/saved_meal_item.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('ApiCustomMealMapper builds POST body with item macros', () {
-    const oats = FoodItem(
-      name: 'oats',
-      caloriesPer100g: 389,
-      protein: 13,
-      carbs: 66,
-      fat: 7,
+  test('ApiCustomMealMapper builds POST /api/v1/my-meals body', () {
+    const chicken = FoodItem(
+      name: 'chicken breast',
+      caloriesPer100g: 165,
+      protein: 31,
+      carbs: 0,
+      fat: 3.6,
     );
-    const honey = FoodItem(
-      name: 'honey',
-      caloriesPer100g: 300,
-      protein: 0,
-      carbs: 80,
-      fat: 0,
-    );
-    const banana = FoodItem(
-      name: 'banana',
-      caloriesPer100g: 90,
-      protein: 1,
-      carbs: 23,
-      fat: 0,
+    const rice = FoodItem(
+      name: 'rice',
+      caloriesPer100g: 130,
+      protein: 2.7,
+      carbs: 28,
+      fat: 0.3,
     );
 
     final preset = CustomMealPreset(
       id: 'local-1',
-      name: 'Oat Meal',
-      createdAt: DateTime(2026, 7, 10),
-      meal: MealType.breakfast,
-      visibility: MealShareVisibility.public,
+      name: 'Protein Bowl',
+      createdAt: DateTime(2026, 7, 17),
+      meal: MealType.lunch,
+      visibility: MealShareVisibility.onlyMe,
       items: [
-        SavedMealItem(food: oats, grams: 100, meal: MealType.breakfast),
-        SavedMealItem(food: honey, grams: 10, meal: MealType.breakfast),
-        SavedMealItem(food: banana, grams: 60, meal: MealType.breakfast),
+        SavedMealItem(food: chicken, grams: 150, meal: MealType.lunch),
+        SavedMealItem(food: rice, grams: 100, meal: MealType.lunch),
       ],
     );
 
     final body = ApiCustomMealMapper.toCreateRequestBody(preset);
 
-    expect(body['name'], 'Oat Meal');
-    expect(body['mealTime'], 'breakfast');
-    expect(body['visibility'], 'public');
-    expect(body['items'], [
-      {
-        'name': 'oats',
-        'quantity': 100,
-        'unit': 'gm',
-        'calories': 389,
-        'protein': 13,
-        'fat': 7,
-        'carbs': 66,
-      },
-      {
-        'name': 'honey',
-        'quantity': 10,
-        'unit': 'gm',
-        'calories': 30,
-        'protein': 0,
-        'fat': 0,
-        'carbs': 8,
-      },
-      {
-        'name': 'banana',
-        'quantity': 60,
-        'unit': 'gm',
-        'calories': 54,
-        'protein': 1,
-        'fat': 0,
-        'carbs': 14,
-      },
-    ]);
+    expect(body, {
+      'name': 'Protein Bowl',
+      'mealTime': 'lunch',
+      'visibility': 'private',
+      'items': [
+        {'name': 'chicken breast', 'quantity': 150, 'unit': 'g'},
+        {'name': 'rice', 'quantity': 100, 'unit': 'g'},
+      ],
+    });
+  });
+
+  test('ApiCustomMealMapper builds PATCH /api/v1/my-meals/:id body', () {
+    const chicken = FoodItem(
+      name: 'chicken breast',
+      caloriesPer100g: 165,
+      protein: 31,
+      carbs: 0,
+      fat: 3.6,
+    );
+    const rice = FoodItem(
+      name: 'rice',
+      caloriesPer100g: 130,
+      protein: 2.7,
+      carbs: 28,
+      fat: 0.3,
+    );
+
+    final preset = CustomMealPreset(
+      id: 'meal-1',
+      name: 'Updated Bowl',
+      createdAt: DateTime(2026, 7, 17),
+      meal: MealType.lunch,
+      visibility: MealShareVisibility.onlyMe,
+      items: [
+        SavedMealItem(food: chicken, grams: 150, meal: MealType.lunch),
+        SavedMealItem(food: rice, grams: 100, meal: MealType.lunch),
+      ],
+    );
+
+    final body = ApiCustomMealMapper.toPatchRequestBody(
+      preset: preset,
+      imageUrl: 'https://example.com/bowl.jpg',
+    );
+
+    expect(body['name'], 'Updated Bowl');
+    expect(body['mealTime'], 'lunch');
+    expect(body['visibility'], 'private');
+    expect(body['image'], 'https://example.com/bowl.jpg');
+    expect(body['calories'], preset.totalCalories);
+    expect(body['protein'], isA<num>());
+    expect(body['carbs'], isA<num>());
+    expect(body['fat'], isA<num>());
+    expect(body.containsKey('items'), isFalse);
+  });
+
+  test('ApiCustomMealMapper omits empty image from PATCH body', () {
+    final preset = CustomMealPreset(
+      id: 'meal-1',
+      name: 'Updated Bowl',
+      createdAt: DateTime(2026, 7, 17),
+      meal: MealType.lunch,
+      visibility: MealShareVisibility.onlyMe,
+      items: const [
+        SavedMealItem(
+          food: FoodItem(
+            name: 'rice',
+            caloriesPer100g: 130,
+            protein: 2.7,
+            carbs: 28,
+            fat: 0.3,
+          ),
+          grams: 100,
+          meal: MealType.lunch,
+        ),
+      ],
+    );
+
+    final body = ApiCustomMealMapper.toPatchRequestBody(preset: preset);
+    expect(body.containsKey('image'), isFalse);
+  });
+
+  test('ApiCustomMealMapper maps snacks mealTime to snack', () {
+    final preset = CustomMealPreset(
+      id: 'local-2',
+      name: 'Snack Pack',
+      createdAt: DateTime(2026, 7, 17),
+      meal: MealType.snacks,
+      items: const [
+        SavedMealItem(
+          food: FoodItem(
+            name: 'almonds',
+            caloriesPer100g: 579,
+            protein: 21,
+            carbs: 22,
+            fat: 50,
+          ),
+          grams: 30,
+          meal: MealType.snacks,
+        ),
+      ],
+    );
+
+    final body = ApiCustomMealMapper.toCreateRequestBody(preset);
+    expect(body['mealTime'], 'snack');
+    expect(body['visibility'], 'private');
   });
 
   test('ApiCustomMealMapper maps wrapped create response', () {
@@ -118,7 +183,7 @@ void main() {
             {
               'name': 'oats',
               'quantity': 100,
-              'unit': 'gm',
+              'unit': 'g',
               'calories': 389,
               'protein': 13,
               'fat': 7,
@@ -153,7 +218,7 @@ void main() {
             {
               'name': 'oats',
               'quantity': 100,
-              'unit': 'gm',
+              'unit': 'g',
               'calories': 389,
               'protein': 13,
               'fat': 7,
@@ -164,13 +229,13 @@ void main() {
         {
           'id': 'custom-2',
           'name': 'Misal Pav',
-          'mealTime': 'snacks',
+          'mealTime': 'snack',
           'visibility': 'private',
           'items': [
             {
               'name': 'misal',
               'quantity': 250,
-              'unit': 'gm',
+              'unit': 'g',
               'calories': 300,
               'protein': 10,
               'fat': 12,
@@ -188,5 +253,44 @@ void main() {
     expect(presets.last.id, 'custom-2');
     expect(presets.last.meal, MealType.snacks);
     expect(presets.last.visibility, MealShareVisibility.onlyMe);
+  });
+
+  test('ApiCustomMealMapper reads myMealId from response', () {
+    final source = CustomMealPreset(
+      id: 'local-1',
+      name: 'Protein Bowl',
+      createdAt: DateTime(2026, 7, 17),
+      meal: MealType.lunch,
+      items: const [
+        SavedMealItem(
+          food: FoodItem(
+            name: 'rice',
+            caloriesPer100g: 130,
+            protein: 2.7,
+            carbs: 28,
+            fat: 0.3,
+          ),
+          grams: 100,
+          meal: MealType.lunch,
+        ),
+      ],
+    );
+
+    final preset = ApiCustomMealMapper.presetFromResponse(
+      {
+        'data': {
+          'myMealId': 'srv-meal-42',
+          'name': 'Protein Bowl',
+          'mealTime': 'lunch',
+          'visibility': 'private',
+          'items': [
+            {'name': 'rice', 'quantity': 100, 'unit': 'g'},
+          ],
+        },
+      },
+      source: source,
+    );
+
+    expect(preset.id, 'srv-meal-42');
   });
 }

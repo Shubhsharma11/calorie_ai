@@ -1,5 +1,6 @@
 import 'package:calorie_ai/models/api_weight_mapper.dart';
 import 'package:calorie_ai/models/meal_entry.dart';
+import 'package:calorie_ai/models/weight_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -28,6 +29,39 @@ void main() {
     expect(entries.first.date, DateTime(2026, 6, 27));
     expect(entries.last.kg, 68);
     expect(entries.last.id, 'w-2');
+  });
+
+  test('collapseToLatestPerDay keeps newest same-day log by createdAt', () {
+    final entries = ApiWeightMapper.entriesFromResponse({
+      'success': true,
+      'data': {
+        'entries': [
+          {
+            'id': 'newest',
+            'weightKg': 60,
+            'recordedAt': '2026-07-16T12:00:00.000Z',
+            'createdAt': '2026-07-16T11:02:57.540Z',
+          },
+          {
+            'id': 'mid',
+            'weightKg': 36,
+            'recordedAt': '2026-07-16T12:00:00.000Z',
+            'createdAt': '2026-07-16T10:55:31.966Z',
+          },
+          {
+            'id': 'oldest',
+            'weightKg': 150,
+            'recordedAt': '2026-07-16T12:00:00.000Z',
+            'createdAt': '2026-07-16T09:00:00.000Z',
+          },
+        ],
+      },
+    });
+
+    final collapsed = WeightEntry.collapseToLatestPerDay(entries);
+    expect(collapsed, hasLength(1));
+    expect(collapsed.single.kg, 60);
+    expect(collapsed.single.id, 'newest');
   });
 
   test('ApiWeightMapper maps single date weight entry', () {

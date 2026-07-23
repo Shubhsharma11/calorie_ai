@@ -28,8 +28,16 @@ class MealsApiService {
   Future<List<MealEntry>> fetchMeals({
     required String accessToken,
     DateTime? date,
+    String? period,
+    DateTime? fromDate,
+    DateTime? toDate,
   }) async {
-    final endpoint = ApiEndpoints.mealsWithQuery(date: date);
+    final endpoint = ApiEndpoints.mealsWithQuery(
+      date: date,
+      period: period,
+      fromDate: fromDate,
+      toDate: toDate,
+    );
     debugPrint('MealsApiService: GET ${ApiEndpoints.url(endpoint)}');
 
     final response = await _apiClient.get(

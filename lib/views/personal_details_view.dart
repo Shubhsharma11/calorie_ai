@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
+import '../controllers/settings_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_snackbar.dart';
 import '../core/body_measurement_units.dart';
@@ -24,6 +25,7 @@ class PersonalDetailsView extends StatefulWidget {
 
 class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   late final UserController _user = Get.find<UserController>();
+  late final SettingsController _settings = Get.find<SettingsController>();
   late final TextEditingController _ageCtrl;
   late final TextEditingController _heightCmCtrl;
   late final TextEditingController _heightFeetCtrl;
@@ -31,6 +33,11 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   late final TextEditingController _weightCtrl;
   late String _gender;
   late ProfileSyncSnapshot _baseline;
+
+  final _ageFocus = FocusNode();
+  final _genderFocus = FocusNode();
+  final _heightFocus = FocusNode();
+  final _weightFocus = FocusNode();
 
   bool _heightUseCm = true;
   bool _weightUseKg = true;
@@ -44,38 +51,85 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   static const _ageIconAsset = 'assets/image/age.svg';
   static const _genderIconAsset = 'assets/image/gemder.svg';
   static const _heightIconAsset = 'assets/image/height.svg';
-  static const _weightIconAsset = 'assets/image/weight2.2.svg';
+  static const _weightIconAsset = 'assets/image/gym.svg';
 
   @override
   void initState() {
     super.initState();
     final fromProfile = RouteArgs.isEditingFromProfile;
-    final u = _user.user;
+    _weightUseKg = _settings.useMetricUnits.value;
 
-    if (fromProfile) {
-      _gender = u.gender;
-      _ageCtrl = TextEditingController(text: '${u.age}');
-      _heightCmCtrl = TextEditingController(text: '${u.heightCm}');
+    if (fromProfile || _user.personalDetailsComplete) {
+      _seedPersonalFieldsFromUser(requireAll: true);
+    } else {
+      if (!_user.hasOnboardingDraft) {
+        _user.resetPersonalDetailsForOnboarding();
+      }
+      _seedPersonalFieldsFromUser(requireAll: false);
+    }
+
+    _ageCtrl.addListener(_onFieldChanged);
+    _heightCmCtrl.addListener(_onFieldChanged);
+    _heightFeetCtrl.addListener(_onFieldChanged);
+    _heightInchesCtrl.addListener(_onFieldChanged);
+    _weightCtrl.addListener(_onFieldChanged);
+
+    _baseline = _user.captureProfileSyncSnapshot();
+  }
+
+  void _seedPersonalFieldsFromUser({required bool requireAll}) {
+    final u = _user.user;
+    _gender = requireAll || u.gender.isNotEmpty ? u.gender : '';
+    _ageCtrl = TextEditingController(
+      text: requireAll || u.age > 0 ? '${u.age}' : '',
+    );
+    _heightCmCtrl = TextEditingController(
+      text: requireAll || u.heightCm > 0 ? '${u.heightCm}' : '',
+    );
+    if (requireAll || u.heightCm > 0) {
       final feetInches = BodyMeasurementUnits.feetInchesFromCm(u.heightCm);
       _heightFeetCtrl = TextEditingController(text: '${feetInches.feet}');
       _heightInchesCtrl = TextEditingController(text: '${feetInches.inches}');
-      _weightCtrl = TextEditingController(text: '${u.weightKg}');
     } else {
-      _gender = '';
-      _ageCtrl = TextEditingController();
-      _heightCmCtrl = TextEditingController();
       _heightFeetCtrl = TextEditingController();
       _heightInchesCtrl = TextEditingController();
-      _weightCtrl = TextEditingController();
+    }
+    _weightCtrl = TextEditingController(
+      text: requireAll || u.weightKg > 0
+          ? _weightUseKg
+              ? '${u.weightKg}'
+              : '${BodyMeasurementUnits.lbsFromKg(u.weightKg)}'
+          : '',
+    );
+  }
+
+  void _onFieldChanged() {
+    _clearAgeError();
+    _clearHeightError();
+    _clearWeightError();
+    _syncDraftFromFields();
+  }
+
+  void _syncDraftFromFields() {
+    if (RouteArgs.isEditingFromProfile) return;
+
+    final ageText = _ageCtrl.text.trim();
+    if (ageText.isEmpty) {
+      _user.user.age = 0;
+    } else {
+      final age = int.tryParse(ageText);
+      if (age != null) _user.user.age = age;
     }
 
-    _ageCtrl.addListener(_clearAgeError);
-    _heightCmCtrl.addListener(_clearHeightError);
-    _heightFeetCtrl.addListener(_clearHeightError);
-    _heightInchesCtrl.addListener(_clearHeightError);
-    _weightCtrl.addListener(_clearWeightError);
+    _user.user.gender = _gender;
 
-    _baseline = _user.captureProfileSyncSnapshot();
+    final height = _parseHeightCm();
+    _user.user.heightCm = height ?? 0;
+
+    final weight = _parseWeightKg();
+    _user.user.weightKg = weight ?? 0;
+
+    _user.scheduleOnboardingDraftSave();
   }
 
   void _clearAgeError() {
@@ -92,6 +146,10 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
 
   @override
   void dispose() {
+    _ageFocus.dispose();
+    _genderFocus.dispose();
+    _heightFocus.dispose();
+    _weightFocus.dispose();
     _ageCtrl.dispose();
     _heightCmCtrl.dispose();
     _heightFeetCtrl.dispose();
@@ -131,6 +189,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       _heightUseCm = useCm;
       _heightError = null;
     });
+    _syncDraftFromFields();
   }
 
   void _toggleWeightUnit(bool useKg) {
@@ -150,6 +209,12 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       _weightUseKg = useKg;
       _weightError = null;
     });
+    _syncDraftFromFields();
+  }
+
+  Future<void> _selectWeightUnit(bool useKg) async {
+    _toggleWeightUnit(useKg);
+    await _settings.toggleUseMetricUnits(useKg);
   }
 
   int? _parseHeightCm() {
@@ -249,8 +314,38 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
         weightError == null;
   }
 
+  void _scrollToFirstError() {
+    final focusNode = _ageError != null
+        ? _ageFocus
+        : _genderError != null
+            ? _genderFocus
+            : _heightError != null
+                ? _heightFocus
+                : _weightError != null
+                    ? _weightFocus
+                    : null;
+
+    if (focusNode == null) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      focusNode.requestFocus();
+      final context = focusNode.context;
+      if (context == null) return;
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        alignment: 0.12,
+      );
+    });
+  }
+
   Future<void> _save() async {
-    if (!_validateFields()) return;
+    if (!_validateFields()) {
+      _scrollToFirstError();
+      return;
+    }
 
     final age = int.parse(_ageCtrl.text.trim());
     final height = _parseHeightCm()!;
@@ -261,6 +356,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     u.gender = _gender;
     u.heightCm = height;
     u.weightKg = weight;
+    await _settings.toggleUseMetricUnits(_weightUseKg);
 
     if (RouteArgs.isEditingFromProfile) {
       final patch = OnboardingPatchModel.personalDetailsDiff(u, _baseline);
@@ -282,6 +378,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       Get.back();
       AppSnackbar.success('Personal details updated.');
     } else {
+      _user.markPersonalDetailsComplete();
       _user.onProfileUpdated();
       _user.syncWeightFromProfile();
       await _user.persistOnboardingStep(AppRoutes.goalSetup);
@@ -297,43 +394,54 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SetupScreenLayout(
-        scrollable: true,
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(height: r.scale(60, tablet: 68)),
-            _HeroSection(r: r, compact: compact),
-            SizedBox(height: r.scale(20)),
-            _DetailCard(
-              iconWidget: SvgPicture.asset(_ageIconAsset, fit: BoxFit.contain),
-              label: 'Age',
-              subtitle: 'Enter your age',
-              errorText: _ageError,
-              child: _NumberInput(
-                controller: _ageCtrl,
-                unit: 'years',
-                maxLength: 3,
-                hasError: _ageError != null,
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SetupScreenLayout(
+          scrollable: true,
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: r.scale(60, tablet: 68)),
+              _HeroSection(r: r, compact: compact),
+              SizedBox(height: r.scale(20)),
+              _DetailCard(
+                iconWidget: SvgPicture.asset(_ageIconAsset, fit: BoxFit.contain),
+                label: 'Age',
+                subtitle: 'Enter your age',
+                errorText: _ageError,
+                child: _NumberInput(
+                  controller: _ageCtrl,
+                  focusNode: _ageFocus,
+                  unit: 'years',
+                  maxLength: 3,
+                  hasError: _ageError != null,
+                ),
               ),
-            ),
             SizedBox(height: r.scale(12)),
-            _DetailCard(
-              iconWidget: SvgPicture.asset(
-                _genderIconAsset,
-                fit: BoxFit.contain,
-              ),
-              label: 'Gender',
-              subtitle: 'Select your gender',
-              errorText: _genderError,
-              child: _GenderDropdown(
-                value: _gender,
-                options: _genders,
-                hasError: _genderError != null,
-                onChanged: (g) => setState(() {
-                  _gender = g;
-                  _genderError = null;
-                }),
+            Focus(
+              focusNode: _genderFocus,
+              child: _DetailCard(
+                iconWidget: SvgPicture.asset(
+                  _genderIconAsset,
+                  fit: BoxFit.contain,
+                ),
+                label: 'Gender',
+                subtitle: 'Select your gender',
+                errorText: _genderError,
+                child: Padding(
+                  padding: EdgeInsets.only(top: r.scale(6)),
+                  child: _GenderDropdown(
+                    value: _gender,
+                    options: _genders,
+                    hasError: _genderError != null,
+                    onChanged: (g) => setState(() {
+                      _gender = g;
+                      _genderError = null;
+                      _syncDraftFromFields();
+                    }),
+                  ),
+                ),
               ),
             ),
             SizedBox(height: r.scale(12)),
@@ -350,6 +458,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
                 cmController: _heightCmCtrl,
                 feetController: _heightFeetCtrl,
                 inchesController: _heightInchesCtrl,
+                focusNode: _heightFocus,
                 hasError: _heightError != null,
                 onUnitTap: () => _toggleHeightUnit(!_heightUseCm),
               ),
@@ -365,10 +474,11 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
               errorText: _weightError,
               child: _NumberInput(
                 controller: _weightCtrl,
+                focusNode: _weightFocus,
                 unit: _weightUseKg ? 'kg' : 'lbs',
                 maxLength: 3,
                 hasError: _weightError != null,
-                onUnitTap: () => _toggleWeightUnit(!_weightUseKg),
+                onUnitTap: () => _selectWeightUnit(!_weightUseKg),
               ),
             ),
           ],
@@ -376,6 +486,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
         action: PrimaryButton(
           label: fromProfile ? 'Save' : 'Continue',
           onPressed: _save,
+        ),
         ),
       ),
     );
@@ -601,6 +712,7 @@ class _HeightInput extends StatelessWidget {
     required this.inchesController,
     required this.hasError,
     required this.onUnitTap,
+    this.focusNode,
   });
 
   final bool useCm;
@@ -609,6 +721,7 @@ class _HeightInput extends StatelessWidget {
   final TextEditingController inchesController;
   final bool hasError;
   final VoidCallback onUnitTap;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -617,6 +730,7 @@ class _HeightInput extends StatelessWidget {
     if (useCm) {
       return _NumberInput(
         controller: cmController,
+        focusNode: focusNode,
         unit: 'cm',
         maxLength: 3,
         hasError: hasError,
@@ -630,6 +744,7 @@ class _HeightInput extends StatelessWidget {
       children: [
         _NumberInput(
           controller: feetController,
+          focusNode: focusNode,
           maxLength: 1,
           hasError: hasError,
           showUnitLabel: false,
@@ -700,6 +815,7 @@ class _NumberInput extends StatelessWidget {
   const _NumberInput({
     required this.controller,
     required this.maxLength,
+    this.focusNode,
     this.unit = '',
     this.hasError = false,
     this.showUnitLabel = true,
@@ -708,6 +824,7 @@ class _NumberInput extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final String unit;
   final int maxLength;
   final bool hasError;
@@ -727,6 +844,7 @@ class _NumberInput extends StatelessWidget {
       width: fieldWidth,
       child: TextField(
         controller: controller,
+        focusNode: focusNode,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         maxLength: maxLength,
@@ -804,68 +922,43 @@ class _GenderDropdown extends StatelessWidget {
       color: AppColors.textPrimary,
     );
 
-    // Matches _NumberInput field height (vertical padding 10 + text).
-    return SizedBox(
-      width: r.scale(88),
-      height: r.scale(40),
-      child: Material(
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: r.scale(10),
+        vertical: r.scale(2),
+      ),
+      decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(fieldRadius),
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(fieldRadius),
-            border: Border.all(color: borderColor),
+        border: Border.all(color: borderColor),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: selected ? value : null,
+          isDense: true,
+          hint: Text(
+            'Select',
+            style: textStyle.copyWith(color: AppColors.textSecondary),
           ),
-          child: DropdownButtonHideUnderline(
-            child: ButtonTheme(
-              alignedDropdown: true,
-              child: DropdownButton<String>(
-                value: selected ? value : null,
-                isExpanded: true,
-                isDense: true,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                hint: Text(
-                  'Select',
-                  textAlign: TextAlign.center,
-                  style: textStyle.copyWith(color: AppColors.textSecondary),
-                ),
-                icon: Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: r.scale(18),
-                  color: AppColors.textSecondary,
-                ),
-                borderRadius: BorderRadius.circular(fieldRadius),
-                dropdownColor: AppColors.card,
-                style: textStyle,
-                selectedItemBuilder: (context) => options
-                    .map(
-                      (option) => Center(
-                        child: Text(
-                          option,
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                          style: textStyle,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                items: options
-                    .map(
-                      (option) => DropdownMenuItem(
-                        value: option,
-                        child: Center(
-                          child: Text(option, style: textStyle),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) onChanged(v);
-                },
-              ),
-            ),
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: r.scale(18),
+            color: AppColors.textSecondary,
           ),
+          borderRadius: BorderRadius.circular(fieldRadius),
+          dropdownColor: AppColors.card,
+          style: textStyle,
+          items: options
+              .map(
+                (option) => DropdownMenuItem(
+                  value: option,
+                  child: Text(option, style: textStyle),
+                ),
+              )
+              .toList(),
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
         ),
       ),
     );

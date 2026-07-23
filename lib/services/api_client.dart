@@ -68,9 +68,13 @@ class ApiClient {
     Map<String, String>? headers,
     String? baseUrl,
   }) {
+    // Avoid sending Content-Type without a body — some APIs reject that on DELETE.
+    final mergedHeaders = body == null
+        ? <String, String>{...?headers}
+        : _headers(headers);
     return _client.delete(
       _uri(endpoint, baseUrl: baseUrl),
-      headers: _headers(headers),
+      headers: mergedHeaders.isEmpty ? null : mergedHeaders,
       body: _encodeBody(body),
     );
   }

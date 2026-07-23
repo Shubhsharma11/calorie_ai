@@ -139,6 +139,10 @@ class MyGoalsView extends GetView<UserController> {
                     ),
                     SizedBox(height: r.scale(12)),
                     ProfileGoalProgressCard(progress: progress),
+                    SizedBox(
+                      height: MediaQuery.viewPaddingOf(context).bottom +
+                          r.scale(16),
+                    ),
                   ],
                 ),
               ),

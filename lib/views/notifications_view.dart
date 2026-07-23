@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/settings_controller.dart';
-import '../controllers/streak_controller.dart';
+// import '../controllers/streak_controller.dart';
 import '../controllers/tracker_controller.dart';
-import '../core/streak_calculator.dart';
+// import '../core/streak_calculator.dart';
 import '../core/responsive.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
@@ -102,7 +102,10 @@ class _NotificationsViewState extends State<NotificationsView> {
                     ),
                 ],
                 if (notifications.isEmpty) const _EmptyNotifications(),
-                SizedBox(height: r.scale(24)),
+                SizedBox(
+                  height: MediaQuery.viewPaddingOf(context).bottom +
+                      r.scale(24),
+                ),
               ],
             );
           }),
@@ -114,9 +117,10 @@ class _NotificationsViewState extends State<NotificationsView> {
     final tracker = Get.isRegistered<TrackerController>()
         ? Get.find<TrackerController>()
         : null;
-    final streak = Get.isRegistered<StreakController>()
-        ? Get.find<StreakController>()
-        : null;
+    // Streak unused.
+    // final streak = Get.isRegistered<StreakController>()
+    //     ? Get.find<StreakController>()
+    //     : null;
     final items = <_NotificationItem>[];
 
     if (!settings.pushNotifications.value) {
@@ -205,46 +209,21 @@ class _NotificationsViewState extends State<NotificationsView> {
       );
     }
 
-    if (settings.streakReminders.value) {
-      items.add(
-        const _NotificationItem(
-          id: 'wellness-tip',
-          icon: Icons.favorite_rounded,
-          title: 'Daily wellness tip',
-          body: 'A short walk after meals helps digestion.',
-          timeLabel: '3 h ago',
-          accentColor: Color(0xFFFF4F8B),
-          backgroundColor: Color(0xFFFFEDF4),
-        ),
-      );
-    }
+    // Streak unused — keep wellness tip without streak reminder setting.
+    items.add(
+      const _NotificationItem(
+        id: 'wellness-tip',
+        icon: Icons.favorite_rounded,
+        title: 'Daily wellness tip',
+        body: 'A short walk after meals helps digestion.',
+        timeLabel: '3 h ago',
+        accentColor: Color(0xFFFF4F8B),
+        backgroundColor: Color(0xFFFFEDF4),
+      ),
+    );
 
-    if (streak != null) {
-      final stats = streak.stats;
-      final achievedDays =
-          StreakMilestones.reachedBy(stats.currentStreak) ??
-          stats.longestStreak;
-      if (achievedDays > 0) {
-        items.add(
-          _NotificationItem(
-            id: 'streak-achievement',
-            icon: Icons.workspace_premium_rounded,
-            title: achievedDays >= 3
-                ? '$achievedDays Day Streak!'
-                : 'Streak Started!',
-            body: stats.hasLoggedToday
-                ? 'You logged today and kept your streak going.'
-                : streak.statusMessage,
-            timeLabel: stats.hasLoggedToday ? 'Today' : 'Streak',
-            accentColor: AppColors.primary,
-            backgroundColor: const Color(0xFFEFFBF3),
-            route: AppRoutes.streak,
-            achievement: true,
-            streakDays: achievedDays,
-          ),
-        );
-      }
-    }
+    // Streak unused — skip streak achievement notification cards.
+    // if (streak != null) { ... }
 
     return items;
   }

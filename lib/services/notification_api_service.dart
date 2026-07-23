@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/api_timezone.dart';
 import '../models/notification_model.dart';
 import 'api_client.dart';
 import 'api_endpoints.dart';
@@ -35,7 +36,7 @@ class NotificationApiService {
     final response = await _apiClient.put(
       ApiEndpoints.fcmToken,
       body: request.toJson(),
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
     );
 
     final decoded = _tryDecodeJson(response.body.trim());

@@ -86,6 +86,7 @@ class DashboardHeader extends StatelessWidget {
                       height: 1.3,
                     ),
                   ),
+                  SizedBox(height: r.scale(12)),
                 ],
               ),
             ),

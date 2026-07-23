@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../controllers/food_controller.dart';
 import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
+import '../models/custom_food_preset.dart';
 import '../models/meal_type.dart';
 import '../models/saved_meal_item.dart';
 import '../theme/app_colors.dart';
@@ -15,6 +16,7 @@ Future<void> showLogHistorySheet(
   BuildContext context, {
   required SavedMealItem item,
   String? initialMeal,
+  CustomFoodPreset? myFood,
   VoidCallback? onLogged,
 }) async {
   final controller = Get.find<FoodController>();
@@ -33,7 +35,7 @@ Future<void> showLogHistorySheet(
       return StatefulBuilder(
         builder: (context, setState) {
           final food = item.food;
-          final calories = food.caloriesForGrams(item.grams);
+          final calories = item.calories;
 
           return SafeArea(
             child: Padding(
@@ -78,7 +80,7 @@ Future<void> showLogHistorySheet(
                               ),
                               SizedBox(height: r.scale(4)),
                               Text(
-                                '${item.grams}g · $calories kcal',
+                                '${item.servingDescription} · $calories kcal',
                                 style: TextStyle(
                                   color: AppColors.textSecondary,
                                   fontSize: r.scale(13),
@@ -86,9 +88,9 @@ Future<void> showLogHistorySheet(
                               ),
                               SizedBox(height: r.scale(6)),
                               Text(
-                                'P ${food.macroForGrams(food.protein, item.grams).toStringAsFixed(0)}g · '
-                                'C ${food.macroForGrams(food.carbs, item.grams).toStringAsFixed(0)}g · '
-                                'F ${food.macroForGrams(food.fat, item.grams).toStringAsFixed(0)}g',
+                                'P ${item.protein.toStringAsFixed(0)}g · '
+                                'C ${item.carbs.toStringAsFixed(0)}g · '
+                                'F ${item.fat.toStringAsFixed(0)}g',
                                 style: TextStyle(
                                   fontSize: r.scale(12),
                                   color: AppColors.textSecondary,
@@ -124,10 +126,14 @@ Future<void> showLogHistorySheet(
                   FilledButton(
                     onPressed: () {
                       final meal = selectedMeal;
-                      controller.logFromHistory(
-                        item,
-                        meal: meal,
-                      );
+                      if (myFood != null) {
+                        controller.logMyFood(myFood, meal: meal);
+                      } else {
+                        controller.logFromHistory(
+                          item,
+                          meal: meal,
+                        );
+                      }
                       Navigator.pop(sheetContext);
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         AppSnackbar.success(

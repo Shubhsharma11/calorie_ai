@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/custom_meal_preset.dart';
+import '../models/custom_food_preset.dart';
 import '../models/exercise_entry.dart';
 import '../models/health_concern.dart';
 import '../models/meal_entry.dart';
@@ -20,6 +21,7 @@ final String? userId;
 }
   static const _favoriteMealsKey = 'favorite_meals_v1';
   static const _customMealsKey = 'custom_meals_v1';
+  static const _customFoodsKey = 'custom_foods_v1';
   static const _dismissedBreakfastSuggestionKey =
       'dismissed_breakfast_suggestion_v1';
   static const _longestStreakKey = 'longest_streak';
@@ -29,6 +31,7 @@ final String? userId;
   static const _healthProblemKey = 'health_problem_v2';
   static const _healthProblemLegacyKey = 'health_problem_v1';
   static const _activityLogKey = 'activity_log_v1';
+  static const _stepTrackingEnabledKey = 'step_tracking_enabled_v1';
   static const _authSessionKey = 'auth_session_v1';
   static const _onboardingCompletedKey = 'onboarding_completed_v1';
   static const _onboardingStepKey = 'onboarding_step_v1';
@@ -94,6 +97,26 @@ await prefs.setString(_mealKey(), encoded);
     final prefs = await _storage;
     final encoded = jsonEncode(meals.map((meal) => meal.toJson()).toList());
     await prefs.setString(_customMealsKey, encoded);
+  }
+
+  Future<List<CustomFoodPreset>> loadCustomFoods() async {
+    final prefs = await _storage;
+    final raw = prefs.getString(_customFoodsKey);
+    if (raw == null || raw.isEmpty) return [];
+
+    final list = jsonDecode(raw) as List<dynamic>;
+    return list
+        .map(
+          (item) =>
+              CustomFoodPreset.fromJson(item as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  Future<void> saveCustomFoods(List<CustomFoodPreset> foods) async {
+    final prefs = await _storage;
+    final encoded = jsonEncode(foods.map((food) => food.toJson()).toList());
+    await prefs.setString(_customFoodsKey, encoded);
   }
 
   Future<String?> loadDismissedBreakfastSuggestionDate() async {
@@ -435,5 +458,17 @@ await prefs.setString(_mealKey(), encoded);
       'exercises': exercises.map((entry) => entry.toJson()).toList(),
     });
     await prefs.setString(_activityLogKey, encoded);
+  }
+
+  Future<bool> loadStepTrackingEnabled() async {
+    final prefs = await _storage;
+    // Default on so the app can request native health permissions like
+    // other fitness apps, unless the user explicitly disconnected.
+    return prefs.getBool(_stepTrackingEnabledKey) ?? true;
+  }
+
+  Future<void> saveStepTrackingEnabled(bool enabled) async {
+    final prefs = await _storage;
+    await prefs.setBool(_stepTrackingEnabledKey, enabled);
   }
 }

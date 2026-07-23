@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:lottie/lottie.dart';
 
 import '../../core/responsive.dart';
@@ -9,69 +10,110 @@ class CreateMealPromoCard extends StatelessWidget {
   const CreateMealPromoCard({
     super.key,
     required this.onTap,
+    this.title = 'Create Meal',
+    this.description = 'Build and save your favorite meal.',
+    this.actionLabel = 'Create New Meal',
+    this.illustrationAsset = 'assets/image/chef.json',
   });
 
   final VoidCallback onTap;
+  final String title;
+  final String description;
+  final String actionLabel;
+  final String illustrationAsset;
 
-  static const _cardTint = Color(0xFFF0F9F4);
+  static const _lightCardTint = Color(0xFFF0F9F4);
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final illustrationSize = r.scale(162, tablet: 184);
+    final isDark = AppColors.isDark(context);
+    final cardColor = isDark ? AppColors.darkHeaderWash : _lightCardTint;
 
     return Material(
-      color: _cardTint,
-      borderRadius: BorderRadius.circular(r.scale(20)),
+      color: cardColor,
+      borderRadius: BorderRadius.circular(r.scale(16)),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(r.scale(20)),
-        child: Padding(
-          padding: EdgeInsets.all(r.scale(18)),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final cardWidth = constraints.maxWidth;
-              final illustrationSize = (cardWidth * 0.3).clamp(80.0, 112.0);
-              final useStackedLayout =
-                  cardWidth < 300 || textScale > 1.12;
-
-              final textBlock = _PromoTextBlock(
-                onTap: onTap,
-                illustrationSize: illustrationSize,
-                reserveRightSpace: !useStackedLayout,
-              );
-
-              if (useStackedLayout) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    textBlock,
-                    SizedBox(height: r.scale(4)),
-                    Center(
-                      child: _CreateMealIllustration(size: illustrationSize),
-                    ),
-                  ],
-                );
-              }
-
-              return ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: illustrationSize * 0.9,
+        borderRadius: BorderRadius.circular(r.scale(16)),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(r.scale(16)),
+            border: Border.all(
+              color: isDark
+                  ? AppColors.primary.withValues(alpha: 0.28)
+                  : AppColors.border.withValues(alpha: 0.5),
+            ),
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              r.scale(14),
+              r.scale(12),
+              r.scale(4),
+              r.scale(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: r.scale(22),
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      SizedBox(height: r.scale(6)),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          fontSize: r.scale(15),
+                          height: 1.4,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      SizedBox(height: r.scale(10)),
+                      FilledButton(
+                        onPressed: onTap,
+                        style: FilledButton.styleFrom(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: r.scale(18),
+                            vertical: r.scale(12),
+                          ),
+                          minimumSize: Size(0, r.scale(44)),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                        ),
+                        child: Text(
+                          actionLabel,
+                          style: TextStyle(
+                            fontSize: r.scale(14),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.centerRight,
-                  children: [
-                    textBlock,
-                    Positioned(
-                      right: -r.scale(2),
-                      bottom: -r.scale(6),
-                      child: _CreateMealIllustration(size: illustrationSize),
-                    ),
-                  ],
+                SizedBox(width: r.scale(2)),
+                Transform.translate(
+                  offset: Offset(0, -r.scale(18)),
+                  child: _CreateMealIllustration(
+                    size: illustrationSize,
+                    asset: illustrationAsset,
+                  ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
         ),
       ),
@@ -79,84 +121,17 @@ class CreateMealPromoCard extends StatelessWidget {
   }
 }
 
-class _PromoTextBlock extends StatelessWidget {
-  const _PromoTextBlock({
-    required this.onTap,
-    required this.illustrationSize,
-    required this.reserveRightSpace,
+class _CreateMealIllustration extends StatelessWidget {
+  const _CreateMealIllustration({
+    required this.size,
+    required this.asset,
   });
 
-  final VoidCallback onTap;
-  final double illustrationSize;
-  final bool reserveRightSpace;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    final rightInset =
-        reserveRightSpace ? illustrationSize * 0.62 : 0.0;
-
-    return Padding(
-      padding: EdgeInsets.only(right: rightInset),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Create Meal',
-            style: TextStyle(
-              fontSize: r.scale(18),
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-              letterSpacing: -0.3,
-            ),
-          ),
-          SizedBox(height: r.scale(8)),
-          Text(
-            'Build a new meal by adding foods and save it for later.',
-            style: TextStyle(
-              fontSize: r.scale(13),
-              height: 1.4,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          SizedBox(height: r.scale(16)),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton(
-              onPressed: onTap,
-              style: FilledButton.styleFrom(
-                padding: EdgeInsets.symmetric(
-                  horizontal: r.scale(18),
-                  vertical: r.scale(12),
-                ),
-                minimumSize: Size(0, r.scale(44)),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28),
-                ),
-              ),
-              child: Text(
-                'Create New Meal',
-                style: TextStyle(
-                  fontSize: r.scale(14),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CreateMealIllustration extends StatelessWidget {
-  const _CreateMealIllustration({required this.size});
-
   final double size;
+  final String asset;
 
-  static const _chefLottie = 'assets/image/chef.json';
-  static const _lottieScale = 1.3;
+  bool get _isLottie => asset.endsWith('.json');
+  bool get _isSvg => asset.endsWith('.svg');
 
   @override
   Widget build(BuildContext context) {
@@ -166,26 +141,43 @@ class _CreateMealIllustration extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
-        child: ClipRect(
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: Transform.scale(
-              scale: _lottieScale,
-              child: Lottie.asset(
-                _chefLottie,
+        child: _isLottie
+            ? Lottie.asset(
+                asset,
                 width: size,
                 height: size,
                 fit: BoxFit.contain,
                 repeat: true,
+                addRepaintBoundary: true,
                 errorBuilder: (context, error, stackTrace) => Icon(
                   Icons.restaurant_rounded,
-                  size: r.scale(40),
+                  size: r.scale(32),
                   color: AppColors.primary,
                 ),
-              ),
-            ),
-          ),
-        ),
+              )
+            : _isSvg
+                ? SvgPicture.asset(
+                    asset,
+                    width: size,
+                    height: size,
+                    fit: BoxFit.contain,
+                    placeholderBuilder: (_) => Icon(
+                      Icons.restaurant_rounded,
+                      size: r.scale(32),
+                      color: AppColors.primary,
+                    ),
+                  )
+                : Image.asset(
+                    asset,
+                    width: size,
+                    height: size,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => Icon(
+                      Icons.restaurant_rounded,
+                      size: r.scale(32),
+                      color: AppColors.primary,
+                    ),
+                  ),
       ),
     );
   }

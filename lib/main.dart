@@ -7,9 +7,11 @@ import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'bindings/initial_binding.dart';
+import 'controllers/settings_controller.dart';
 import 'controllers/theme_controller.dart';
 import 'controllers/user_controller.dart';
 import 'core/app_page_transitions.dart';
+import 'core/app_route_observer.dart';
 import 'firebase_options.dart';
 import 'routes/app_pages.dart';
 import 'routes/app_routes.dart';
@@ -32,10 +34,22 @@ Future<void> main() async {
   Get.put(ThemeController(), permanent: true);
   await Get.find<ThemeController>().loadTheme();
 
+  Get.put(SettingsController(), permanent: true);
+  await Get.find<SettingsController>().settingsReady;
   Get.put(UserController(), permanent: true);
   final userController = Get.find<UserController>();
   await userController.loadAuthSession();
   await userController.restoreOnboardingProgress();
+
+  // One FCM upload on cold start when already signed in.
+  // Login path also syncs once via UserController.saveGoogleLoginDetails.
+  if (userController.isLoggedIn && userController.accessToken.isNotEmpty) {
+    unawaited(
+      NotificationService.instance.syncTokenWithBackend(
+        accessToken: userController.accessToken,
+      ),
+    );
+  }
 
   runApp(
     CalorieAiApp(
@@ -46,9 +60,6 @@ Future<void> main() async {
 
 Future<String> _resolveInitialRoute(UserController userController) async {
   if (userController.isLoggedIn && userController.accessToken.isNotEmpty) {
-    if (userController.isEmailVerified) {
-      return AppRoutes.main;
-    }
     return userController.resolveSetupResumeRoute();
   }
   return AppRoutes.onboarding;
@@ -69,47 +80,49 @@ class _CalorieAiAppState extends State<CalorieAiApp> {
   @override
   Widget build(BuildContext context) {
     final themeController = Get.find<ThemeController>();
+    AppColors.syncWithBrightness(themeController.effectiveBrightness);
 
-    return Obx(() {
-      final themeMode = themeController.themeMode.value;
-      final brightness = themeController.effectiveBrightness;
-      AppColors.syncWithBrightness(brightness);
+    // Do not wrap GetMaterialApp in Obx — recreating it rebuilds Get.key and
+    // can crash with Duplicate GlobalKeys. Theme is applied in [builder]
+    // instead (see below), without Get.changeThemeMode / AnimatedTheme.
+    return GetMaterialApp(
+      title: 'Fit Buddy AI',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      // themeMode is owned by ThemeController and applied in [builder].
+      // Keeping MaterialApp on light avoids GetX AnimatedTheme lerps.
+      themeMode: ThemeMode.light,
+      initialBinding: InitialBinding(),
+      initialRoute: widget.initialRoute,
+      getPages: AppPages.pages,
+      navigatorObservers: [appRouteObserver],
+      defaultTransition: AppPageTransitions.transition,
+      transitionDuration: AppPageTransitions.duration,
+      builder: (context, child) {
+        if (!_handledLaunchNotification) {
+          _handledLaunchNotification = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (NotificationService.instance.isInitialized) {
+              NotificationService.instance.handlePendingLaunchNavigation();
+            }
+          });
+        }
 
-      return GetMaterialApp(
-        title: 'Calorie AI',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        darkTheme: AppTheme.dark,
-        themeMode: themeMode,
-        initialBinding: InitialBinding(),
-        initialRoute: widget.initialRoute,
-        getPages: AppPages.pages,
-        defaultTransition: AppPageTransitions.transition,
-        transitionDuration: AppPageTransitions.duration,
-        builder: (context, child) {
-          if (!_handledLaunchNotification) {
-            _handledLaunchNotification = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (NotificationService.instance.isInitialized) {
-                NotificationService.instance.handlePendingLaunchNavigation();
-              }
-            });
-          }
-
-          final activeBrightness = Theme.of(context).brightness;
-          AppColors.syncWithBrightness(activeBrightness);
-
-          final mediaQuery = MediaQuery.of(context);
-          final scale = mediaQuery.textScaler.scale(1).clamp(0.9, 1.25);
-          return KeyedSubtree(
-            key: ValueKey(activeBrightness),
-            child: MediaQuery(
-              data: mediaQuery.copyWith(textScaler: TextScaler.linear(scale)),
-              child: child ?? const SizedBox.shrink(),
-            ),
+        // Listens to [appliedBrightness] so Appearance toggles update the
+        // navigator Theme immediately (tabs stay frozen while Settings is open).
+        return Obx(() {
+          final theme = Get.find<ThemeController>();
+          final brightness = theme.appliedBrightness.value;
+          AppColors.syncWithBrightness(brightness);
+          return Theme(
+            data: brightness == Brightness.dark
+                ? AppTheme.dark
+                : AppTheme.light,
+            child: child ?? const SizedBox.shrink(),
           );
-        },
-      );
-    });
+        });
+      },
+    );
   }
 }

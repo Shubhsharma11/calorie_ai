@@ -49,11 +49,13 @@ class WaterRepository {
   Future<WaterLogResponse> logWater({
     required String accessToken,
     required int amountMl,
+    DateTime? date,
   }) async {
     try {
       return await _apiService.logWater(
         accessToken: accessToken,
         amountMl: amountMl,
+        date: date,
       );
     } on WaterApiException {
       rethrow;

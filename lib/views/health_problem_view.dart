@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
@@ -22,11 +24,15 @@ class HealthProblemView extends StatefulWidget {
 }
 
 class _ConcernFormData {
-  _ConcernFormData({HealthConcern? concern})
+  _ConcernFormData({HealthConcern? concern, VoidCallback? onChanged})
     : description = TextEditingController(text: concern?.description ?? ''),
       duration = concern?.duration,
       severity = concern?.severity,
-      medication = concern?.medication;
+      medication = concern?.medication {
+    if (onChanged != null) {
+      description.addListener(onChanged);
+    }
+  }
 
   final TextEditingController description;
   String? duration;
@@ -105,7 +111,10 @@ class _HealthProblemViewState extends State<HealthProblemView> {
         continue;
       }
       _selectedCategories.add(concern.category);
-      _forms[concern.category] = _ConcernFormData(concern: concern);
+      _forms[concern.category] = _ConcernFormData(
+        concern: concern,
+        onChanged: _persistPartialHealth,
+      );
       _expandedCategories.add(concern.category);
     }
   }
@@ -116,6 +125,37 @@ class _HealthProblemViewState extends State<HealthProblemView> {
       form.dispose();
     }
     super.dispose();
+  }
+
+  void _persistPartialHealth() {
+    if (_fromProfile) return;
+    unawaited(_savePartialHealth());
+  }
+
+  Future<void> _savePartialHealth() async {
+    if (_noneSelected) {
+      await _user.saveHealthConcerns([HealthConcern.none()]);
+      return;
+    }
+
+    if (_selectedCategories.isEmpty) {
+      await _user.saveHealthConcerns([]);
+      return;
+    }
+
+    final concerns = (_selectedCategories.toList()..sort())
+        .map((category) => _forms[category]!.toConcern(category))
+        .toList();
+    await _user.saveHealthConcerns(concerns);
+  }
+
+  Future<void> _onBack() async {
+    if (_fromProfile) {
+      Get.back<void>();
+      return;
+    }
+    await _savePartialHealth();
+    await _user.goToPreviousOnboardingStep(AppRoutes.healthProblem);
   }
 
   Future<void> _continue() async {
@@ -177,7 +217,10 @@ class _HealthProblemViewState extends State<HealthProblemView> {
     await _user.saveHealthConcerns(concerns);
 
     if (_fromProfile) {
-      final patch = OnboardingPatchModel.healthConcernsDiff(concerns, _baseline);
+      final patch = OnboardingPatchModel.healthConcernsDiff(
+        concerns,
+        _baseline,
+      );
       if (!patch.isEmpty) {
         final error = await _user.patchOnboarding(patch);
         if (!mounted) return;
@@ -228,6 +271,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
         _expandedCategories.clear();
       }
     });
+    _persistPartialHealth();
   }
 
   void _toggleCategory(String category) {
@@ -240,123 +284,135 @@ class _HealthProblemViewState extends State<HealthProblemView> {
         _forms.remove(category)?.dispose();
       } else {
         _selectedCategories.add(category);
-        _forms[category] = _ConcernFormData();
+        _forms[category] = _ConcernFormData(onChanged: _persistPartialHealth);
         _expandedCategories.add(category);
       }
     });
+    _persistPartialHealth();
   }
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
     final compact = r.height < 760;
     final hasHealthConcerns = _selectedCategories.isNotEmpty && !_noneSelected;
     final sortedCategories = _selectedCategories.toList()..sort();
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const AppAppBar.backOnly(),
-      body: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: SetupScreenLayout(
-          scrollable: true,
-          content: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(height: r.scale(compact ? 8 : 14)),
-              _HeroSection(r: r, compact: compact),
-              SizedBox(height: r.scale(compact ? 18 : 24)),
-              _SectionTitle(text: 'Select Your Problem Categories', r: r),
-              SizedBox(height: r.scale(6)),
-              Text(
-                'Tap to select multiple concerns. Tap again to deselect.',
-                style: TextStyle(
-                  fontSize: r.scale(13, tablet: 14),
-                  color: AppColors.textSecondary,
-                  height: 1.35,
-                ),
-              ),
-              if (hasHealthConcerns) ...[
-                SizedBox(height: r.scale(6)),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: _CountBadge(count: _selectedCategories.length),
-                ),
-              ],
-              SizedBox(height: r.scale(8)),
-              _CategoryGrid(
-                categories: _categories,
-                selectedCategories: _selectedCategories,
-                onChanged: _toggleCategory,
-              ),
-              if (!_noneSelected && _selectedCategories.isEmpty) ...[
-                SizedBox(height: r.scale(compact ? 14 : 18)),
-                const _GuidanceCard(
-                  iconAsset: 'assets/image/point.svg',
-                  title: 'Choose what applies to you',
-                  message:
-                      'Select one or more health concerns and fill in details for each, or choose the option below if none apply.',
-                ),
-              ],
-              SizedBox(height: r.scale(12)),
-              _OrDivider(),
-              SizedBox(height: r.scale(10)),
-              _NoneOption(selected: _noneSelected, onTap: _toggleNone),
-              SizedBox(height: r.scale(compact ? 18 : 22)),
-              if (hasHealthConcerns) ...[
-                _SectionTitle(text: 'Details for Each Concern', r: r),
+    return PopScope(
+      canPop: _fromProfile,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        unawaited(_onBack());
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppAppBar.backOnly(onBack: () => unawaited(_onBack())),
+        body: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: SetupScreenLayout(
+            scrollable: true,
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(height: r.scale(compact ? 8 : 14)),
+                _HeroSection(r: r, compact: compact),
+                SizedBox(height: r.scale(compact ? 18 : 24)),
+                _SectionTitle(text: 'Select Your Problem Categories', r: r),
                 SizedBox(height: r.scale(6)),
                 Text(
-                  'Expand each concern and add its own description and details.',
+                  'Tap to select multiple concerns. Tap again to deselect.',
                   style: TextStyle(
                     fontSize: r.scale(13, tablet: 14),
                     color: AppColors.textSecondary,
                     height: 1.35,
                   ),
                 ),
-                SizedBox(height: r.scale(12)),
-                ...sortedCategories.map((category) {
-                  final form = _forms[category]!;
-                  final asset = _categories
-                      .firstWhere((item) => item.label == category)
-                      .asset;
-                  return Padding(
-                    padding: EdgeInsets.only(bottom: r.scale(12)),
-                    child: _ConcernDetailCard(
-                      category: category,
-                      asset: asset,
-                      form: form,
-                      expanded: _expandedCategories.contains(category),
-                      onExpansionChanged: (expanded) {
-                        setState(() {
-                          if (expanded) {
-                            _expandedCategories.add(category);
-                          } else {
-                            _expandedCategories.remove(category);
-                          }
-                        });
-                      },
-                      onChanged: () => setState(() {}),
-                    ),
-                  );
-                }),
-              ],
-            ],
-          ),
-          action: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _continue,
-                  child: Text(_fromProfile ? 'Save' : 'Continue'),
+                if (hasHealthConcerns) ...[
+                  SizedBox(height: r.scale(6)),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _CountBadge(count: _selectedCategories.length),
+                  ),
+                ],
+                SizedBox(height: r.scale(8)),
+                _CategoryGrid(
+                  categories: _categories,
+                  selectedCategories: _selectedCategories,
+                  onChanged: _toggleCategory,
                 ),
-              ),
-              SizedBox(height: r.scale(12)),
-              const _SettingsNote(),
-            ],
+                if (!_noneSelected && _selectedCategories.isEmpty) ...[
+                  SizedBox(height: r.scale(compact ? 14 : 18)),
+                  const _GuidanceCard(
+                    iconAsset: 'assets/image/point.svg',
+                    title: 'Choose what applies to you',
+                    message:
+                        'Select one or more health concerns and fill in details for each, or choose the option below if none apply.',
+                  ),
+                ],
+                SizedBox(height: r.scale(12)),
+                _OrDivider(),
+                SizedBox(height: r.scale(10)),
+                _NoneOption(selected: _noneSelected, onTap: _toggleNone),
+                SizedBox(height: r.scale(compact ? 18 : 22)),
+                if (hasHealthConcerns) ...[
+                  _SectionTitle(text: 'Details for Each Concern', r: r),
+                  SizedBox(height: r.scale(6)),
+                  Text(
+                    'Expand each concern and add its own description and details.',
+                    style: TextStyle(
+                      fontSize: r.scale(13, tablet: 14),
+                      color: AppColors.textSecondary,
+                      height: 1.35,
+                    ),
+                  ),
+                  SizedBox(height: r.scale(12)),
+                  ...sortedCategories.map((category) {
+                    final form = _forms[category]!;
+                    final asset = _categories
+                        .firstWhere((item) => item.label == category)
+                        .asset;
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: r.scale(12)),
+                      child: _ConcernDetailCard(
+                        category: category,
+                        asset: asset,
+                        form: form,
+                        expanded: _expandedCategories.contains(category),
+                        onExpansionChanged: (expanded) {
+                          setState(() {
+                            if (expanded) {
+                              _expandedCategories.add(category);
+                            } else {
+                              _expandedCategories.remove(category);
+                            }
+                          });
+                        },
+                        onChanged: () {
+                          setState(() {});
+                          _persistPartialHealth();
+                        },
+                      ),
+                    );
+                  }),
+                ],
+              ],
+            ),
+            action: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _continue,
+                    child: Text(_fromProfile ? 'Save' : 'Continue'),
+                  ),
+                ),
+                SizedBox(height: r.scale(12)),
+                const _SettingsNote(),
+              ],
+            ),
           ),
         ),
       ),
@@ -452,8 +508,9 @@ class _ConcernDetailCard extends StatelessWidget {
                               color: complete
                                   ? AppColors.primary
                                   : AppColors.textSecondary,
-                              fontWeight:
-                                  complete ? FontWeight.w600 : FontWeight.w500,
+                              fontWeight: complete
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
                               height: 1.25,
                             ),
                           ),
@@ -626,7 +683,11 @@ class _SelectionIndicator extends StatelessWidget {
           color: AppColors.primary,
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.check_rounded, size: 16, color: AppColors.onPrimary),
+        child: const Icon(
+          Icons.check_rounded,
+          size: 16,
+          color: AppColors.onPrimary,
+        ),
       );
     }
 
@@ -919,10 +980,7 @@ class _GuidanceCard extends StatelessWidget {
           SizedBox(
             width: r.scale(34),
             height: r.scale(34),
-            child: SvgPicture.asset(
-              iconAsset,
-              fit: BoxFit.contain,
-            ),
+            child: SvgPicture.asset(iconAsset, fit: BoxFit.contain),
           ),
           SizedBox(width: r.scale(12)),
           Expanded(

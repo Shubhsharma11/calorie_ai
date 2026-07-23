@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/api_timezone.dart';
 import '../models/api_weight_mapper.dart';
 import '../models/meal_entry.dart';
 import '../models/weight_entry.dart';
@@ -51,7 +52,7 @@ class WeightApiService {
 
     final response = await _apiClient.get(
       endpoint,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
     );
 
     return _parseListResponse(response, fallbackDate: date);
@@ -76,7 +77,7 @@ class WeightApiService {
 
     final response = await _apiClient.post(
       ApiEndpoints.weight,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
       body: body,
     );
 
@@ -95,7 +96,7 @@ class WeightApiService {
 
     final response = await _apiClient.delete(
       endpoint,
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: apiAuthHeaders(accessToken),
     );
 
     _parseDeleteResponse(response, weightId: weightId);

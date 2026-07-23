@@ -75,9 +75,20 @@ class ScanController extends GetxController {
   }
 
   void resumeBarcodeScan() {
-    barcodeScanPaused.value = false;
-    scanError.value = '';
+    if (barcodeScanPaused.value) {
+      barcodeScanPaused.value = false;
+    }
+    if (scanError.value.isNotEmpty) {
+      scanError.value = '';
+    }
     barcodeScannerController?.start();
+  }
+
+  void pauseBarcodeScan() {
+    if (!barcodeScanPaused.value) {
+      barcodeScanPaused.value = true;
+    }
+    barcodeScannerController?.stop();
   }
 
   void openFoodDetails(FoodItem food) {
