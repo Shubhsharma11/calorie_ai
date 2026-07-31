@@ -254,6 +254,24 @@ class OnboardingPatchModel {
     return extras.keys.any(goalKeys.contains);
   }
 
+  /// True when calories/macros may need a new nutrition plan after this patch.
+  bool get shouldRefreshNutritionPlan {
+    if (touchesGoalFields) return true;
+    if (activityLevel != null) return true;
+    final personal = personalDetails;
+    if (personal == null || personal.isEmpty) return false;
+    const planKeys = {
+      'age',
+      'gender',
+      'heightCm',
+      'height_cm',
+      'weight',
+      'weightKg',
+      'weight_kg',
+    };
+    return personal.keys.any(planKeys.contains);
+  }
+
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
 
@@ -405,13 +423,18 @@ class OnboardingPatchModel {
     }
 
     final extras = <String, dynamic>{};
-    if ((user.goalWeightKg - baseline.goalWeightKg).abs() > 0.01) {
+    final goalWeightChanged =
+        (user.goalWeightKg - baseline.goalWeightKg).abs() > 0.01;
+    if (goalWeightChanged) {
       extras['goalWeight'] = user.goalWeightKg;
       extras['goalWeightUnit'] = 'kg';
-      if (user.goalStartWeightKg != null) {
-        extras['startWeight'] = user.goalStartWeightKg;
-        extras['startWeightUnit'] = 'kg';
-      }
+    }
+    // Always send startWeight when goal type or target changes so the API
+    // owns the progress baseline (no local storage).
+    if ((goal != null || goalWeightChanged) &&
+        user.goalStartWeightKg != null) {
+      extras['startWeight'] = user.goalStartWeightKg;
+      extras['startWeightUnit'] = 'kg';
     }
     if (user.isGoalWeightManual != baseline.isGoalWeightManual) {
       extras['isGoalWeightManual'] = user.isGoalWeightManual;
@@ -423,7 +446,7 @@ class OnboardingPatchModel {
       if (customDate != null) {
         extras['goalTimelineCustomDate'] = customDate;
       }
-    } else if (extras.containsKey('goalWeight')) {
+    } else if (goalWeightChanged || goal != null) {
       extras['goalTimeline'] = user.goalTimeline;
       final customDate = user.goalTimelineCustomDate;
       if (customDate != null) {

@@ -79,6 +79,7 @@ class LocalStorageService {
     required String accessToken,
     String? refreshToken,
     required Map<String, dynamic> backendResponse,
+    bool setupComplete = false,
   }) async {
     final prefs = await _storage;
     final encoded = jsonEncode({
@@ -89,6 +90,7 @@ class LocalStorageService {
       'accessToken': accessToken,
       'refreshToken': refreshToken,
       'backendResponse': backendResponse,
+      'setupComplete': setupComplete,
       'loggedInAt': DateTime.now().toIso8601String(),
     });
     await prefs.setString(_authSessionKey, encoded);

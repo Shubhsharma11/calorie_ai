@@ -56,8 +56,12 @@ class MyGoalsView extends StatefulWidget {
     required double currentWeight,
     required double progress,
   }) {
-    final goal = user.goal;
+    final goal = user.pinnedGoalType ?? user.goal;
     if (goal == null) return null;
+
+    if (currentWeight <= 0) {
+      return 'Log your current weight to track progress';
+    }
 
     final target = user.goalWeightKg;
     if (!targetMatchesGoal(
@@ -103,7 +107,18 @@ class _MyGoalsViewState extends State<MyGoalsView> {
     // mutations of goal / target weight from the onboarding API.
     await controller.fetchProfile(refreshGoalTarget: false);
     if (!mounted) return;
+
+    // Seed display weight from profile when weight API history is empty.
+    if (Get.isRegistered<TrackerController>()) {
+      final tracker = Get.find<TrackerController>();
+      if (tracker.currentWeight.value <= 0 &&
+          (controller.user.weightKg ?? 0) > 0) {
+        tracker.syncWeightFromProfileIfEmpty();
+      }
+    }
+
     // Prefer the pinned goal type over inferring from a mutated target.
+    // Do not silently retarget — mismatch is shown until the user saves via API.
     if (controller.user.pinnedGoalType != null) {
       controller.user.goal = controller.user.pinnedGoalType;
       controller.update();
@@ -136,14 +151,14 @@ class _MyGoalsViewState extends State<MyGoalsView> {
             if (Get.isRegistered<TrackerController>()) {
               Get.find<TrackerController>().weightRevision.value;
             }
-            final currentWeight = Get.isRegistered<TrackerController>()
-                ? Get.find<TrackerController>().currentWeight.value
-                : user.weightKg?.toDouble() ?? 0;
+            final currentWeight = controller.resolvedCurrentWeightKg();
             final progress =
                 MyGoalsView.weightGoalProgress(user, currentWeight);
             final goal = user.pinnedGoalType ?? user.goal;
             final target = user.goalWeightKg;
-            final mismatch = goal != null &&
+            final canValidate = currentWeight > 0 && target > 0;
+            final mismatch = canValidate &&
+                goal != null &&
                 !MyGoalsView.targetMatchesGoal(
                   goal: goal,
                   currentKg: currentWeight,
@@ -175,25 +190,44 @@ class _MyGoalsViewState extends State<MyGoalsView> {
                               subtitle: goal?.statusLabel,
                               icon: Icons.monitor_weight_outlined,
                               iconColor: AppColors.primary,
-                              onTap: () => Get.toNamed(
-                                AppRoutes.goalSetup,
-                                arguments: RouteArgs.fromProfileMap,
-                              ),
+                              onTap: () {
+                                controller.beginGoalEditFromProfile();
+                                Get.toNamed(
+                                  AppRoutes.goalSetup,
+                                  arguments: RouteArgs.fromProfileMap,
+                                );
+                              },
                             ),
                             SizedBox(height: r.scale(12)),
                             ProfileGoalField(
                               label: 'Target Weight',
-                              value: '${target.toStringAsFixed(1)} kg',
-                              subtitle: mismatch
-                                  ? 'Doesn’t match your goal'
-                                  : user.isGoalWeightManual
-                                      ? 'Custom target'
-                                      : 'Recommended target',
+                              value: target > 0
+                                  ? '${target.toStringAsFixed(1)} kg'
+                                  : 'Not set',
+                              subtitle: !canValidate
+                                  ? 'Based on your current weight'
+                                  : mismatch
+                                      ? 'Doesn’t match your goal'
+                                      : user.isGoalWeightManual
+                                          ? 'Custom target'
+                                          : 'Recommended target',
                               icon: Icons.flag_outlined,
-                              onTap: () => Get.toNamed(
-                                AppRoutes.goalWeight,
-                                arguments: RouteArgs.fromProfileMap,
-                              ),
+                              onTap: () {
+                                controller.beginGoalEditFromProfile();
+                                final g = user.pinnedGoalType ?? user.goal;
+                                if (g == GoalType.loseWeight ||
+                                    g == GoalType.gainWeight) {
+                                  Get.toNamed(
+                                    AppRoutes.goalAmount,
+                                    arguments: RouteArgs.fromProfileMap,
+                                  );
+                                } else {
+                                  Get.toNamed(
+                                    AppRoutes.goalWeight,
+                                    arguments: RouteArgs.fromProfileMap,
+                                  );
+                                }
+                              },
                             ),
                             if (goal != null &&
                                 goal != GoalType.maintainWeight) ...[

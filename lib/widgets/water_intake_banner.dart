@@ -52,7 +52,7 @@ class WaterIntakeBanner extends StatelessWidget {
       final overGlasses = glasses > goalGlasses ? glasses - goalGlasses : 0;
       final remainingGlasses =
           (goalGlasses - glasses).clamp(0, goalGlasses);
-      final _ = tracker.waterByDate.length;
+      final _ = tracker.waterRevision.value;
       final color = isComplete ? AppColors.primary : _waterBlue;
       final dayWord = viewingToday ? 'today' : 'this day';
       final headerText = overGlasses > 0

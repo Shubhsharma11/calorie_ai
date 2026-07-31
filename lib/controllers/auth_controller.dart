@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -86,13 +87,22 @@ class AuthController extends GetxController {
         'AuthController: access token saved length=${accessToken.length}',
       );
 
-      if (UserController.readEmailVerified(backendResponse) &&
-          user.user.hasProfileBasics) {
-        // Only open home when this account already has API profile basics.
-        // A brand-new email must not inherit "verified → skip setup".
+      // Profile is loaded inside saveGoogleLoginDetails. Rate limits (429) must
+      // not send an existing account through personal-details again.
+      if (user.user.hasProfileBasics || user.isSetupComplete) {
         await user.markOnboardingComplete();
         MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);
+      } else if (user.lastProfileFetchStatusCode == 429 &&
+          (UserController.readEmailVerified(backendResponse) ||
+              user.isLikelyExistingBackendUser)) {
+        debugPrint(
+          'AuthController: profile rate-limited for existing user — opening home',
+        );
+        await user.markOnboardingComplete();
+        MainController.resetHomeTabIfRegistered();
+        Get.offAllNamed(AppRoutes.main);
+        unawaited(user.fetchProfile(refreshGoalTarget: true, maxAttempts: 4));
       } else {
         await user.restoreOnboardingProgress();
         final resumeRoute = await user.resolveSetupResumeRoute();

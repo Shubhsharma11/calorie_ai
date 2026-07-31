@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
+import '../controllers/user_controller.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/primary_button.dart';
@@ -18,6 +19,9 @@ class ProgressView extends GetView<DashboardController> {
       body: SafeArea(
         child: Obx(() {
           final _ = food.entriesRevision.value;
+          if (Get.isRegistered<UserController>()) {
+            Get.find<UserController>().calorieGoalRevision.value;
+          }
           final daysOnGoal = controller.daysOnGoal;
           final avgCalories = controller.weeklyAverageCalories;
           final mealsLogged =

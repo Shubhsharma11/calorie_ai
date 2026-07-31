@@ -55,7 +55,7 @@ class WaterTrackerView extends GetView<TrackerController> {
           final goalMl = TrackerController.waterGoalMl;
           final glasses = controller.waterGlasses;
           final period = controller.waterPeriod.value;
-          final _ = controller.waterByDate.length;
+          final _ = controller.waterRevision.value;
           final chartHeight = _chartHeightFor(period, r);
           final goalGlasses = goalMl > 0
               ? (goalMl / TrackerController.mlPerGlass).round().clamp(1, 100)

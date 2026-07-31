@@ -10,15 +10,15 @@ abstract final class WeightGoalCalculator {
 
   static double recommendedGoalWeight({
     required GoalType? goal,
-    required int weightKg,
-    required int heightCm,
-    required int age,
-    required String gender,
+    required double currentWeightKg,
+    int? heightCm,
+    int? age,
+    String? gender,
   }) {
-    final current = weightKg.toDouble();
+    final current = currentWeightKg;
 
     return switch (goal) {
-      null || GoalType.maintainWeight => current,
+      null || GoalType.maintainWeight => _roundKg(current),
       GoalType.loseWeight => () {
           const minKg = 40.0;
           final ceiling = current - 0.5;

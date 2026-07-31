@@ -26,6 +26,7 @@ class AuthRepository {
     required String accessToken,
     String? refreshToken,
     required Map<String, dynamic> backendResponse,
+    bool setupComplete = false,
   }) {
     // Prefer explicit refresh; fall back to nested fields in backend payload.
     final resolvedRefresh = (refreshToken != null && refreshToken.isNotEmpty)
@@ -40,6 +41,7 @@ class AuthRepository {
       accessToken: accessToken,
       refreshToken: resolvedRefresh,
       backendResponse: backendResponse,
+      setupComplete: setupComplete,
     );
   }
 

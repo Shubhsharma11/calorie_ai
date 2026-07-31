@@ -72,6 +72,9 @@ class AnalyticsView extends GetView<AnalyticsController> {
             const SizedBox(height: 20),
             Obx(() {
               food.entriesRevision.value;
+              if (Get.isRegistered<UserController>()) {
+                Get.find<UserController>().calorieGoalRevision.value;
+              }
               controller.period.value;
               controller.customStartDate.value;
               controller.customEndDate.value;
@@ -85,6 +88,9 @@ class AnalyticsView extends GetView<AnalyticsController> {
             const SizedBox(height: 24),
             Obx(() {
               food.entriesRevision.value;
+              if (Get.isRegistered<UserController>()) {
+                Get.find<UserController>().calorieGoalRevision.value;
+              }
               final period = controller.period.value;
               final metric = controller.trendMetric.value;
               controller.customStartDate.value;
@@ -109,6 +115,9 @@ class AnalyticsView extends GetView<AnalyticsController> {
             const SizedBox(height: 24),
             Obx(() {
               food.entriesRevision.value;
+              if (Get.isRegistered<UserController>()) {
+                Get.find<UserController>().calorieGoalRevision.value;
+              }
               controller.period.value;
               controller.customStartDate.value;
               controller.customEndDate.value;
@@ -120,6 +129,9 @@ class AnalyticsView extends GetView<AnalyticsController> {
             const SizedBox(height: 24),
             Obx(() {
               food.entriesRevision.value;
+              if (Get.isRegistered<UserController>()) {
+                Get.find<UserController>().calorieGoalRevision.value;
+              }
               controller.period.value;
               controller.anchorDate.value;
               controller.customStartDate.value;
@@ -129,7 +141,8 @@ class AnalyticsView extends GetView<AnalyticsController> {
                   '${controller.period.value.name}_'
                   '${controller.periodStartDate.toIso8601String()}_'
                   '${controller.periodEndDate.toIso8601String()}_'
-                  '${controller.rangeRevision.value}';
+                  '${controller.rangeRevision.value}_'
+                  '${Get.isRegistered<UserController>() ? Get.find<UserController>().calorieGoalRevision.value : 0}';
               final proteinDaily = _userGoal((u) => u.proteinGoalG);
               final carbsDaily = _userGoal((u) => u.carbsGoalG);
               final fatDaily = _userGoal((u) => u.fatGoalG);

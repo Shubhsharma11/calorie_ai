@@ -18,6 +18,7 @@ import '../repositories/nutrition_plan_repository.dart';
 import '../repositories/onboarding_repository.dart';
 import '../routes/app_routes.dart';
 import '../core/app_snackbar.dart';
+import '../core/weight_goal_calculator.dart';
 import '../services/auth_api_service.dart';
 import '../services/notification_service.dart';
 import '../services/nutrition_plan_api_service.dart';
@@ -67,6 +68,9 @@ class UserController extends GetxController {
   String? _onboardingStep;
   bool _onboardingCompleted = false;
 
+  /// Last HTTP status from [fetchProfile] (e.g. 429 rate limit).
+  int? lastProfileFetchStatusCode;
+
   /// Goal weight the user entered during onboarding (before AI recommendation).
   double? userOnboardingGoalWeightKg;
 
@@ -76,6 +80,10 @@ class UserController extends GetxController {
   /// Which target is currently driving the nutrition plan.
   final weightTargetSource = WeightTargetSource.user.obs;
   final isRefreshingWeightTarget = false.obs;
+
+  /// Snapshot of API-synced goal state when the user opens Goals edit.
+  /// Diffs / restores against this so lose/gain/maintain always PATCH correctly.
+  _GoalEditCheckpoint? _goalEditCheckpoint;
 
   static const int calorieStep = 50;
   static const int minDailyCalories = 1200;
@@ -105,15 +113,36 @@ class UserController extends GetxController {
     try {
       await loadAuthSession();
       await restoreOnboardingProgress();
-      if (isLoggedIn) {
-        await fetchProfile();
-      }
       _notifyCalorieGoalChanged();
       update();
     } finally {
+      // Unlock startup routing immediately — do not wait on API/profile.
       if (_localProfileReady != null && !_localProfileReady!.isCompleted) {
         _localProfileReady!.complete();
       }
+    }
+
+    if (isLoggedIn && accessToken.isNotEmpty) {
+      unawaited(hydrateProfileInBackground());
+    }
+  }
+
+  /// Loads onboarding/profile from the API after the UI is already showing.
+  Future<void> hydrateProfileInBackground({
+    bool refreshGoalTarget = true,
+  }) async {
+    try {
+      await fetchProfile(
+        refreshGoalTarget: refreshGoalTarget,
+        maxAttempts: 3,
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'UserController: background profile hydrate failed: $error\n$stackTrace',
+      );
+    } finally {
+      _notifyCalorieGoalChanged();
+      update();
     }
   }
 
@@ -126,6 +155,7 @@ class UserController extends GetxController {
       accessToken = '';
       refreshToken = '';
       backendLoginResponse = {};
+      _onboardingCompleted = false;
       return;
     }
 
@@ -136,6 +166,7 @@ class UserController extends GetxController {
     refreshToken = saved['refreshToken'] as String? ?? '';
     user.email = saved['email'] as String? ?? user.email;
     user.name = saved['name'] as String? ?? user.name;
+    _onboardingCompleted = saved['setupComplete'] == true;
 
     final savedBackendResponse = saved['backendResponse'];
     backendLoginResponse = savedBackendResponse is Map<String, dynamic>
@@ -169,7 +200,17 @@ class UserController extends GetxController {
   }
 
   Future<AccessTokenResolution> resolveAccessTokenWithDiagnostics() async {
-    await localProfileReady;
+    // Prefer an already-hydrated in-memory token. Waiting on [localProfileReady]
+    // here deadlocks startup: _initializeLocalProfile → fetchProfile → here.
+    if (isLoggedIn && accessToken.isNotEmpty) {
+      return AccessTokenResolution(token: accessToken, source: 'memory');
+    }
+
+    final ready = _localProfileReady;
+    if (ready == null || ready.isCompleted) {
+      await localProfileReady;
+    }
+
     final saved = await _authRepository.loadSession();
     if (saved.isEmpty) {
       isLoggedIn = false;
@@ -231,6 +272,9 @@ class UserController extends GetxController {
 
   bool get isEmailVerified => readEmailVerified(backendLoginResponse);
 
+  /// Persisted / in-memory flag that setup finished (survives cold start via session).
+  bool get isSetupComplete => _onboardingCompleted;
+
   static bool readEmailVerified(Map<String, dynamic> response) {
     return _readBackendFlag(response, 'emailVerified');
   }
@@ -270,8 +314,12 @@ class UserController extends GetxController {
   }
 
   void _notifyCalorieGoalChanged() {
+    // Home calorie/macro Obx listens to calorieGoalRevision — bump it whenever
+    // goals or plan fields change so the UI refreshes without a manual reload.
     calorieGoalRevision.value++;
-    _notifyDashboard();
+    if (Get.isRegistered<DashboardController>()) {
+      Get.find<DashboardController>().update();
+    }
   }
 
   Future<void> pickProfilePhoto(ImageSource source) async {
@@ -330,31 +378,155 @@ class UserController extends GetxController {
     if (source != null) await pickProfilePhoto(source);
   }
 
-  void selectGoal(GoalType goal) {
+  /// True while editing goals from My Goals (in-memory journey, API commit on save).
+  bool get isGoalEditFromProfile => _goalEditCheckpoint != null;
+
+  /// Capture API-synced goal state before the user mutates lose/gain/maintain.
+  void beginGoalEditFromProfile() {
+    if (_goalEditCheckpoint != null) return;
+    final u = user;
+    _goalEditCheckpoint = _GoalEditCheckpoint(
+      syncBaseline: ProfileSyncSnapshot.fromUser(u),
+      goal: u.goal,
+      pinnedGoalType: u.pinnedGoalType,
+      pinnedGoalWeightKg: u.pinnedGoalWeightKg,
+      manualGoalWeightKg: u.manualGoalWeightKg,
+      goalStartWeightKg: u.goalStartWeightKg,
+      targetDate: DateTime(
+        u.targetDate.year,
+        u.targetDate.month,
+        u.targetDate.day,
+      ),
+    );
+  }
+
+  /// Discard in-memory goal edits and restore the pre-edit API snapshot.
+  void cancelGoalEditFromProfile() {
+    final cp = _goalEditCheckpoint;
+    if (cp == null) return;
+    user.goal = cp.goal;
+    user.pinnedGoalType = cp.pinnedGoalType;
+    user.pinnedGoalWeightKg = cp.pinnedGoalWeightKg;
+    user.manualGoalWeightKg = cp.manualGoalWeightKg;
+    user.goalStartWeightKg = cp.goalStartWeightKg;
+    user.targetDate = cp.targetDate;
+    _goalEditCheckpoint = null;
+    update();
+    _notifyCalorieGoalChanged();
+  }
+
+  void commitGoalEditFromProfile() {
+    _goalEditCheckpoint = null;
+  }
+
+  /// Baseline for goal PATCH: journey start when editing from profile.
+  ProfileSyncSnapshot baselineForGoalProfileSave() {
+    return _goalEditCheckpoint?.syncBaseline ?? captureProfileSyncSnapshot();
+  }
+
+  /// After a successful profile goal save, return to My Goals (not Goal Setup).
+  void popToMyGoals() {
+    if (Get.currentRoute == AppRoutes.myGoals) return;
+    Get.until(
+      (route) =>
+          route.settings.name == AppRoutes.myGoals || route.isFirst,
+    );
+    if (Get.currentRoute != AppRoutes.myGoals) {
+      Get.offNamed(AppRoutes.myGoals);
+    }
+  }
+
+  void selectGoal(GoalType goal, {bool persistDraft = true}) {
+    final previous = user.goal;
     user.goal = goal;
     user.pinnedGoalType = goal;
+
     if (goal == GoalType.maintainWeight) {
-      user.clearPinnedGoalWeight();
-      user.pinnedGoalType = GoalType.maintainWeight;
+      // Pin current weight once — later weigh-ins must not move this target.
+      final current = resolvedCurrentWeightKg();
+      if (current > 0) {
+        user.pinGoalWeight(current, goalType: GoalType.maintainWeight);
+      } else {
+        user.pinnedGoalType = GoalType.maintainWeight;
+      }
       _captureGoalStartWeight();
     } else {
-      // Keep any existing pinned target; amount/weight screens set the new one.
-      if (user.pinnedGoalWeightKg != null) {
-        user.pinGoalWeight(user.pinnedGoalWeightKg!, goalType: goal);
+      final current = resolvedCurrentWeightKg();
+      final pinned = user.pinnedGoalWeightKg;
+      final pinStillValid = pinned != null &&
+          current > 0 &&
+          WeightGoalCalculator.targetMatchesGoal(
+            goal: goal,
+            currentKg: current,
+            targetKg: pinned,
+          );
+
+      if (pinStillValid) {
+        user.pinGoalWeight(pinned, goalType: goal);
+      } else if (current > 0) {
+        // Goal type changed — retarget from live weight (not stale profile kg).
+        user.pinGoalWeight(
+          recommendedTargetKg(goal),
+          goalType: goal,
+        );
+        _captureGoalStartWeight();
+      } else if (previous != goal) {
+        // No reliable current weight yet — drop stale pin from the old goal.
+        user.clearPinnedGoalWeight();
+        user.pinnedGoalType = goal;
+        user.goal = goal;
       }
     }
     update();
     _notifyCalorieGoalChanged();
-    scheduleOnboardingDraftSave();
+    if (persistDraft) scheduleOnboardingDraftSave();
+  }
+
+  /// Live weight for goal checks: latest log → tracker display → profile.
+  double resolvedCurrentWeightKg() {
+    if (Get.isRegistered<TrackerController>()) {
+      final tracker = Get.find<TrackerController>();
+      if (tracker.weightEntries.isNotEmpty) {
+        final latest = tracker.weightEntries.last.kg;
+        if (latest > 0) return latest;
+      }
+      if (tracker.currentWeight.value > 0) {
+        return tracker.currentWeight.value;
+      }
+    }
+    return user.weightKg?.toDouble() ?? 0;
+  }
+
+  /// Recommended target from live current weight (API progress baseline).
+  double recommendedTargetKg([GoalType? forGoal]) {
+    final g = forGoal ?? user.pinnedGoalType ?? user.goal;
+    final current = resolvedCurrentWeightKg();
+    if (current <= 0) {
+      return user.pinnedGoalWeightKg ??
+          user.manualGoalWeightKg ??
+          user.weightKg?.toDouble() ??
+          0;
+    }
+    return WeightGoalCalculator.recommendedGoalWeight(
+      goal: g,
+      currentWeightKg: current,
+      heightCm: user.heightCm,
+      age: user.age,
+      gender: user.gender,
+    );
   }
 
   /// Sets [user.goal] from how [targetKg] compares to current weight.
   void inferGoalFromWeight(double targetKg) {
-    final current = _currentWeightKg();
+    final current = resolvedCurrentWeightKg();
     final diff = targetKg - current;
+    if (current <= 0) return;
     if (diff.abs() < 0.1) {
       user.goal = GoalType.maintainWeight;
-      user.clearPinnedGoalWeight();
+      user.pinGoalWeight(
+        targetKg > 0 ? targetKg : current,
+        goalType: GoalType.maintainWeight,
+      );
     } else if (diff < 0) {
       user.goal = GoalType.loseWeight;
     } else {
@@ -367,18 +539,13 @@ class UserController extends GetxController {
   /// Fills a missing goal type from current vs target weight.
   void ensureGoalFromWeight() {
     if (user.goal != null) return;
-    if ((user.weightKg ?? 0) <= 0) return;
+    if (resolvedCurrentWeightKg() <= 0) return;
     inferGoalFromWeight(user.goalWeightKg);
   }
 
   void setGoalWeight(double kg, {required bool manual}) {
     final previousTarget = user.goalWeightKg;
-    if (user.goal == GoalType.maintainWeight) {
-      user.clearPinnedGoalWeight();
-      user.pinnedGoalType = GoalType.maintainWeight;
-    } else {
-      user.pinGoalWeight(kg, goalType: user.goal);
-    }
+    user.pinGoalWeight(kg, goalType: user.goal);
     final newTarget = user.goalWeightKg;
     // New journey baseline whenever the active target meaningfully changes.
     if ((previousTarget - newTarget).abs() > 0.05 ||
@@ -387,18 +554,13 @@ class UserController extends GetxController {
     }
     update();
     _notifyCalorieGoalChanged();
-    scheduleOnboardingDraftSave();
+    if (!isGoalEditFromProfile) scheduleOnboardingDraftSave();
   }
 
   void useRecommendedGoalWeight() {
     final previousTarget = user.goalWeightKg;
-    if (user.goal == GoalType.maintainWeight) {
-      user.clearPinnedGoalWeight();
-      user.pinnedGoalType = GoalType.maintainWeight;
-    } else {
-      // Pin the calculator suggestion once — do not let it track live weigh-ins.
-      user.pinGoalWeight(user.recommendedGoalWeightKg, goalType: user.goal);
-    }
+    // Pin once for lose/gain/maintain — do not let it track live weigh-ins.
+    user.pinGoalWeight(recommendedTargetKg(), goalType: user.goal);
     final newTarget = user.goalWeightKg;
     if ((previousTarget - newTarget).abs() > 0.05 ||
         user.goalStartWeightKg == null) {
@@ -406,24 +568,15 @@ class UserController extends GetxController {
     }
     update();
     _notifyCalorieGoalChanged();
-    scheduleOnboardingDraftSave();
+    if (!isGoalEditFromProfile) scheduleOnboardingDraftSave();
   }
 
   void onProfileUpdated() {
-    if (user.goal == GoalType.maintainWeight) {
-      user.clearPinnedGoalWeight();
-    }
     update();
     _notifyCalorieGoalChanged();
   }
 
-  double _currentWeightKg() {
-    if (Get.isRegistered<TrackerController>()) {
-      final kg = Get.find<TrackerController>().currentWeight.value;
-      if (kg > 0) return kg;
-    }
-    return user.weightKg?.toDouble() ?? 0;
-  }
+  double _currentWeightKg() => resolvedCurrentWeightKg();
 
   void _captureGoalStartWeight() {
     final current = _currentWeightKg();
@@ -440,7 +593,10 @@ class UserController extends GetxController {
     tracker.updateWeight(user.weightKg!.toDouble());
   }
 
-  Future<String?> fetchProfile({bool refreshGoalTarget = false}) async {
+  Future<String?> fetchProfile({
+    bool refreshGoalTarget = false,
+    int maxAttempts = 3,
+  }) async {
     if (isLoadingProfile) return null;
 
     final token = await resolveAccessToken();
@@ -449,34 +605,55 @@ class UserController extends GetxController {
     }
 
     isLoadingProfile = true;
+    lastProfileFetchStatusCode = null;
     update();
 
     try {
-      final response = await _onboardingRepository.fetchOnboarding(
-        accessToken: token,
-      );
-      // Once the user has a pinned lose/gain target, casual profile refreshes
-      // (e.g. opening My Goals) must not adopt server mutations caused by
-      // weight logs (goal → maintainWeight, goalWeight ≈ current).
+      OnboardingApiException? lastError;
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          final response = await _onboardingRepository.fetchOnboarding(
+            accessToken: token,
+          );
+          lastProfileFetchStatusCode = 200;
+          // Once the user has a pinned target (lose/gain/maintain), casual profile
+      // refreshes must not adopt server mutations caused by weight logs
+      // (goalWeight rewritten ≈ current).
       final hasPinnedTarget = user.pinnedGoalWeightKg != null &&
-          (user.pinnedGoalType ?? user.goal) != null &&
-          (user.pinnedGoalType ?? user.goal) != GoalType.maintainWeight;
+          (user.pinnedGoalType ?? user.goal) != null;
       _applyOnboardingResponse(
         response,
         applyGoalFields: refreshGoalTarget || !hasPinnedTarget,
       );
-      syncWeightFromProfile();
-      // Profile loaded from API — treat setup as done when personal basics exist.
-      if (user.hasProfileBasics) {
-        _onboardingCompleted = true;
-        _onboardingStep = null;
-        _onboardingDraft = null;
-        hasOnboardingDraft = false;
+          syncWeightFromProfile();
+          // Profile loaded from API — treat setup as done when personal basics exist.
+          if (user.hasProfileBasics) {
+            _onboardingCompleted = true;
+            _onboardingStep = null;
+            _onboardingDraft = null;
+            hasOnboardingDraft = false;
+            unawaited(_persistCurrentAuthSession());
+          }
+          return null;
+        } on OnboardingApiException catch (error) {
+          lastError = error;
+          lastProfileFetchStatusCode = error.statusCode;
+          debugPrint(
+            'UserController: fetchProfile failed '
+            '(attempt $attempt/$maxAttempts): $error',
+          );
+          final isRateLimited = error.statusCode == 429;
+          final isTransient = isRateLimited ||
+              error.statusCode == 503 ||
+              error.statusCode == 502;
+          if (!isTransient || attempt >= maxAttempts) {
+            return error.message;
+          }
+          // Back off before retry — avoids compounding API rate limits.
+          await Future<void>.delayed(Duration(milliseconds: 700 * attempt));
+        }
       }
-      return null;
-    } on OnboardingApiException catch (error) {
-      debugPrint('UserController: fetchProfile failed: $error');
-      return error.message;
+      return lastError?.message ?? 'Unable to load your profile. Please try again.';
     } catch (error) {
       debugPrint('UserController: fetchProfile failed: $error');
       return 'Unable to load your profile. Please try again.';
@@ -635,7 +812,8 @@ class UserController extends GetxController {
   void _captureUserOnboardingGoalWeightIfNeeded() {
     if (userOnboardingGoalWeightKg != null) return;
     if (user.goal == GoalType.maintainWeight) {
-      userOnboardingGoalWeightKg = user.weightKg?.toDouble();
+      userOnboardingGoalWeightKg =
+          user.pinnedGoalWeightKg ?? user.weightKg?.toDouble();
       return;
     }
     if (user.manualGoalWeightKg != null) {
@@ -656,15 +834,20 @@ class UserController extends GetxController {
   }
 
   /// Applies the server's goal/target weight as the active home + profile target.
-  /// Lose/gain targets are always pinned so logging weight cannot move the goal.
+  /// Lose/gain/maintain targets are pinned so logging weight cannot move the goal.
   void _applyServerGoalWeight(double kg, {bool? isManual}) {
     final clamped = kg.clamp(40.0, 200.0);
     aiRecommendedGoalWeightKg = clamped;
 
-    if (user.goal == GoalType.maintainWeight) {
-      user.pinnedGoalType = GoalType.maintainWeight;
-      user.pinnedGoalWeightKg = null;
-      user.manualGoalWeightKg = null;
+    final effectiveGoal = user.pinnedGoalType ?? user.goal;
+    if (effectiveGoal == GoalType.maintainWeight) {
+      // Keep an existing maintain pin — weight API must not chase live weight.
+      if (user.pinnedGoalWeightKg != null) {
+        user.goal = GoalType.maintainWeight;
+        user.pinnedGoalType = GoalType.maintainWeight;
+        return;
+      }
+      user.pinGoalWeight(clamped, goalType: GoalType.maintainWeight);
       return;
     }
 
@@ -682,18 +865,15 @@ class UserController extends GetxController {
     }
   }
 
-  /// Weight API mutates onboarding profile (often flips goal → maintain and
-  /// rewrites goalWeight ≈ current). Always re-assert the user's pinned target.
+  /// Weight API mutates onboarding profile (often rewrites goalWeight ≈ current).
+  /// Always re-assert the user's pinned target for lose/gain/maintain.
   Future<void> reaffirmPinnedGoalWeightAfterWeightLog() async {
     final goal = user.pinnedGoalType ?? user.goal;
     final pinned = user.pinnedGoalWeightKg ?? user.manualGoalWeightKg;
-    if (goal == null || goal == GoalType.maintainWeight) {
-      debugPrint(
-        'UserController: skip goal reaffirm — no pinned lose/gain target',
-      );
+    if (goal == null || pinned == null) {
+      debugPrint('UserController: skip goal reaffirm — no pinned target');
       return;
     }
-    if (pinned == null) return;
 
     debugPrint(
       'UserController: reaffirming goal=${goal.apiValue} target=$pinned kg '
@@ -740,7 +920,7 @@ class UserController extends GetxController {
       aiRecommendedGoalWeightKg ??
       (user.goal == null || user.goal == GoalType.maintainWeight
           ? null
-          : user.recommendedGoalWeightKg);
+          : recommendedTargetKg());
 
   Future<void> _ensurePlanMatchesSelectedWeightTarget({
     required String accessToken,
@@ -1044,8 +1224,11 @@ class UserController extends GetxController {
   }
 
   Future<String> resolveSetupResumeRoute() async {
-    // Prefer home only when this account already has real profile basics.
-    if (_onboardingCompleted && user.hasProfileBasics) {
+    // API profile / persisted setupComplete are the cold-start source of truth
+    // (in-memory flags alone reset when the process dies).
+    if (user.hasProfileBasics || _onboardingCompleted) {
+      _onboardingCompleted = true;
+      _onboardingStep = null;
       return AppRoutes.main;
     }
 
@@ -1059,11 +1242,7 @@ class UserController extends GetxController {
       return step;
     }
 
-    // Verified + profile loaded from API → home. Otherwise start setup.
-    if (isEmailVerified && user.hasProfileBasics) {
-      return AppRoutes.main;
-    }
-
+    // Signed in but setup not finished — continue onboarding, never login.
     return AppRoutes.personalDetails;
   }
 
@@ -1151,6 +1330,12 @@ class UserController extends GetxController {
         response,
         applyGoalFields: patch.touchesGoalFields,
       );
+      if (patch.shouldRefreshNutritionPlan) {
+        // Goal / body / activity changes need a fresh nutrition plan so home
+        // calories + macros update immediately.
+        unawaited(_refreshNutritionPlanAfterProfileChange());
+      }
+      _notifyCalorieGoalChanged();
       return null;
     } on OnboardingApiException catch (error) {
       return error.message;
@@ -1160,6 +1345,24 @@ class UserController extends GetxController {
     } finally {
       isPatchingOnboarding = false;
       update();
+    }
+  }
+
+  /// Recreate + apply nutrition plan after a profile goal edit (API-only).
+  Future<void> _refreshNutritionPlanAfterProfileChange() async {
+    try {
+      final token = await resolveAccessToken();
+      if (token == null || token.isEmpty) return;
+
+      await _nutritionPlanRepository.createPlan(accessToken: token);
+      final plan = await _nutritionPlanRepository.fetchPlan(accessToken: token);
+      await applyNutritionPlan(plan, applyTargetWeight: false);
+      _syncNutritionPlanController(plan);
+      debugPrint('UserController: nutrition plan refreshed after profile change');
+    } catch (error, stackTrace) {
+      debugPrint(
+        'UserController: nutrition plan refresh failed: $error\n$stackTrace',
+      );
     }
   }
 
@@ -1277,6 +1480,7 @@ class UserController extends GetxController {
   Future<void> finishOnboardingSetup() async {
     _onboardingCompleted = true;
     await clearOnboardingProgress();
+    await _persistCurrentAuthSession();
     _notifyDashboard();
     MainController.resetHomeTabIfRegistered();
     Get.offAllNamed(AppRoutes.main);
@@ -1440,8 +1644,7 @@ class UserController extends GetxController {
       // If the payload had no goal weight, keep the user's existing target.
       if (!receivedGoalWeight &&
           preservedPinnedGoal != null &&
-          preservedGoalType != null &&
-          preservedGoalType != GoalType.maintainWeight) {
+          preservedGoalType != null) {
         user.pinGoalWeight(preservedPinnedGoal, goalType: preservedGoalType);
       }
       if (user.goalStartWeightKg == null && preservedStartWeight != null) {
@@ -1449,9 +1652,7 @@ class UserController extends GetxController {
       }
       // If goal type is still missing but we have a target weight, infer it.
       ensureGoalFromWeight();
-      if (user.goal != null &&
-          user.goal != GoalType.maintainWeight &&
-          user.pinnedGoalWeightKg != null) {
+      if (user.goal != null && user.pinnedGoalWeightKg != null) {
         user.pinnedGoalType = user.goal;
       }
     } else {
@@ -1460,9 +1661,7 @@ class UserController extends GetxController {
         user.goal = preservedGoalType;
         user.pinnedGoalType = preservedGoalType;
       }
-      if (preservedPinnedGoal != null &&
-          preservedGoalType != null &&
-          preservedGoalType != GoalType.maintainWeight) {
+      if (preservedPinnedGoal != null && preservedGoalType != null) {
         user.pinGoalWeight(preservedPinnedGoal, goalType: preservedGoalType);
       }
       if (preservedStartWeight != null) {
@@ -1624,6 +1823,8 @@ class UserController extends GetxController {
     user.name = name.trim().isNotEmpty ? name.trim() : '';
     update();
 
+    // Persist tokens first. Defer FCM until after profile — parallel bursts
+    // right after Google login were triggering 429 rate limits.
     await _authRepository.saveSession(
       userId: this.userId,
       provider: authProvider,
@@ -1632,6 +1833,7 @@ class UserController extends GetxController {
       accessToken: accessToken,
       refreshToken: refreshToken,
       backendResponse: backendResponse,
+      setupComplete: _onboardingCompleted || user.hasProfileBasics,
     );
 
     // Keep in-memory refresh in sync with what was persisted (may be nested).
@@ -1643,18 +1845,22 @@ class UserController extends GetxController {
       }
     }
 
+    // Profile first (with retries), then diary — never stampede the API.
+    await _reloadApiOwnedDataAfterLogin();
+
     unawaited(
       NotificationService.instance.syncTokenWithBackend(
         accessToken: accessToken,
       ),
     );
-
-    // Await API reload so home never paints with leftover / placeholder data.
-    await _reloadApiOwnedDataAfterLogin();
   }
 
   Future<void> _reloadApiOwnedDataAfterLogin() async {
     debugPrint('UserController: reloading API-owned data after login');
+
+    // Gate every other call on profile — this decides home vs setup.
+    await fetchProfile(refreshGoalTarget: true, maxAttempts: 4);
+
     if (Get.isRegistered<FoodController>()) {
       await Get.find<FoodController>().reloadAfterLogin();
     }
@@ -1664,11 +1870,26 @@ class UserController extends GetxController {
     if (Get.isRegistered<NutritionPlanController>()) {
       await Get.find<NutritionPlanController>().loadPlan(force: true);
     }
+    // Notifications are non-blocking for routing — don't delay / cause 429s.
     if (Get.isRegistered<NotificationsController>()) {
-      await Get.find<NotificationsController>().refreshUnreadCount();
+      unawaited(Get.find<NotificationsController>().refreshUnreadCount());
     }
-    await fetchProfile(refreshGoalTarget: true);
     _notifyDashboard();
+  }
+
+  /// True when the Google login payload looks like an existing account
+  /// (created earlier), not a brand-new signup in this request.
+  bool get isLikelyExistingBackendUser {
+    for (final map in _authResponseMaps(backendLoginResponse)) {
+      final createdRaw = map['createdAt'] ?? map['created_at'];
+      final loginRaw = map['lastLoginAt'] ?? map['last_login_at'];
+      if (createdRaw is! String || loginRaw is! String) continue;
+      final created = DateTime.tryParse(createdRaw);
+      final lastLogin = DateTime.tryParse(loginRaw);
+      if (created == null || lastLogin == null) continue;
+      return lastLogin.difference(created).inSeconds.abs() >= 90;
+    }
+    return false;
   }
 
   void _clearApiOwnedControllers() {
@@ -1690,6 +1911,21 @@ class UserController extends GetxController {
   Future<void> markOnboardingComplete() async {
     _onboardingCompleted = true;
     await clearOnboardingProgress();
+    await _persistCurrentAuthSession();
+  }
+
+  Future<void> _persistCurrentAuthSession() async {
+    if (!isLoggedIn || accessToken.isEmpty) return;
+    await _authRepository.saveSession(
+      userId: userId,
+      provider: authProvider,
+      email: user.email,
+      name: user.name,
+      accessToken: accessToken,
+      refreshToken: refreshToken.isEmpty ? null : refreshToken,
+      backendResponse: backendLoginResponse,
+      setupComplete: _onboardingCompleted || user.hasProfileBasics,
+    );
   }
 
   Future<void> _markEmailVerifiedLocally() async {
@@ -1701,25 +1937,13 @@ class UserController extends GetxController {
       return;
     }
 
-    await _authRepository.saveSession(
-      userId: userId,
-      provider: authProvider,
-      email: user.email,
-      name: user.name,
-      accessToken: accessToken,
-      refreshToken: refreshToken.isEmpty ? null : refreshToken,
-      backendResponse: backendLoginResponse,
-    );
+    await _persistCurrentAuthSession();
     update();
   }
 
-  void notifyGoalConsumers() => _notifyDashboard();
+  void notifyGoalConsumers() => _notifyCalorieGoalChanged();
 
-  void _notifyDashboard() {
-    if (Get.isRegistered<DashboardController>()) {
-      Get.find<DashboardController>().update();
-    }
-  }
+  void _notifyDashboard() => _notifyCalorieGoalChanged();
 
   Future<bool> performDeleteAccount() async {
     if (isDeletingAccount || isLoggingOut) return false;
@@ -1822,6 +2046,7 @@ class UserController extends GetxController {
     user.goalStartWeightKg = null;
     user.clearPinnedGoalWeight();
     user.pinnedGoalType = null;
+    _goalEditCheckpoint = null;
     weightTargetSource.value = WeightTargetSource.user;
     isRefreshingWeightTarget.value = false;
 
@@ -1838,6 +2063,27 @@ class UserController extends GetxController {
 }
 
 enum WeightTargetSource { user, ai }
+
+/// In-memory checkpoint for a My Goals → Goal Setup/Amount/Weight edit journey.
+class _GoalEditCheckpoint {
+  const _GoalEditCheckpoint({
+    required this.syncBaseline,
+    required this.goal,
+    required this.pinnedGoalType,
+    required this.pinnedGoalWeightKg,
+    required this.manualGoalWeightKg,
+    required this.goalStartWeightKg,
+    required this.targetDate,
+  });
+
+  final ProfileSyncSnapshot syncBaseline;
+  final GoalType? goal;
+  final GoalType? pinnedGoalType;
+  final double? pinnedGoalWeightKg;
+  final double? manualGoalWeightKg;
+  final double? goalStartWeightKg;
+  final DateTime targetDate;
+}
 
 /// Outcome of [UserController.pickTargetDate].
 enum PickTargetDateStatus { cancelled, unchanged, saved, failed }

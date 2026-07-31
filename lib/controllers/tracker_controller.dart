@@ -93,6 +93,8 @@ class TrackerController extends GetxController {
   final RxnString weightApiErrorMessage = RxnString();
   final RxBool isLoadingWeightApi = false.obs;
   final RxInt weightRevision = 0.obs;
+  /// Bumped on every water ml change so Obx rebuilds even when map length is unchanged.
+  final RxInt waterRevision = 0.obs;
   final RxBool needsHealthConnectInstall = false.obs;
   final RxBool usesHealthConnect = false.obs;
 
@@ -117,6 +119,11 @@ class TrackerController extends GetxController {
   WeightChartCustomRange? _weightChartCustomRange;
 
   DateTime get _today => MealEntry.normalizeDate(DateTime.now());
+
+  void _bumpWaterRevision() {
+    waterByDate.refresh();
+    waterRevision.value++;
+  }
 
   List<double> get weightHistory =>
       weightEntries.map((entry) => entry.kg).toList();
@@ -163,6 +170,8 @@ class TrackerController extends GetxController {
     _waterGoalCelebrationShown = false;
     currentWeight.value = 0;
     activityRevision.value++;
+    weightRevision.value++;
+    waterRevision.value++;
     update();
     debugPrint('TrackerController: session data cleared');
   }
@@ -198,7 +207,7 @@ class TrackerController extends GetxController {
       waterByDate[entry.key] = raw * mlPerGlass;
       changed = true;
     }
-    if (changed) waterByDate.refresh();
+    if (changed) _bumpWaterRevision();
   }
 
   bool _isLegacyGlassCount(int value) =>
@@ -332,7 +341,7 @@ class TrackerController extends GetxController {
     final wasComplete = previous >= waterGoalMl;
 
     waterByDate[day] = previous + ml;
-    waterByDate.refresh();
+    _bumpWaterRevision();
     AppSnackbar.success(_waterLoggedMessage(ml), title: 'Water');
     _maybeShowWaterGoalCelebration(wasComplete, forDate: day);
 
@@ -352,7 +361,7 @@ class TrackerController extends GetxController {
       final serverTotal = response.dailyTotalMl;
       if (serverTotal != null) {
         waterByDate[day] = serverTotal;
-        waterByDate.refresh();
+        _bumpWaterRevision();
       } else {
         await refreshWaterForDate(day);
       }
@@ -425,7 +434,7 @@ class TrackerController extends GetxController {
     } else {
       waterByDate[day] = next;
     }
-    waterByDate.refresh();
+    _bumpWaterRevision();
     AppSnackbar.success(_waterRemovedMessage(ml), title: 'Water');
 
     if (waterForDate(day) < waterGoalMl) {
@@ -521,7 +530,7 @@ class TrackerController extends GetxController {
     if (!isWaterGoalComplete) {
       _waterGoalCelebrationShown = false;
     }
-    waterByDate.refresh();
+    _bumpWaterRevision();
   }
 
   /// Loads today's water total and paginated history from the API.
@@ -558,14 +567,6 @@ class TrackerController extends GetxController {
     }
   }
 
-  void _applyWaterTotals(Map<DateTime, int> totals) {
-    if (totals.isEmpty) return;
-    for (final entry in totals.entries) {
-      waterByDate[entry.key] = entry.value;
-    }
-    waterByDate.refresh();
-  }
-
   void _applyWaterFetchResult(
     WaterFetchResult result, {
     DateTime? replaceEntriesForDate,
@@ -580,7 +581,13 @@ class TrackerController extends GetxController {
       }
       waterEntries.refresh();
     }
-    _applyWaterTotals(result.dailyTotalsMl);
+    if (result.dailyTotalsMl.isNotEmpty) {
+      for (final entry in result.dailyTotalsMl.entries) {
+        waterByDate[entry.key] = entry.value;
+      }
+    }
+    // Always notify — entries-only payloads must still rebuild the chart.
+    _bumpWaterRevision();
   }
 
   void _upsertWaterEntries(List<WaterLogEntry> incoming) {
@@ -783,6 +790,16 @@ class TrackerController extends GetxController {
     final kg = (Get.find<UserController>().user.weightKg?.toDouble() ?? 0);
     if (kg > 0) {
       currentWeight.value = kg;
+    }
+  }
+
+  /// Public hook for Goal screens when weight history hasn't loaded yet.
+  void syncWeightFromProfileIfEmpty() {
+    if (currentWeight.value > 0 || weightEntries.isNotEmpty) return;
+    _seedDisplayWeightFromProfile();
+    if (currentWeight.value > 0) {
+      weightRevision.value++;
+      update();
     }
   }
 

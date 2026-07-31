@@ -91,25 +91,25 @@ class UserModel {
     if (!hasProfileBasics) return 0;
     return WeightGoalCalculator.recommendedGoalWeight(
       goal: goal,
-      weightKg: weightKg!,
-      heightCm: heightCm!,
-      age: age!,
-      gender: gender!,
+      currentWeightKg: weightKg!.toDouble(),
+      heightCm: heightCm,
+      age: age,
+      gender: gender,
     );
   }
 
   /// Active target for home + profile.
   ///
-  /// Lose/gain always use the pinned onboarding/goal target — never a live
-  /// recalculation from the latest weigh-in.
+  /// Lose/gain/maintain always use the pinned Goals/onboarding target — never
+  /// a live recalculation from the latest weigh-in.
   double get goalWeightKg {
     final effectiveGoal = pinnedGoalType ?? goal;
-    final current = weightKg?.toDouble() ?? 0;
-    if (effectiveGoal == GoalType.maintainWeight) {
-      return current;
-    }
     if (pinnedGoalWeightKg != null) return pinnedGoalWeightKg!;
     if (manualGoalWeightKg != null) return manualGoalWeightKg!;
+    if (effectiveGoal == GoalType.maintainWeight) {
+      // Fallback only before a maintain target has been pinned.
+      return weightKg?.toDouble() ?? 0;
+    }
     return recommendedGoalWeightKg;
   }
 
@@ -120,7 +120,7 @@ class UserModel {
     if (goalType != null) {
       pinnedGoalType = goalType;
       goal = goalType;
-    } else if (goal != null && goal != GoalType.maintainWeight) {
+    } else if (goal != null) {
       pinnedGoalType = goal;
     }
   }

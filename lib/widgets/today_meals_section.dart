@@ -27,6 +27,7 @@ class TodayMealsSection extends StatelessWidget {
 
     return Obx(() {
       final _ = food.entriesRevision.value;
+      food.selectedLogDate.value;
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,

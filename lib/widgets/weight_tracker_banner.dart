@@ -43,13 +43,14 @@ class WeightTrackerBanner extends StatelessWidget {
       final currentKg = tracker.currentWeight.value;
       final trend = _WeightTrend.fromEntries(entries);
       final goalKg = user.user.goalWeightKg;
+      final goalType = user.user.pinnedGoalType ?? user.user.goal;
 
       final card = _WeightTrackerCard(
         currentKg: currentKg,
         goalKg: goalKg,
         entries: entries,
         trend: trend,
-        goal: user.user.goal,
+        goal: goalType,
         useMetricUnits: useMetricUnits,
         onAddWeight: () {
           // Use the banner's build context (not a nested InkWell route) so

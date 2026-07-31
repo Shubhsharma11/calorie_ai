@@ -10,7 +10,6 @@ import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/goal_type.dart';
 import '../models/onboarding_request_model.dart';
-import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
@@ -30,16 +29,18 @@ class GoalSetupView extends StatefulWidget {
 
 class _GoalSetupViewState extends State<GoalSetupView> {
   final UserController controller = Get.find<UserController>();
-  late final ProfileSyncSnapshot _baseline;
 
   @override
   void initState() {
     super.initState();
-    _baseline = controller.captureProfileSyncSnapshot();
+    if (RouteArgs.isEditingFromProfile) {
+      controller.beginGoalEditFromProfile();
+    }
   }
 
   Future<void> _onBack({required bool fromProfile}) async {
     if (fromProfile) {
+      controller.cancelGoalEditFromProfile();
       Get.back<void>();
       return;
     }
@@ -47,10 +48,10 @@ class _GoalSetupViewState extends State<GoalSetupView> {
   }
 
   void _onSelectGoal(GoalType goal) {
-    controller.selectGoal(goal);
-    if (!RouteArgs.isEditingFromProfile) {
-      controller.scheduleOnboardingDraftSave();
-    }
+    controller.selectGoal(
+      goal,
+      persistDraft: !RouteArgs.isEditingFromProfile,
+    );
   }
 
   Future<void> _onContinue({required bool fromProfile}) async {
@@ -65,10 +66,12 @@ class _GoalSetupViewState extends State<GoalSetupView> {
         controller.useRecommendedGoalWeight();
         final patch = OnboardingPatchModel.goalProfileDiff(
           controller.user,
-          _baseline,
+          controller.baselineForGoalProfileSave(),
         );
         if (patch.isEmpty) {
+          controller.commitGoalEditFromProfile();
           AppSnackbar.info('No changes to save.', title: 'Nothing changed');
+          controller.popToMyGoals();
           return;
         }
         final error = await controller.patchOnboarding(patch);
@@ -76,7 +79,8 @@ class _GoalSetupViewState extends State<GoalSetupView> {
           AppSnackbar.error(error, title: 'Save failed');
           return;
         }
-        Get.back();
+        controller.commitGoalEditFromProfile();
+        controller.popToMyGoals();
         AppSnackbar.success('Goal updated.');
         return;
       }

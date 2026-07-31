@@ -6,6 +6,7 @@ import '../controllers/daily_summary_controller.dart';
 import '../controllers/food_controller.dart';
 import '../controllers/main_controller.dart';
 import '../controllers/tracker_controller.dart';
+import '../controllers/user_controller.dart';
 import '../core/dashboard_actions.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
@@ -46,8 +47,12 @@ class DailySummaryView extends GetView<DailySummaryController> {
       body: Obx(() {
         food.entriesRevision.value;
         food.selectedLogDate.value;
-        Get.find<TrackerController>().waterByDate.length;
+        Get.find<TrackerController>().waterRevision.value;
         Get.find<TrackerController>().activityRevision.value;
+        Get.find<TrackerController>().weightRevision.value;
+        if (Get.isRegistered<UserController>()) {
+          Get.find<UserController>().calorieGoalRevision.value;
+        }
 
         final viewingToday = controller.isViewingToday;
 

@@ -5,6 +5,7 @@ import '../widgets/daily_log/repeat_yesterday_card.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
+import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_snackbar.dart';
 import '../core/dashboard_actions.dart';
@@ -26,6 +27,12 @@ class DailyLogView extends GetView<FoodController> {
 
     return Obx(() {
       final _ = controller.entriesRevision.value;
+      if (Get.isRegistered<UserController>()) {
+        Get.find<UserController>().calorieGoalRevision.value;
+      }
+      if (Get.isRegistered<TrackerController>()) {
+        Get.find<TrackerController>().activityRevision.value;
+      }
       final logDate = controller.selectedLogDate.value;
       final eaten = controller.selectedDateCalories;
       final goal = dash.calorieGoal;

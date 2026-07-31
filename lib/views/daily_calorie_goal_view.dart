@@ -54,6 +54,8 @@ class DailyCalorieGoalView extends GetView<UserController> {
             final canIncrease = goal < UserController.maxDailyCalories;
 
             return Obx(() {
+              planController.revision.value;
+              controller.calorieGoalRevision.value;
               if (planController.isLoading.value &&
                   !controller.isRefreshingWeightTarget.value) {
                 return const Center(child: CircularProgressIndicator());

@@ -38,44 +38,70 @@ Future<void> main() async {
 }
 
 Future<String> _resolveInitialRoute() async {
-  try {
-    final theme = Get.find<ThemeController>();
-    final settings = Get.find<SettingsController>();
-    final user = Get.find<UserController>();
+  final theme = Get.find<ThemeController>();
+  final settings = Get.find<SettingsController>();
+  final user = Get.find<UserController>();
 
-    await Future.wait<void>([
-      theme.loadTheme(),
-      settings.settingsReady,
+  // Restore auth from disk only — never block launch on network/profile.
+  try {
+    await LocalStorageService().wipeLegacyApiCachesIfNeeded();
+    await user.loadAuthSession();
+  } catch (error, stackTrace) {
+    debugPrint('Startup auth restore failed: $error\n$stackTrace');
+  }
+
+  // Side inits can finish after first frame; cap wait so splash never sticks.
+  await Future.any<void>([
+    Future.wait<void>([
+      _ignoreInitErrors(theme.loadTheme(), 'theme'),
+      _ignoreInitErrors(settings.settingsReady, 'settings'),
+    ]),
+    Future<void>.delayed(const Duration(seconds: 2)),
+  ]);
+
+  unawaited(
+    _ignoreInitErrors(
       NotificationService.instance.initialize(),
+      'notifications',
+    ),
+  );
+  unawaited(
+    _ignoreInitErrors(
       GoogleSignIn.instance.initialize(
         serverClientId:
             '950645223660-73fq24ua6hn9h7u92bc9nhtg22rjag1d.apps.googleusercontent.com',
       ),
-      () async {
-        await LocalStorageService().wipeLegacyApiCachesIfNeeded();
-        await user.loadAuthSession();
-        await user.restoreOnboardingProgress();
-      }(),
-    ]);
+      'google_sign_in',
+    ),
+  );
 
-    if (user.isLoggedIn && user.accessToken.isNotEmpty) {
-      unawaited(
-        NotificationService.instance.syncTokenWithBackend(
-          accessToken: user.accessToken,
-        ),
-      );
-      // Returning users should never see welcome slides again after logout.
+  if (user.isLoggedIn && user.accessToken.isNotEmpty) {
+    unawaited(
+      NotificationService.instance.syncTokenWithBackend(
+        accessToken: user.accessToken,
+      ),
+    );
+    try {
       await LocalStorageService().saveWelcomeIntroSeen(seen: true);
-      return user.resolveSetupResumeRoute();
-    }
+    } catch (_) {}
 
+    // Route from persisted session; profile continues hydrating in background.
+    return user.resolveSetupResumeRoute();
+  }
+
+  try {
     if (await LocalStorageService().isWelcomeIntroSeen()) {
       return AppRoutes.login;
     }
-    return AppRoutes.onboarding;
-  } catch (_) {
-    // Still open the app; screens handle their own errors.
-    return AppRoutes.login;
+  } catch (_) {}
+  return AppRoutes.onboarding;
+}
+
+Future<void> _ignoreInitErrors(Future<void> future, String label) async {
+  try {
+    await future;
+  } catch (error, stackTrace) {
+    debugPrint('Startup $label init failed: $error\n$stackTrace');
   }
 }
 

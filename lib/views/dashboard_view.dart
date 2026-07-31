@@ -192,6 +192,9 @@ class _SecondarySection extends GetView<DashboardController> {
       food.entriesRevision.value;
       food.selectedLogDate.value;
       Get.find<UserController>().calorieGoalRevision.value;
+      if (Get.isRegistered<TrackerController>()) {
+        Get.find<TrackerController>().activityRevision.value;
+      }
       final user = Get.find<UserController>().user;
       final goal = controller.calorieGoal;
       final weeklyMetric = controller.weeklyMetric.value;

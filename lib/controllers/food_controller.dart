@@ -1547,8 +1547,18 @@ class FoodController extends GetxController {
     DateTime? fromDate,
     DateTime? toDate,
   }) {
-    if (_refreshMealsFuture != null) {
-      return _refreshMealsFuture!;
+    // Never coalesce onto an in-flight GET with different args — that can
+    // restore a stale list and wipe an optimistic create/delete.
+    final inFlight = _refreshMealsFuture;
+    if (inFlight != null) {
+      return inFlight.then(
+        (_) => refreshMealsFromApi(
+          date: date,
+          period: period,
+          fromDate: fromDate,
+          toDate: toDate,
+        ),
+      );
     }
 
     _refreshMealsFuture = _refreshMealsFromApi(

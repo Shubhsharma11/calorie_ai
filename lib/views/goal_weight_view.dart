@@ -10,7 +10,6 @@ import '../core/route_args.dart';
 import '../core/weight_goal_calculator.dart';
 import '../models/goal_type.dart';
 import '../models/onboarding_request_model.dart';
-import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/responsive_page.dart';
@@ -29,7 +28,6 @@ class _GoalWeightViewState extends State<GoalWeightView> {
   late double _goalWeight;
   late bool _isManual;
   late DateTime _targetDate;
-  late ProfileSyncSnapshot _baseline;
   bool _isSaving = false;
 
   static const double _weightMinKg = 40;
@@ -39,10 +37,12 @@ class _GoalWeightViewState extends State<GoalWeightView> {
   void initState() {
     super.initState();
     final u = _user.user;
+    if (RouteArgs.isEditingFromProfile) {
+      _user.beginGoalEditFromProfile();
+    }
     _isManual = u.isGoalWeightManual;
     _goalWeight = u.goalWeightKg.clamp(_weightMinKg, _weightMaxKg);
     _targetDate = u.targetDate;
-    _baseline = _user.captureProfileSyncSnapshot();
 
     if (u.goal == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -55,13 +55,7 @@ class _GoalWeightViewState extends State<GoalWeightView> {
 
   GoalType get _goal => _user.user.goal ?? GoalType.maintainWeight;
 
-  double get _currentKg {
-    if (Get.isRegistered<TrackerController>()) {
-      final kg = Get.find<TrackerController>().currentWeight.value;
-      if (kg > 0) return kg;
-    }
-    return _user.user.weightKg?.toDouble() ?? 0;
-  }
+  double get _currentKg => _user.resolvedCurrentWeightKg();
 
   bool _weightMatchesGoal(double targetKg, double currentKg, GoalType goal) =>
       WeightGoalCalculator.targetMatchesGoal(
@@ -79,12 +73,15 @@ class _GoalWeightViewState extends State<GoalWeightView> {
 
     u.goal = _goal;
     if (_goal == GoalType.maintainWeight) {
-      u.clearPinnedGoalWeight();
+      u.pinGoalWeight(
+        _isManual ? _goalWeight : _user.recommendedTargetKg(_goal),
+        goalType: GoalType.maintainWeight,
+      );
     } else if (_isManual) {
       u.pinGoalWeight(_goalWeight);
     } else {
       u.clearPinnedGoalWeight();
-      u.pinGoalWeight(u.recommendedGoalWeightKg);
+      u.pinGoalWeight(_user.recommendedTargetKg(_goal));
     }
     u.targetDate = _targetDate;
     final calories = u.dailyCalorieGoal;
@@ -153,16 +150,28 @@ class _GoalWeightViewState extends State<GoalWeightView> {
     if (_isSaving) return;
 
     final u = _user.user;
-    final currentKg = _currentKg;
+    var currentKg = _currentKg;
+    if (currentKg <= 0 && Get.isRegistered<TrackerController>()) {
+      Get.find<TrackerController>().syncWeightFromProfileIfEmpty();
+      currentKg = _currentKg;
+    }
+
+    if (currentKg <= 0) {
+      AppSnackbar.error(
+        'Set your current weight in profile first, then choose a target.',
+        title: 'Current weight needed',
+      );
+      return;
+    }
 
     if (!_weightMatchesGoal(_goalWeight, currentKg, _goal)) {
       final message = switch (_goal) {
         GoalType.loseWeight =>
-          'For weight loss, set a target below your current weight.',
+          'For weight loss, set a target below your current weight (${currentKg.toStringAsFixed(1)} kg).',
         GoalType.maintainWeight =>
-          'For maintenance, your target should match your current weight.',
+          'For maintenance, your target should match your current weight (${currentKg.toStringAsFixed(1)} kg).',
         GoalType.gainWeight =>
-          'For weight gain, set a target above your current weight.',
+          'For weight gain, set a target above your current weight (${currentKg.toStringAsFixed(1)} kg).',
       };
       AppSnackbar.error(message, title: 'Invalid target');
       return;
@@ -186,9 +195,14 @@ class _GoalWeightViewState extends State<GoalWeightView> {
       if (RouteArgs.isEditingFromProfile || RouteArgs.shouldReturnToDailyGoal) {
         var didSaveProfile = false;
         if (RouteArgs.isEditingFromProfile && u.goal != null) {
-          final patch = OnboardingPatchModel.goalProfileDiff(u, _baseline);
+          final patch = OnboardingPatchModel.goalProfileDiff(
+            u,
+            _user.baselineForGoalProfileSave(),
+          );
           if (patch.isEmpty) {
+            _user.commitGoalEditFromProfile();
             AppSnackbar.info('No changes to save.', title: 'Nothing changed');
+            _user.popToMyGoals();
             return;
           }
 
@@ -198,10 +212,14 @@ class _GoalWeightViewState extends State<GoalWeightView> {
             AppSnackbar.error(error, title: 'Save failed');
             return;
           }
-          _baseline = _user.captureProfileSyncSnapshot();
+          _user.commitGoalEditFromProfile();
           didSaveProfile = true;
         }
-        Get.back();
+        if (RouteArgs.isEditingFromProfile) {
+          _user.popToMyGoals();
+        } else {
+          Get.back();
+        }
         if (didSaveProfile) {
           AppSnackbar.success('Goal weight updated.');
         }
@@ -223,7 +241,14 @@ class _GoalWeightViewState extends State<GoalWeightView> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const AppAppBar.backOnly(),
+      appBar: AppAppBar.backOnly(
+        onBack: () {
+          if (RouteArgs.isEditingFromProfile) {
+            _user.cancelGoalEditFromProfile();
+          }
+          Get.back<void>();
+        },
+      ),
       body: SetupScreenLayout(
         scrollable: true,
         content: Column(

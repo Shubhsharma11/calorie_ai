@@ -6,7 +6,6 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../controllers/settings_controller.dart';
-import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_snackbar.dart';
 import '../core/body_measurement_units.dart';
@@ -14,7 +13,6 @@ import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/goal_type.dart';
 import '../models/onboarding_request_model.dart';
-import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
@@ -34,7 +32,6 @@ class GoalAmountView extends StatefulWidget {
 class _GoalAmountViewState extends State<GoalAmountView> {
   final UserController _user = Get.find<UserController>();
   final SettingsController _settings = Get.find<SettingsController>();
-  late ProfileSyncSnapshot _baseline;
 
   late bool _useKg;
   late double _amountDisplay;
@@ -59,19 +56,15 @@ class _GoalAmountViewState extends State<GoalAmountView> {
 
   bool get _isLose => _goal == GoalType.loseWeight;
 
-  double get _currentKg {
-    if (Get.isRegistered<TrackerController>()) {
-      final kg = Get.find<TrackerController>().currentWeight.value;
-      if (kg > 0) return kg;
-    }
-    return _user.user.weightKg?.toDouble() ?? 0;
-  }
+  double get _currentKg => _user.resolvedCurrentWeightKg();
 
   @override
   void initState() {
     super.initState();
     _useKg = _settings.useMetricUnits.value;
-    _baseline = _user.captureProfileSyncSnapshot();
+    if (RouteArgs.isEditingFromProfile) {
+      _user.beginGoalEditFromProfile();
+    }
     _bootstrapFromUser();
 
     final goal = _user.user.goal;
@@ -261,6 +254,11 @@ class _GoalAmountViewState extends State<GoalAmountView> {
 
   Future<void> _onBack({required bool fromProfile}) async {
     if (fromProfile) {
+      // Back to Goal Setup keeps the edit journey; cancel only when Amount
+      // was opened directly from My Goals.
+      if (Get.previousRoute != AppRoutes.goalSetup) {
+        _user.cancelGoalEditFromProfile();
+      }
       Get.back<void>();
       return;
     }
@@ -282,9 +280,14 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     _user.update();
 
     if (fromProfile) {
-      final patch = OnboardingPatchModel.goalProfileDiff(_user.user, _baseline);
+      final patch = OnboardingPatchModel.goalProfileDiff(
+        _user.user,
+        _user.baselineForGoalProfileSave(),
+      );
       if (patch.isEmpty) {
+        _user.commitGoalEditFromProfile();
         AppSnackbar.info('No changes to save.', title: 'Nothing changed');
+        _user.popToMyGoals();
         return;
       }
       setState(() => _isSaving = true);
@@ -295,7 +298,8 @@ class _GoalAmountViewState extends State<GoalAmountView> {
         AppSnackbar.error(saveError, title: 'Save failed');
         return;
       }
-      Get.back();
+      _user.commitGoalEditFromProfile();
+      _user.popToMyGoals();
       AppSnackbar.success('Goal updated.');
       return;
     }

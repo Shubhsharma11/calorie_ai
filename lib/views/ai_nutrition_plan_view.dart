@@ -60,6 +60,7 @@ class _AiNutritionPlanViewState extends State<AiNutritionPlanView> {
           final plan = planController?.plan.value;
           final isLoading = planController?.isLoading.value ?? false;
           final _ = planController?.revision.value;
+          userController.calorieGoalRevision.value;
           if (Get.isRegistered<TrackerController>()) {
             Get.find<TrackerController>().weightRevision.value;
           }

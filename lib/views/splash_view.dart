@@ -31,6 +31,9 @@ class _SplashViewState extends State<SplashView> {
       final user = Get.find<UserController>();
       final storage = LocalStorageService();
 
+      // Session-only — do not wait on network profile hydrate.
+      await user.loadAuthSession();
+
       if (user.isLoggedIn && user.accessToken.isNotEmpty) {
         await storage.saveWelcomeIntroSeen(seen: true);
         next = await user.resolveSetupResumeRoute();
@@ -40,7 +43,16 @@ class _SplashViewState extends State<SplashView> {
         next = AppRoutes.onboarding;
       }
     } catch (_) {
-      next = AppRoutes.login;
+      final user = Get.isRegistered<UserController>()
+          ? Get.find<UserController>()
+          : null;
+      if (user != null &&
+          user.isLoggedIn &&
+          user.accessToken.isNotEmpty) {
+        next = await user.resolveSetupResumeRoute();
+      } else {
+        next = AppRoutes.login;
+      }
     }
 
     if (!mounted) return;
