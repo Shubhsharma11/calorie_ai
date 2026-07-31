@@ -179,8 +179,24 @@ class CalorieOverviewCard extends StatelessWidget {
                           ),
                         ],
                       ),
+                      SizedBox(height: r.scale(14)),
+                      Padding(
+                        // Align with macros box inner content (Carbs / Fat / Protein).
+                        padding: EdgeInsets.symmetric(horizontal: r.scale(10)),
+                        child: Text(
+                          'Remaining = Goal − Food + Exercise',
+                          textAlign: TextAlign.left,
+                          style: TextStyle(
+                            fontSize: r.scale(12.5),
+                            height: 1.35,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary.withValues(alpha: 0.9),
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                      ),
                       if (macros.isNotEmpty) ...[
-                        SizedBox(height: r.scale(24)),
+                        SizedBox(height: r.scale(15)),
                         Container(
                           padding: EdgeInsets.symmetric(
                             horizontal: r.scale(10),

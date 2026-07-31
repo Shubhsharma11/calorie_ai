@@ -6,7 +6,7 @@ class FoodItem {
     required this.carbs,
     required this.fat,
     this.emoji = '🍽️',
-    
+    this.imageUrl,
   });
 
   final String name;
@@ -15,6 +15,7 @@ class FoodItem {
   final double carbs;
   final double fat;
   final String emoji;
+  final String? imageUrl;
 
   int caloriesForGrams(int grams) =>
       (caloriesPer100g * grams / 100).round();
@@ -29,6 +30,7 @@ class FoodItem {
         'carbs': carbs,
         'fat': fat,
         'emoji': emoji,
+        if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
       };
 
   factory FoodItem.fromJson(Map<String, dynamic> json) => FoodItem(
@@ -38,5 +40,10 @@ class FoodItem {
         carbs: (json['carbs'] as num).toDouble(),
         fat: (json['fat'] as num).toDouble(),
         emoji: json['emoji'] as String? ?? '🍽️',
+        imageUrl: (json['imageUrl'] as String?)?.trim().isNotEmpty == true
+            ? (json['imageUrl'] as String).trim()
+            : (json['image'] as String?)?.trim().isNotEmpty == true
+                ? (json['image'] as String).trim()
+                : null,
       );
 }

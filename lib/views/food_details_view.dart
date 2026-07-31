@@ -72,6 +72,7 @@ class FoodDetailsView extends GetView<FoodController> {
             Center(
               child: FoodEmojiAvatar(
                 emoji: food.emoji,
+                imageUrl: food.imageUrl,
                 size: 120,
                 fontSize: 64,
               ),

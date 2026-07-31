@@ -111,6 +111,7 @@ Future<void> showCustomMealLogSheet(
                               children: [
                                 FoodEmojiAvatar(
                                   emoji: item.food.emoji,
+                                  imageUrl: item.food.imageUrl,
                                   size: 38,
                                 ),
                                 SizedBox(width: r.scale(10)),

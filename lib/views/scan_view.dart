@@ -267,7 +267,11 @@ class _ScanResultCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            FoodEmojiAvatar(emoji: food.emoji, size: 48),
+            FoodEmojiAvatar(
+              emoji: food.emoji,
+              imageUrl: food.imageUrl,
+              size: 48,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

@@ -84,6 +84,7 @@ class FoodController extends GetxController {
 
   final RxBool isSearching = false.obs; 
   final RxBool isLoadingMealsApi = false.obs;
+  final RxnString searchErrorMessage = RxnString();
   final RxnString mealsApiErrorMessage = RxnString();
   final Rx<DateTime> selectedLogDate = MealEntry.normalizeDate(
     DateTime.now(),
@@ -133,6 +134,7 @@ class FoodController extends GetxController {
     _lastCustomMealsFetchAt = null;
     _lastMyFoodsFetchAt = null;
     _lastFavouritesFetchAt = null;
+    searchErrorMessage.value = null;
     mealsApiErrorMessage.value = null;
     entriesRevision.value++;
     debugPrint('FoodController: session data cleared');
@@ -311,6 +313,7 @@ class FoodController extends GetxController {
             emoji: local.food.emoji.isNotEmpty
                 ? local.food.emoji
                 : remote.food.emoji,
+            imageUrl: local.food.imageUrl ?? remote.food.imageUrl,
           ),
           servingQuantity: local.servingQuantity ?? remote.servingQuantity,
           servingUnit: local.servingUnit.isNotEmpty
@@ -1827,12 +1830,22 @@ class FoodController extends GetxController {
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
       searchResults.clear();
+      searchErrorMessage.value = null;
       return;
     }
 
     isSearching.value = true;
+    searchErrorMessage.value = null;
     try {
       searchResults.value = await searchFoodsEphemeral(trimmed);
+    } on FoodApiException catch (error) {
+      searchResults.clear();
+      searchErrorMessage.value = error.message;
+      debugPrint('FoodController: search failed: $error');
+    } catch (error) {
+      searchResults.clear();
+      searchErrorMessage.value = 'Unable to search foods. Please try again.';
+      debugPrint('FoodController: search failed: $error');
     } finally {
       isSearching.value = false;
     }
@@ -1842,7 +1855,16 @@ class FoodController extends GetxController {
   Future<List<FoodItem>> searchFoodsEphemeral(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return [];
-    return _api.searchFoods(trimmed);
+    final accessToken = await _mealAccessToken();
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const FoodApiException('Sign in to search foods.');
+    }
+    return _api.searchFoods(
+      trimmed,
+      accessToken: accessToken,
+      page: 1,
+      limit: 20,
+    );
   }
 
   void onSearchChanged(String value) {
@@ -1858,6 +1880,7 @@ class FoodController extends GetxController {
     _debounce?.cancel();
     searchQuery.value = '';
     searchResults.clear();
+    searchErrorMessage.value = null;
     isSearching.value = false;
   }
 

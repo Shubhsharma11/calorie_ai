@@ -10,8 +10,8 @@ import 'package:image_picker/image_picker.dart';
 import '../controllers/food_controller.dart';
 import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
-import '../data/indian_foods_data.dart';
 import '../models/custom_meal_preset.dart';
+import '../services/food_api_service.dart';
 import '../models/food_item.dart';
 import '../models/meal_type.dart';
 import '../models/saved_meal_item.dart';
@@ -40,6 +40,7 @@ class _CreateMealViewState extends State<CreateMealView> {
   List<FoodItem> _searchResults = [];
   bool _isSaving = false;
   bool _isSearching = false;
+  String? _searchError;
   MealShareVisibility _visibility = MealShareVisibility.public;
   CustomMealPreset? _editingPreset;
   Timer? _searchDebounce;
@@ -79,14 +80,6 @@ class _CreateMealViewState extends State<CreateMealView> {
     super.dispose();
   }
 
-  List<FoodItem> _localSearchResults(String query) {
-    final lower = query.toLowerCase();
-    return indianFoods
-        .where((food) => food.name.toLowerCase().contains(lower))
-        .take(8)
-        .toList();
-  }
-
   void _onSearchChanged() {
     final query = _searchController.text.trim();
     _searchDebounce?.cancel();
@@ -95,15 +88,15 @@ class _CreateMealViewState extends State<CreateMealView> {
       setState(() {
         _searchResults = [];
         _isSearching = false;
+        _searchError = null;
       });
       return;
     }
 
     final requestId = ++_searchRequestId;
-    final localResults = _localSearchResults(query);
     setState(() {
-      _searchResults = localResults;
       _isSearching = true;
+      _searchError = null;
     });
 
     _searchDebounce = Timer(const Duration(milliseconds: 450), () async {
@@ -113,14 +106,24 @@ class _CreateMealViewState extends State<CreateMealView> {
         if (_searchController.text.trim() != query) return;
 
         setState(() {
-          _searchResults = apiResults.isNotEmpty
-              ? apiResults.take(8).toList()
-              : localResults;
+          _searchResults = apiResults.take(8).toList();
           _isSearching = false;
+          _searchError = null;
+        });
+      } on FoodApiException catch (error) {
+        if (!mounted || requestId != _searchRequestId) return;
+        setState(() {
+          _searchResults = [];
+          _isSearching = false;
+          _searchError = error.message;
         });
       } catch (_) {
         if (!mounted || requestId != _searchRequestId) return;
-        setState(() => _isSearching = false);
+        setState(() {
+          _searchResults = [];
+          _isSearching = false;
+          _searchError = 'Unable to search foods. Please try again.';
+        });
       }
     });
   }
@@ -158,6 +161,8 @@ class _CreateMealViewState extends State<CreateMealView> {
       );
       _searchController.clear();
       _searchResults = [];
+      _searchError = null;
+      _isSearching = false;
     });
   }
 
@@ -185,6 +190,7 @@ class _CreateMealViewState extends State<CreateMealView> {
       carbs: customized.carbs,
       fat: customized.fat,
       emoji: item.food.emoji,
+      imageUrl: item.food.imageUrl,
     );
 
     setState(() {
@@ -550,6 +556,7 @@ class _CreateMealViewState extends State<CreateMealView> {
                                         ),
                                         leading: FoodEmojiAvatar(
                                           emoji: food.emoji,
+                                          imageUrl: food.imageUrl,
                                           size: r.scale(42),
                                         ),
                                         title: Text(
@@ -588,6 +595,23 @@ class _CreateMealViewState extends State<CreateMealView> {
                                     ],
                                   );
                                 },
+                              ),
+                            ),
+                          ),
+                        ] else if (_searchController.text.trim().isNotEmpty &&
+                            !_isSearching &&
+                            _searchError != null) ...[
+                          SizedBox(height: r.scale(10)),
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              vertical: r.scale(12),
+                            ),
+                            child: Text(
+                              _searchError!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: r.scale(13),
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ),
@@ -1719,6 +1743,7 @@ class _IngredientRow extends StatelessWidget {
               children: [
                 FoodEmojiAvatar(
                   emoji: item.food.emoji,
+                  imageUrl: item.food.imageUrl,
                   size: r.scale(42),
                 ),
                 SizedBox(width: r.scale(10)),

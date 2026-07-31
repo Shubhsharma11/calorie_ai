@@ -66,23 +66,24 @@ class FloatingBottomNavBar extends StatelessWidget {
                           selected: main.tabIndex.value == index,
                           isCenter: isCenter,
                           onTap: () => onTap(index),
-                          compact: coachKey != null,
                         ),
                       );
 
                       if (coachKey != null) {
-                        // Tight target around the visible control — not the
-                        // full 90px Expanded cell (that left a huge tip gap).
-                        navItem = Align(
-                          alignment: Alignment.bottomCenter,
-                          child: AppCoachMarks.target(
-                            key: coachKey,
-                            child: navItem,
-                          ),
+                        navItem = AppCoachMarks.target(
+                          key: coachKey,
+                          child: navItem,
                         );
                       }
 
-                      return Expanded(child: navItem);
+                      // Same bottom alignment for every tab (Home had no
+                      // coach key, so it used a taller cell and sat lower).
+                      return Expanded(
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: navItem,
+                        ),
+                      );
                     }),
                   ),
                 ),
@@ -263,7 +264,6 @@ class _NavItem extends StatelessWidget {
     required this.selected,
     required this.isCenter,
     required this.onTap,
-    this.compact = false,
   });
 
   final IconData icon;
@@ -271,7 +271,6 @@ class _NavItem extends StatelessWidget {
   final bool selected;
   final bool isCenter;
   final VoidCallback onTap;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -286,47 +285,44 @@ class _NavItem extends StatelessWidget {
         splashFactory: NoSplash.splashFactory,
         splashColor: Colors.transparent,
         highlightColor: Colors.transparent,
-        child: SizedBox(
-          height: compact ? null : 90,
-          child: Column(
-            mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (isCenter)
-                _CenterAction(icon: Icons.eco_rounded, selected: selected)
-              else
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  width: 42,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? AppColors.primary.withValues(alpha: 0.12)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 28,
-                    color: selected ? activeColor : inactiveColor,
-                  ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (isCenter)
+              _CenterAction(icon: Icons.eco_rounded, selected: selected)
+            else
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                width: 42,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: selected
+                      ? AppColors.primary.withValues(alpha: 0.12)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(18),
                 ),
-              SizedBox(height: isCenter ? 4 : 8),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  height: 1,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                child: Icon(
+                  icon,
+                  size: 28,
                   color: selected ? activeColor : inactiveColor,
                 ),
               ),
-              SizedBox(height: isCenter ? 6 : (compact ? 6 : 10)),
-            ],
-          ),
+            SizedBox(height: isCenter ? 4 : 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                color: selected ? activeColor : inactiveColor,
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
         ),
       ),
     );

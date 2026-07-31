@@ -179,6 +179,11 @@ abstract final class ApiFavouriteMealMapper {
         carbs: carbs,
         fat: fat,
         emoji: '⭐',
+        imageUrl: (json['image'] as String?)?.trim().isNotEmpty == true
+            ? (json['image'] as String).trim()
+            : (json['imageUrl'] as String?)?.trim().isNotEmpty == true
+                ? (json['imageUrl'] as String).trim()
+                : null,
       ),
       grams: grams,
       meal: meal,

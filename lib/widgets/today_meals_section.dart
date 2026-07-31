@@ -161,6 +161,7 @@ class _MealEntryRow extends StatelessWidget {
             children: [
               FoodEmojiAvatar(
                 emoji: entry.food.emoji,
+                imageUrl: entry.food.imageUrl,
                 size: r.scale(compact ? 36 : 40),
               ),
               SizedBox(width: r.scale(10)),

@@ -17,7 +17,7 @@ class WaterProgressChart extends StatelessWidget {
   final double chartHeight;
 
   static const Color _waterBlue = Color(0xFF4AA3DF);
-  static const double _dayLabelHeight = 22;
+  static const double _dayLabelHeight = 22; 
   static const double _valueLabelHeight = 18;
 
   @override

@@ -91,6 +91,7 @@ class _AddFoodViewState extends State<AddFoodView> {
                   return _SearchResultsList(
                     isSearching: isSearching,
                     foods: _food.filteredFoods,
+                    errorMessage: _food.searchErrorMessage.value,
                     onCreateFood: () => Get.to<void>(
                       () => const CreateCustomFoodView(),
                     ),
@@ -580,7 +581,11 @@ class _FoodBrowseList extends GetView<FoodController> {
               initialMeal: selectedMeal,
             ),
             contentPadding: EdgeInsets.symmetric(vertical: r.scale(4)),
-            leading: FoodEmojiAvatar(emoji: item.food.emoji, size: 44),
+            leading: FoodEmojiAvatar(
+              emoji: item.food.emoji,
+              imageUrl: item.food.imageUrl,
+              size: 44,
+            ),
             title: Text(
               item.food.name,
               style: TextStyle(
@@ -1160,11 +1165,13 @@ class _SearchResultsList extends StatelessWidget {
     required this.isSearching,
     required this.foods,
     required this.onCreateFood,
+    this.errorMessage,
   });
 
   final bool isSearching;
   final List<FoodItem> foods;
   final VoidCallback onCreateFood;
+  final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -1173,6 +1180,14 @@ class _SearchResultsList extends StatelessWidget {
     if (isSearching) {
       return const Center(child: CircularProgressIndicator());
     }
+
+    final error = errorMessage?.trim();
+    final emptyTitle = (error != null && error.isNotEmpty)
+        ? 'Search unavailable'
+        : 'No results found';
+    final emptyBody = (error != null && error.isNotEmpty)
+        ? error
+        : 'Can’t find it? Create your own food and log it anytime.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1212,7 +1227,7 @@ class _SearchResultsList extends StatelessWidget {
                             ),
                             SizedBox(height: r.scale(8)),
                             Text(
-                              'No results found',
+                              emptyTitle,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: r.scale(18),
@@ -1222,7 +1237,7 @@ class _SearchResultsList extends StatelessWidget {
                             ),
                             SizedBox(height: r.scale(8)),
                             Text(
-                              'Can’t find it? Create your own food and log it anytime.',
+                              emptyBody,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: r.scale(13),
@@ -1253,6 +1268,7 @@ class _SearchResultsList extends StatelessWidget {
                       ),
                       leading: FoodEmojiAvatar(
                         emoji: food.emoji,
+                        imageUrl: food.imageUrl,
                         size: 48,
                       ),
                       title: Text(food.name),
@@ -1422,6 +1438,7 @@ class _MyFoodDeleteTileState extends State<_MyFoodDeleteTile> {
                       )
                     : FoodEmojiAvatar(
                         emoji: preset.food.emoji,
+                        imageUrl: preset.food.imageUrl,
                         size: r.scale(42),
                       ),
                 title: Text(

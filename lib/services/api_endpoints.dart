@@ -1,10 +1,10 @@
 abstract final class ApiEndpoints {
 
   
-    static const String baseUrl = 'https://fitbuddyai.srhsoftwares.com';
+    // static const String baseUrl = 'https://fitbuddyai.srhsoftwares.com';
 
 
-// static const String baseUrl = 'https://donations-gps-homepage-francis.trycloudflare.com';
+static const String baseUrl = 'https://belts-economies-bra-graphical.trycloudflare.com';
 
 
 
@@ -29,11 +29,28 @@ abstract final class ApiEndpoints {
   static const String water = '$apiVersion/water';
   static const String myFoods = '$apiVersion/my-foods';
   static const String favouriteMeals = '$apiVersion/favourite-meals';
+  static const String searchFoods = '$apiVersion/search/foods';
 
 
 
   static String url(String path) => '$baseUrl$path';
 
+  /// `GET /api/v1/search/foods?search=apple&page=1&limit=20`
+  static String searchFoodsWithQuery({
+    required String search,
+    int page = 1,
+    int limit = 20,
+  }) {
+    final params = <String, String>{
+      'search': search.trim(),
+      'page': '$page',
+      'limit': '$limit',
+    };
+    final query = params.entries
+        .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
+        .join('&');
+    return '$searchFoods?$query';
+  }
   static String mealsWithQuery({
     DateTime? date,
     String? period,
@@ -195,6 +212,7 @@ abstract final class ApiEndpoints {
   static String favouriteMealLogUrl(String favouriteMealId) =>
       url(favouriteMealLog(favouriteMealId));
   static String myMealByIdUrl(String myMealId) => url(myMealById(myMealId));
+  static String get searchFoodsUrl => url(searchFoods);
 
   static const String openFoodFactsBaseUrl = 'https://world.openfoodfacts.org';
 

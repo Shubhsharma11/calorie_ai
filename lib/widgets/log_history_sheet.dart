@@ -65,7 +65,11 @@ Future<void> showLogHistorySheet(
                     ),
                     child: Row(
                       children: [
-                        FoodEmojiAvatar(emoji: food.emoji, size: 52),
+                        FoodEmojiAvatar(
+                          emoji: food.emoji,
+                          imageUrl: food.imageUrl,
+                          size: 52,
+                        ),
                         SizedBox(width: r.scale(14)),
                         Expanded(
                           child: Column(

@@ -91,6 +91,7 @@ class _EditMealViewState extends State<EditMealView> {
                   Center(
                     child: FoodEmojiAvatar(
                       emoji: _entry.food.emoji,
+                      imageUrl: _entry.food.imageUrl,
                       size: 96,
                       fontSize: 52,
                     ),

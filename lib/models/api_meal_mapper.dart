@@ -196,6 +196,14 @@ abstract final class ApiMealMapper {
       carbs: carbs,
       fat: fat,
       emoji: _readString(json, const ['emoji', 'icon']) ?? '🍽️',
+      imageUrl: _readString(json, const [
+        'image',
+        'imageUrl',
+        'image_url',
+        'photo',
+        'photoUrl',
+        'thumbnail',
+      ]),
     );
   }
 
@@ -214,6 +222,14 @@ abstract final class ApiMealMapper {
       carbs: _readDouble(json, const ['carbs', 'carbsG', 'carbs_g']) ?? 0,
       fat: _readDouble(json, const ['fat', 'fatG', 'fat_g']) ?? 0,
       emoji: _readString(json, const ['emoji', 'icon']) ?? '🍽️',
+      imageUrl: _readString(json, const [
+        'image',
+        'imageUrl',
+        'image_url',
+        'photo',
+        'photoUrl',
+        'thumbnail',
+      ]),
     );
   }
 

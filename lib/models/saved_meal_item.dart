@@ -112,6 +112,7 @@ class SavedMealItem {
           carbs: carbs,
           fat: fat,
           emoji: food.emoji,
+          imageUrl: food.imageUrl,
         ),
         grams: 100,
         meal: meal,

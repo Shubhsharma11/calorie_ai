@@ -150,6 +150,7 @@ abstract final class ApiMyFoodMapper {
       carbs: hasCarbs ? parsed.food.carbs : source.food.carbs,
       fat: hasFat ? parsed.food.fat : source.food.fat,
       emoji: source.food.emoji,
+      imageUrl: parsed.food.imageUrl ?? source.food.imageUrl,
     );
 
     return source.copyWith(
@@ -202,6 +203,11 @@ abstract final class ApiMyFoodMapper {
         carbs: carbs,
         fat: fat,
         emoji: '🥣',
+        imageUrl: (json['image'] as String?)?.trim().isNotEmpty == true
+            ? (json['image'] as String).trim()
+            : (json['imageUrl'] as String?)?.trim().isNotEmpty == true
+                ? (json['imageUrl'] as String).trim()
+                : null,
       ),
       defaultGrams: defaultGrams,
       createdAt:
