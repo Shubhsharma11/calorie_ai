@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../models/daily_nutrition.dart';
@@ -11,6 +12,8 @@ import 'user_controller.dart';
 class DashboardController extends GetxController {
   final Rx<NutritionTrendMetric> weeklyMetric =
       NutritionTrendMetric.calories.obs;
+
+  final ScrollController homeScrollController = ScrollController();
 
   int get calorieGoal => Get.find<UserController>().user.dailyCalorieGoal;
 
@@ -100,5 +103,24 @@ class DashboardController extends GetxController {
 
   void backToToday() {
     _food.setSelectedLogDate(DateTime.now());
+  }
+
+  void scrollHomeToTop({bool animate = true}) {
+    if (!homeScrollController.hasClients) return;
+    if (animate) {
+      homeScrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      homeScrollController.jumpTo(0);
+    }
+  }
+
+  @override
+  void onClose() {
+    homeScrollController.dispose();
+    super.onClose();
   }
 }

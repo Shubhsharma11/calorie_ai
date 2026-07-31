@@ -7,7 +7,6 @@ import '../core/streak_calculator.dart';
 import '../models/meal_streak_model.dart';
 import '../repositories/meal_streak_repository.dart';
 import '../repositories/meals_repository.dart';
-import '../services/local_storage_service.dart';
 import '../services/meal_streak_api_service.dart';
 import '../services/meals_api_service.dart';
 import '../widgets/streak_milestone_dialog.dart';
@@ -15,14 +14,11 @@ import 'user_controller.dart';
 
 class StreakController extends GetxController {
   StreakController({
-    LocalStorageService? storage,
     MealStreakRepository? repository,
     MealsRepository? mealsRepository,
-  })  : _storage = storage ?? LocalStorageService(),
-        _repository = repository ?? MealStreakRepository(),
+  })  : _repository = repository ?? MealStreakRepository(),
         _mealsRepository = mealsRepository ?? MealsRepository();
 
-  final LocalStorageService _storage;
   final MealStreakRepository _repository;
   final MealsRepository _mealsRepository;
 
@@ -96,9 +92,7 @@ class StreakController extends GetxController {
   }
 
   Future<void> _loadMetadata() async {
-    celebratedMilestones
-      ..clear()
-      ..addAll(await _storage.loadCelebratedMilestones());
+    celebratedMilestones.clear();
     revision.value++;
   }
 
@@ -219,7 +213,6 @@ class StreakController extends GetxController {
       if (celebratedMilestones.contains(milestone)) continue;
 
       celebratedMilestones.add(milestone);
-      await _storage.saveCelebratedMilestones(celebratedMilestones);
 
       if (Get.isDialogOpen != true) {
         await StreakMilestoneDialog.show(days: milestone);

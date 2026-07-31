@@ -31,10 +31,10 @@ class ProfileSyncSnapshot {
 
   factory ProfileSyncSnapshot.fromUser(UserModel user) {
     return ProfileSyncSnapshot(
-      age: user.age,
-      gender: user.gender,
-      heightCm: user.heightCm,
-      weightKg: user.weightKg,
+      age: user.age ?? 0,
+      gender: user.gender ?? '',
+      heightCm: user.heightCm ?? 0,
+      weightKg: user.weightKg ?? 0,
       goal: user.goal,
       goalWeightKg: user.goalWeightKg,
       isGoalWeightManual: user.isGoalWeightManual,

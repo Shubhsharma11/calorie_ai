@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import '../controllers/settings_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
+import '../core/app_coach_marks.dart';
 import '../core/responsive.dart';
 import '../core/weight_chart_data.dart';
 import '../models/goal_type.dart';
@@ -15,12 +16,17 @@ import 'weight_tracker/weight_log_sheet.dart';
 
 /// Compact weight and recent-trend summary for the Home screen.
 class WeightTrackerBanner extends StatelessWidget {
-  const WeightTrackerBanner({super.key});
+  const WeightTrackerBanner({super.key, this.coachKey});
+
+  /// Optional coach-mark anchor. Must be on this card, not a parent wrapper.
+  final GlobalKey? coachKey;
 
   @override
   Widget build(BuildContext context) {
     if (!Get.isRegistered<TrackerController>()) {
-      return const SizedBox.shrink();
+      const empty = SizedBox(height: 0);
+      if (coachKey == null) return empty;
+      return AppCoachMarks.target(key: coachKey!, child: empty);
     }
 
     final tracker = Get.find<TrackerController>();
@@ -29,7 +35,7 @@ class WeightTrackerBanner extends StatelessWidget {
         ? Get.find<SettingsController>()
         : null;
 
-    return Obx(() {
+    final banner = Obx(() {
       tracker.weightRevision.value;
       user.calorieGoalRevision.value;
       final useMetricUnits = settings?.useMetricUnits.value ?? true;
@@ -38,7 +44,7 @@ class WeightTrackerBanner extends StatelessWidget {
       final trend = _WeightTrend.fromEntries(entries);
       final goalKg = user.user.goalWeightKg;
 
-      return _WeightTrackerCard(
+      final card = _WeightTrackerCard(
         currentKg: currentKg,
         goalKg: goalKg,
         entries: entries,
@@ -55,7 +61,12 @@ class WeightTrackerBanner extends StatelessWidget {
           );
         },
       );
+      if (coachKey == null) return card;
+      // Key on the visible card so spotlight/tip match real bounds.
+      return AppCoachMarks.target(key: coachKey!, child: card);
     });
+
+    return banner;
   }
 }
 
@@ -91,19 +102,18 @@ class _WeightTrackerCard extends StatelessWidget {
     );
     final unit = WeightChartData.weightUnitLabel(useMetricUnits);
     final latestEntry = entries.isEmpty ? null : entries.last;
-    final isOnTrack = trend.isOnTrackFor(goal);
+    final remainingKg = (goalKg - currentKg).abs();
+    final atGoal = remainingKg < 0.05;
+    final effectiveGoal = goal ?? _inferGoalType(currentKg, goalKg);
+    final isOnTrack = trend.isOnTrackFor(effectiveGoal);
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadowColor,
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        border: Border.all(
+          color: AppColors.border.withValues(alpha: 0.35),
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -136,6 +146,8 @@ class _WeightTrackerCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Weight Progress',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: r.scale(17),
                       fontWeight: FontWeight.w800,
@@ -170,36 +182,87 @@ class _WeightTrackerCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Wrap(
-                      spacing: r.scale(12),
-                      runSpacing: r.scale(8),
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: currentDisplay.toStringAsFixed(1),
-                                style: TextStyle(
-                                  fontSize: r.scale(36),
-                                  fontWeight: FontWeight.w800,
-                                  height: 1,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              TextSpan(
-                                text: ' $unit',
-                                style: TextStyle(
-                                  fontSize: r.scale(16),
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        _TrendPill(trend: trend, useMetricUnits: useMetricUnits),
-                      ],
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final narrow = constraints.maxWidth < 300;
+                        return narrow
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: currentDisplay
+                                              .toStringAsFixed(1),
+                                          style: TextStyle(
+                                            fontSize: r.scale(36),
+                                            fontWeight: FontWeight.w800,
+                                            height: 1,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: ' $unit',
+                                          style: TextStyle(
+                                            fontSize: r.scale(16),
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(height: r.scale(8)),
+                                  _TrendPill(
+                                    trend: trend,
+                                    useMetricUnits: useMetricUnits,
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                children: [
+                                  Flexible(
+                                    child: Text.rich(
+                                      TextSpan(
+                                        children: [
+                                          TextSpan(
+                                            text: currentDisplay
+                                                .toStringAsFixed(1),
+                                            style: TextStyle(
+                                              fontSize: r.scale(36),
+                                              fontWeight: FontWeight.w800,
+                                              height: 1,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          TextSpan(
+                                            text: ' $unit',
+                                            style: TextStyle(
+                                              fontSize: r.scale(16),
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  SizedBox(width: r.scale(10)),
+                                  Flexible(
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: _TrendPill(
+                                        trend: trend,
+                                        useMetricUnits: useMetricUnits,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                      },
                     ),
                     SizedBox(height: r.scale(16)),
                     SizedBox(
@@ -217,6 +280,8 @@ class _WeightTrackerCard extends StatelessWidget {
                           child: Text(
                             _weekdayLabel(date.weekday),
                             textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: r.scale(9),
                               fontWeight: FontWeight.w600,
@@ -231,27 +296,52 @@ class _WeightTrackerCard extends StatelessWidget {
                     SizedBox(height: r.scale(13)),
                     Row(
                       children: [
-                        Text(
-                          'Goal ',
-                          style: TextStyle(
-                            fontSize: r.scale(12),
-                            color: AppColors.textSecondary,
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: 'Goal ',
+                                  style: TextStyle(
+                                    fontSize: r.scale(12),
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: WeightChartData.formatWeight(
+                                    goalKg,
+                                    useMetricUnits,
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: r.scale(13),
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.left,
                           ),
                         ),
-                        Text(
-                          WeightChartData.formatWeight(goalKg, useMetricUnits),
-                          style: TextStyle(
-                            fontSize: r.scale(13),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${remainingDisplay.toStringAsFixed(1)} $unit remaining',
-                          style: TextStyle(
-                            fontSize: r.scale(12),
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
+                        SizedBox(width: r.scale(10)),
+                        Expanded(
+                          child: Text(
+                            atGoal
+                                ? 'Goal reached'
+                                : '${remainingDisplay.toStringAsFixed(1)} $unit remaining',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: r.scale(12),
+                              fontWeight: FontWeight.w800,
+                              color: atGoal
+                                  ? AppColors.primary
+                                  : AppColors.textPrimary,
+                            ),
                           ),
                         ),
                       ],
@@ -259,33 +349,57 @@ class _WeightTrackerCard extends StatelessWidget {
                     SizedBox(height: r.scale(13)),
                     Divider(height: 1, color: AppColors.border),
                     SizedBox(height: r.scale(12)),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    Column(
                       children: [
-                        Icon(
-                          isOnTrack
-                              ? Icons.check_circle_rounded
-                              : Icons.schedule_rounded,
-                          size: r.scale(17),
-                          color: isOnTrack
-                              ? AppColors.primary
-                              : AppColors.textSecondary,
-                        ),
-                        SizedBox(width: r.scale(6)),
-                        Flexible(
-                          child: Text(
-                            latestEntry == null
-                                ? 'Log your weight to begin'
-                                : '${_lastLoggedLabel(latestEntry.date)}'
-                                      '${isOnTrack ? ' · On track' : ''}',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: r.scale(11),
-                              fontWeight: FontWeight.w600,
-                              color: isOnTrack
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              atGoal || isOnTrack
+                                  ? Icons.check_circle_rounded
+                                  : _goalMotivationIcon(effectiveGoal),
+                              size: r.scale(17),
+                              color: atGoal || isOnTrack
                                   ? AppColors.primary
                                   : AppColors.textSecondary,
                             ),
+                            SizedBox(width: r.scale(6)),
+                            Flexible(
+                              child: Text(
+                                _goalMotivationText(
+                                  goal: effectiveGoal,
+                                  isOnTrack: isOnTrack,
+                                  trend: trend,
+                                  currentKg: currentKg,
+                                  goalKg: goalKg,
+                                  useMetricUnits: useMetricUnits,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: r.scale(11),
+                                  fontWeight: FontWeight.w700,
+                                  color: atGoal || isOnTrack
+                                      ? AppColors.primary
+                                      : AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: r.scale(4)),
+                        Text(
+                          latestEntry == null
+                              ? 'Log your weight to begin'
+                              : _lastLoggedLabel(latestEntry.date),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: r.scale(10.5),
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -313,6 +427,7 @@ class _TrendPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = context.responsive;
     final color = AppColors.primary;
+    final label = trend.weeklyLabel(useMetricUnits);
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -329,7 +444,9 @@ class _TrendPill extends StatelessWidget {
           Icon(trend.icon, size: r.scale(14), color: color),
           SizedBox(width: r.scale(4)),
           Text(
-            trend.weeklyLabel(useMetricUnits),
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: r.scale(11),
               fontWeight: FontWeight.w700,
@@ -355,12 +472,17 @@ class _WeightSparkline extends StatelessWidget {
 
     if (recent.length < 2) {
       return Center(
-        child: Text(
-          'Add another check-in to see your weekly trend',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: context.responsive.scale(11),
-            color: AppColors.textSecondary,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'Add another check-in to see your weekly trend',
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: context.responsive.scale(11),
+              color: AppColors.textSecondary,
+            ),
           ),
         ),
       );
@@ -554,4 +676,88 @@ String _lastLoggedLabel(DateTime date) {
   if (days <= 0) return 'Last logged today';
   if (days == 1) return 'Last logged yesterday';
   return 'Last logged $days days ago';
+}
+
+IconData _goalMotivationIcon(GoalType? goal) {
+  return switch (goal) {
+    GoalType.loseWeight => Icons.trending_down_rounded,
+    GoalType.gainWeight => Icons.trending_up_rounded,
+    GoalType.maintainWeight => Icons.balance_rounded,
+    null => Icons.schedule_rounded,
+  };
+}
+
+GoalType _inferGoalType(double currentKg, double goalKg) {
+  final delta = goalKg - currentKg;
+  if (delta.abs() < 0.05) return GoalType.maintainWeight;
+  if (delta < 0) return GoalType.loseWeight;
+  return GoalType.gainWeight;
+}
+
+String _goalMotivationText({
+  required GoalType? goal,
+  required bool isOnTrack,
+  required _WeightTrend trend,
+  required double currentKg,
+  required double goalKg,
+  required bool useMetricUnits,
+}) {
+  final remainingKg = (goalKg - currentKg).abs();
+  final atGoal = remainingKg < 0.05;
+  final unit = WeightChartData.weightUnitLabel(useMetricUnits);
+  final remainingLabel = WeightChartData.toDisplayWeight(
+    remainingKg,
+    useMetricUnits,
+  ).toStringAsFixed(1);
+  final effectiveGoal = goal ?? _inferGoalType(currentKg, goalKg);
+  final needsLose = currentKg > goalKg + 0.05;
+  final needsGain = currentKg < goalKg - 0.05;
+
+  if (atGoal) {
+    return switch (trend.type) {
+      _WeightTrendType.maintaining => 'Goal reached — weight looks stable',
+      _WeightTrendType.losing ||
+      _WeightTrendType.gaining => 'You hit your goal — keep it steady',
+      _WeightTrendType.unavailable => 'Goal reached — keep logging weekly',
+    };
+  }
+
+  if (trend.type == _WeightTrendType.unavailable) {
+    return needsLose
+        ? '$remainingLabel $unit left to reach your goal'
+        : needsGain
+            ? '$remainingLabel $unit left to reach your goal'
+            : 'Keep tracking your weight progress';
+  }
+
+  if (trend.type == _WeightTrendType.maintaining) {
+    return needsLose
+        ? 'You are making progress • $remainingLabel $unit remaining'
+        : needsGain
+            ? 'You are making progress • $remainingLabel $unit remaining'
+            : 'Keep maintaining your progress';
+  }
+
+  if (isOnTrack) {
+    return switch (effectiveGoal) {
+      GoalType.loseWeight =>
+        'On track — $remainingLabel $unit remaining to reach your goal',
+      GoalType.gainWeight =>
+        'On track — $remainingLabel $unit remaining to reach your goal',
+      GoalType.maintainWeight => 'You are maintaining your goal weight',
+    };
+  }
+
+  if (needsLose && trend.type == _WeightTrendType.gaining) {
+    return '$remainingLabel $unit remaining to reach your goal';
+  }
+  if (needsGain && trend.type == _WeightTrendType.losing) {
+    return '$remainingLabel $unit remaining to reach your goal';
+  }
+
+  return switch (effectiveGoal) {
+    GoalType.loseWeight || GoalType.gainWeight =>
+      '$remainingLabel $unit remaining to reach your goal', 
+    GoalType.maintainWeight => 'Consistency keeps your weight stable',
+  };
 }

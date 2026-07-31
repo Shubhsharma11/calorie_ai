@@ -12,7 +12,7 @@
 
     <application
 
-        android:label="Fit Buddy AI"
+        android:label="FitBuddy AI"
 
         android:name="${applicationName}"
 

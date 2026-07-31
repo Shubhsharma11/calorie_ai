@@ -33,6 +33,7 @@ import '../views/main_view.dart';
 import '../views/nutrition_plan_loading_view.dart';
 import '../views/notifications_view.dart';
 import '../views/onboarding_view.dart';
+import '../views/splash_view.dart';
 import '../views/personal_details_view.dart';
 import '../views/personal_information_view.dart';
 import '../views/progress_view.dart';
@@ -47,6 +48,10 @@ import 'app_routes.dart';
 
 abstract final class AppPages {
   static final List<GetPage<dynamic>> pages = [
+    AppPageTransitions.getPage(
+      name: AppRoutes.splash,
+      page: () => const SplashView(),
+    ),
     AppPageTransitions.getPage(
       name: AppRoutes.onboarding,
       page: () => const OnboardingView(),

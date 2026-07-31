@@ -11,6 +11,7 @@ class ResponsivePage extends StatelessWidget {
     this.padding,
     this.maxWidth,
     this.alignment = Alignment.topCenter,
+    this.scrollController,
   });
 
   final Widget child;
@@ -18,6 +19,7 @@ class ResponsivePage extends StatelessWidget {
   final EdgeInsets? padding;
   final double? maxWidth;
   final Alignment alignment;
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +41,15 @@ class ResponsivePage extends StatelessWidget {
     );
 
     if (scrollable) {
-      return SingleChildScrollView(child: content);
+      final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+      return SingleChildScrollView(
+        controller: scrollController,
+        clipBehavior: Clip.hardEdge,
+        padding: EdgeInsets.only(
+          bottom: r.scale(24) + (keyboardInset > 0 ? r.scale(12) : 0),
+        ),
+        child: content,
+      );
     }
     return content;
   }
@@ -59,6 +69,7 @@ class ResponsiveForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
     Widget content = Align(
       alignment: Alignment.topCenter,
@@ -72,7 +83,13 @@ class ResponsiveForm extends StatelessWidget {
     );
 
     if (scrollable) {
-      return SingleChildScrollView(child: content);
+      return SingleChildScrollView(
+        clipBehavior: Clip.hardEdge,
+        padding: EdgeInsets.only(
+          bottom: r.scale(28) + (keyboardInset > 0 ? r.scale(12) : 0),
+        ),
+        child: content,
+      );
     }
     return content;
   }
@@ -106,9 +123,15 @@ class SetupScreenLayout extends StatelessWidget {
       ),
     );
 
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+
     if (scrollable) {
       body = SingleChildScrollView(
-        clipBehavior: Clip.none,
+        // Keep content from painting over the sticky bottom action.
+        clipBehavior: Clip.hardEdge,
+        padding: EdgeInsets.only(
+          bottom: r.scale(36) + (keyboardInset > 0 ? r.scale(16) : 0),
+        ),
         child: body,
       );
     } else {
@@ -121,8 +144,10 @@ class SetupScreenLayout extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: body),
-            SizedBox(height: r.scale(20)),
+            Expanded(
+              child: ClipRect(child: body),
+            ),
+            SizedBox(height: r.scale(16)),
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: r.formMaxWidth),
               child: action,

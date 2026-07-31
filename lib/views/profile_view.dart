@@ -146,7 +146,7 @@ class ProfileView extends GetView<UserController> {
         title: const Text('Terms of Service'),
         content: const SingleChildScrollView(
           child: Text(
-            'By using Fit Buddy AI, you agree to track nutrition and health '
+            'By using FitBuddy AI, you agree to track nutrition and health '
             'data responsibly. Do not use this app as a substitute for '
             'professional medical advice. You are responsible for the '
             'accuracy of the information you enter.',
@@ -164,7 +164,7 @@ class ProfileView extends GetView<UserController> {
   }
 
   void _shareApp(BuildContext context) {
-    const message = 'Check out Fit Buddy AI — your smart nutrition tracker!';
+    const message = 'Check out FitBuddy AI — your smart nutrition tracker!';
     Clipboard.setData(const ClipboardData(text: message));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('App link copied to clipboard')),
@@ -181,8 +181,8 @@ class ProfileView extends GetView<UserController> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Account'),
         content: const Text(
-          'This will permanently delete your account and all associated data. '
-          'This action cannot be undone.',
+          'This removes your app data only. Your login account stays, '
+          'so you can sign in again later.',
         ),
         actions: [
           TextButton(
@@ -211,10 +211,7 @@ class ProfileView extends GetView<UserController> {
       barrierDismissible: !ctrl.isLoggingOut,
       builder: (ctx) => AlertDialog(
         title: const Text('Logout'),
-        content: const Text(
-          'Are you sure you want to logout? You will need to sign in again '
-          'to access your account.',
-        ),
+        content: const Text('Are you sure you want to logout?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),

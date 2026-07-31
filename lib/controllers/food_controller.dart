@@ -3,12 +3,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../core/api_errors.dart';
 import '../core/app_snackbar.dart';
 import '../core/goal_progress_message.dart';
-import '../core/meal_entry_merge.dart';
+import '../core/meal_log_group.dart';
 import '../models/custom_meal_preset.dart';
 import '../models/custom_food_preset.dart';
 import '../models/daily_nutrition.dart';
@@ -23,7 +22,6 @@ import '../repositories/favourite_meals_repository.dart';
 import '../repositories/meals_repository.dart';
 import '../repositories/my_foods_repository.dart';
 import '../services/food_api_service.dart';
-import '../services/local_storage_service.dart';
 import '../services/api_endpoints.dart';
 import '../services/custom_meals_api_service.dart';
 import '../services/favourite_meals_api_service.dart';
@@ -37,13 +35,11 @@ import 'user_controller.dart';
 class FoodController extends GetxController {
   FoodController({
     FoodApiService? api,
-    LocalStorageService? storage,
     MealsRepository? mealsRepository,
     CustomMealsRepository? customMealsRepository,
     MyFoodsRepository? myFoodsRepository,
     FavouriteMealsRepository? favouriteMealsRepository,
   }) : _api = api ?? FoodApiService(),
-       _storage = storage ?? LocalStorageService(),
        _mealsRepository = mealsRepository ?? MealsRepository(),
        _customMealsRepository =
            customMealsRepository ?? CustomMealsRepository(),
@@ -52,7 +48,6 @@ class FoodController extends GetxController {
            favouriteMealsRepository ?? FavouriteMealsRepository();
 
   final FoodApiService _api;
-  final LocalStorageService _storage;
   final MealsRepository _mealsRepository;
   final CustomMealsRepository _customMealsRepository;
   final MyFoodsRepository _myFoodsRepository;
@@ -81,6 +76,12 @@ class FoodController extends GetxController {
   final RxMap<String, bool> expandedMeals = <String, bool>{}.obs;
   final RxList<MealEntry> repeatedYesterdayEntries = <MealEntry>[].obs;
   final RxSet<String> selectedYesterdayMeals = <String>{}.obs;
+
+  /// Meal entry ids currently showing Delete_message.json on their card.
+  final RxSet<String> deletingMealIds = <String>{}.obs;
+  final RxList<MealLogGroup> _deletingGroups = <MealLogGroup>[].obs;
+  final Set<String> _deleteCommitInFlight = <String>{};
+
   final RxBool isSearching = false.obs; 
   final RxBool isLoadingMealsApi = false.obs;
   final RxnString mealsApiErrorMessage = RxnString();
@@ -101,7 +102,6 @@ class FoodController extends GetxController {
   List<CustomFoodPreset> _lastRemoteMyFoods = const [];
   List<SavedMealItem> _lastRemoteFavourites = const [];
   String? _dismissedBreakfastSuggestionDate;
-  static const String _repeatCardDismissKey = 'repeat_card_dismiss_date';
   static const Duration _listRefreshCooldown = Duration(seconds: 20);
 
   @override
@@ -110,31 +110,52 @@ class FoodController extends GetxController {
 
     debugPrint("🔥 FoodController onInit called");
 
-    unawaited(_loadPersistedEntries());
+    unawaited(_bootstrapFromServer());
     unawaited(loadRepeatYesterdayCardState());
   }
 
-  Future<void> _loadPersistedEntries() async {
-    favoriteMeals.assignAll(await _storage.loadFavoriteMeals());
-    customMealPresets.assignAll(await _storage.loadCustomMeals());
-    customFoodPresets.assignAll(await _storage.loadCustomFoods());
-    _dismissedBreakfastSuggestionDate = await _storage
-        .loadDismissedBreakfastSuggestionDate();
+  /// Wipe in-memory meals so logout never leaves the previous user's diary.
+  void clearSessionData() {
+    entries.clear();
+    apiMeals.clear();
+    favoriteMeals.clear();
+    customMealPresets.clear();
+    customFoodPresets.clear();
+    searchResults.clear();
+    repeatedYesterdayEntries.clear();
+    selectedYesterdayMeals.clear();
+    deletingMealIds.clear();
+    _deletingGroups.clear();
+    _deleteCommitInFlight.clear();
+    _lastRemoteCustomMeals = const [];
+    _lastRemoteMyFoods = const [];
+    _lastRemoteFavourites = const [];
+    _lastCustomMealsFetchAt = null;
+    _lastMyFoodsFetchAt = null;
+    _lastFavouritesFetchAt = null;
+    mealsApiErrorMessage.value = null;
+    entriesRevision.value++;
+    debugPrint('FoodController: session data cleared');
+  }
 
-    // Hydrate from disk first so home/diary render without waiting on network.
-    final cached = await _storage.loadMealEntries();
-    if (cached.isNotEmpty) {
-      entries.assignAll(cached);
-      entriesRevision.value++;
-      _maybeCelebrateCalorieGoal(day: MealEntry.normalizeDate(DateTime.now()));
-    }
+  /// Pull fresh meals/catalog from the API after a new login.
+  Future<void> reloadAfterLogin() => _bootstrapFromServer();
 
-    unawaited(() async {
-      await refreshMealsFromApi();
-      // Prefetch yesterday so Last Logged Meals has Lunch / Dinner / Snacks too.
-      await ensureLastLoggedMealsLoaded();
-    }());
-    // my-meals / my-foods / favourites load when Add Food catalog tabs open.
+  /// Always start empty and pull meals/catalog from the API (no disk cache).
+  Future<void> _bootstrapFromServer() async {
+    entries.clear();
+    favoriteMeals.clear();
+    customMealPresets.clear();
+    customFoodPresets.clear();
+    entriesRevision.value++;
+
+    await refreshMealsFromApi();
+    await ensureLastLoggedMealsLoaded();
+    await Future.wait([
+      refreshFavouritesFromApi(force: true),
+      refreshMyFoodsFromApi(force: true),
+      refreshCustomMealsFromApi(force: true),
+    ]);
   }
 
   Future<void> refreshFavouritesFromApi({bool force = false}) {
@@ -200,7 +221,6 @@ class FoodController extends GetxController {
       favoriteMeals.assignAll([...fetched, ...localOnly]);
       _lastRemoteFavourites = List<SavedMealItem>.unmodifiable(fetched);
       _lastFavouritesFetchAt = DateTime.now();
-      await _storage.saveFavoriteMeals(favoriteMeals.toList());
     } on FavouriteMealsApiException catch (error) {
       debugPrint('FoodController: favourite-meals GET failed: $error');
     } catch (error) {
@@ -316,7 +336,6 @@ class FoodController extends GetxController {
       }
 
       customFoodPresets.assignAll(merged);
-      await _storage.saveCustomFoods(merged);
       _lastRemoteMyFoods = List<CustomFoodPreset>.unmodifiable(fetched);
       _lastMyFoodsFetchAt = DateTime.now();
     } on MyFoodsApiException catch (error) {
@@ -426,7 +445,6 @@ class FoodController extends GetxController {
       }
 
       customMealPresets.assignAll(merged);
-      await _storage.saveCustomMeals(merged);
       _lastRemoteCustomMeals = List<CustomMealPreset>.unmodifiable(fetched);
       _lastCustomMealsFetchAt = DateTime.now();
     } on CustomMealsApiException catch (error) {
@@ -579,13 +597,11 @@ class FoodController extends GetxController {
     if (index >= 0) {
       final existing = favoriteMeals[index];
       favoriteMeals.removeAt(index);
-      await _storage.saveFavoriteMeals(favoriteMeals.toList());
       unawaited(_syncDeleteFavourite(existing));
       return;
     }
 
     favoriteMeals.insert(0, item);
-    await _storage.saveFavoriteMeals(favoriteMeals.toList());
     unawaited(_syncAddFavourite(item));
   }
 
@@ -606,7 +622,6 @@ class FoodController extends GetxController {
       }
     }
     favoriteMeals.removeWhere((favorite) => favorite.matchesFavorite(item));
-    await _storage.saveFavoriteMeals(favoriteMeals.toList());
     unawaited(_syncDeleteFavourite(existing));
   }
 
@@ -639,14 +654,14 @@ class FoodController extends GetxController {
       } else {
         favoriteMeals.insert(0, synced);
       }
-      await _storage.saveFavoriteMeals(favoriteMeals.toList());
       _lastFavouritesFetchAt = DateTime.now();
     } on FavouriteMealsApiException catch (error) {
       debugPrint('FoodController: favourite-meals POST failed: $error');
-      AppSnackbar.info(
-        '${item.food.name} was saved on this device. '
-        'It could not sync to the server yet.',
-        title: 'Saved on device',
+      AppSnackbar.error(
+        error.message.isNotEmpty
+            ? error.message
+            : 'Could not save ${item.food.name} to favourites.',
+        title: 'Save failed',
       );
     } catch (error) {
       debugPrint('FoodController: favourite-meals POST failed: $error');
@@ -781,8 +796,6 @@ class FoodController extends GetxController {
       }
     }
 
-    await _storage.saveCustomMeals(customMealPresets.toList());
-    await _storage.saveFavoriteMeals(favoriteMeals.toList());
 
     if (awaitSync) {
       return _syncCustomMealPreset(
@@ -817,7 +830,6 @@ class FoodController extends GetxController {
     } else {
       customFoodPresets.insert(0, preset);
     }
-    await _storage.saveCustomFoods(customFoodPresets.toList());
 
     final mealSlot = mealtime ?? selectedMeal.value;
     if (awaitSync) {
@@ -850,7 +862,6 @@ class FoodController extends GetxController {
     }
 
     customFoodPresets.removeWhere((food) => food.id == id);
-    await _storage.saveCustomFoods(customFoodPresets.toList());
 
     final synced = await _syncDeleteMyFood(
       id,
@@ -860,7 +871,6 @@ class FoodController extends GetxController {
       if (removed != null &&
           customFoodPresets.every((food) => food.id != removed!.id)) {
         customFoodPresets.insert(0, removed);
-        await _storage.saveCustomFoods(customFoodPresets.toList());
       }
       throw MyFoodsApiException(
         'Could not delete "${removed?.food.name ?? 'food'}" on the server.',
@@ -937,10 +947,9 @@ class FoodController extends GetxController {
           'FoodController: edit sync skipped POST for "${preset.food.name}" '
           '(no server my-food id resolved for localId=${preset.id})',
         );
-        AppSnackbar.info(
-          '${preset.food.name} was updated on this device. '
-          'It could not sync to the server yet.',
-          title: 'Saved on device',
+        AppSnackbar.error(
+          'Could not update ${preset.food.name} on the server.',
+          title: 'Save failed',
         );
         return preset;
       } else {
@@ -964,7 +973,6 @@ class FoodController extends GetxController {
         customFoodPresets.insert(0, synced);
       }
 
-      await _storage.saveCustomFoods(customFoodPresets.toList());
       _lastRemoteMyFoods = [
         for (final food in _lastRemoteMyFoods)
           if (food.id != synced.id) food,
@@ -973,20 +981,18 @@ class FoodController extends GetxController {
       return synced;
     } on MyFoodsApiException catch (error) {
       debugPrint('FoodController: my-foods API failed: $error');
-      AppSnackbar.info(
+      AppSnackbar.error(
         error.message.isNotEmpty
             ? error.message
-            : '${preset.food.name} was saved on this device. '
-                'It could not sync to the server yet.',
-        title: 'Saved on device',
+            : 'Could not save ${preset.food.name} on the server.',
+        title: 'Save failed',
       );
       return preset;
     } catch (error) {
       debugPrint('FoodController: my-foods API failed: $error');
-      AppSnackbar.info(
-        '${preset.food.name} was saved on this device. '
-        'It could not sync to the server yet.',
-        title: 'Saved on device',
+      AppSnackbar.error(
+        'Could not save ${preset.food.name} on the server.',
+        title: 'Save failed',
       );
       return preset;
     }
@@ -1049,7 +1055,6 @@ class FoodController extends GetxController {
           customFoodPresets[index] = customFoodPresets[index].copyWith(
             id: resolved,
           );
-          await _storage.saveCustomFoods(customFoodPresets.toList());
         }
       }
     }
@@ -1247,10 +1252,9 @@ class FoodController extends GetxController {
           'FoodController: edit sync skipped POST for "${preset.name}" '
           '(no server my-meal id resolved for localId=${preset.id})',
         );
-        AppSnackbar.info(
-          '${preset.name} was updated on this device. '
-          'It could not sync to the server yet.',
-          title: 'Saved on device',
+        AppSnackbar.error(
+          'Could not update ${preset.name} on the server.',
+          title: 'Save failed',
         );
         return preset;
       } else {
@@ -1274,24 +1278,21 @@ class FoodController extends GetxController {
         customMealPresets.insert(0, synced);
       }
 
-      await _storage.saveCustomMeals(customMealPresets.toList());
       _lastCustomMealsFetchAt = DateTime.now();
       _rememberRemoteCustomMeal(synced);
       return synced;
     } on CustomMealsApiException catch (error) {
       debugPrint('FoodController: custom meal API failed: $error');
-      AppSnackbar.info(
-        '${preset.name} was saved on this device. '
-        'It could not sync to the server yet.',
-        title: 'Saved on device',
+      AppSnackbar.error(
+        'Could not save ${preset.name} on the server.',
+        title: 'Save failed',
       );
       return preset;
     } catch (error) {
       debugPrint('FoodController: custom meal API failed: $error');
-      AppSnackbar.info(
-        '${preset.name} was saved on this device. '
-        'It could not sync to the server yet.',
-        title: 'Saved on device',
+      AppSnackbar.error(
+        'Could not save ${preset.name} on the server.',
+        title: 'Save failed',
       );
       return preset;
     }
@@ -1366,7 +1367,6 @@ class FoodController extends GetxController {
     }
 
     customMealPresets.removeWhere((meal) => meal.id == id);
-    await _storage.saveCustomMeals(customMealPresets.toList());
 
     final synced = await _syncDeleteMyMeal(
       id,
@@ -1378,7 +1378,6 @@ class FoodController extends GetxController {
       if (removed != null &&
           customMealPresets.every((meal) => meal.id != removed!.id)) {
         customMealPresets.insert(0, removed);
-        await _storage.saveCustomMeals(customMealPresets.toList());
       }
       throw CustomMealsApiException(
         'Could not delete "${removed?.name ?? 'meal'}" on the server.',
@@ -1528,7 +1527,6 @@ class FoodController extends GetxController {
   Future<void> dismissBreakfastSuggestion() async {
     final todayKey = MealEntry.dateToKey(DateTime.now());
     _dismissedBreakfastSuggestionDate = todayKey;
-    await _storage.saveDismissedBreakfastSuggestionDate(todayKey);
     entriesRevision.value++;
   }
 
@@ -1624,23 +1622,27 @@ class FoodController extends GetxController {
       );
 
       debugPrint('FoodController: meals API returned ${fetched.length} meals');
+      for (final meal in fetched.take(8)) {
+        debugPrint(
+          'FoodController:   id=${meal.id} '
+          'local=${_looksLikeLocalMealId(meal.id)} '
+          'name=${meal.food.name} meal=${meal.meal} g=${meal.grams}',
+        );
+      }
 
       apiMeals.assignAll(fetched);
 
       if (date != null) {
         final normalized = MealEntry.normalizeDate(date);
-        entries.assignAll(
-          MealEntryMerge.mergeForDay(
-            current: entries.toList(),
-            day: normalized,
-            fetched: fetched,
-          ),
-        );
+        // API is source of truth for that day — do not keep local-only ghosts.
+        entries.assignAll([
+          ...entries.where((e) => e.date != normalized),
+          ...fetched,
+        ]);
         _markEntriesDirty();
       } else if (fetched.isNotEmpty) {
-        entries.assignAll(
-          MealEntryMerge.mergeAll(current: entries.toList(), fetched: fetched),
-        );
+        // Full meals payload replaces in-memory diary (API source of truth).
+        entries.assignAll(fetched);
         _markEntriesDirty();
       }
 
@@ -1654,6 +1656,7 @@ class FoodController extends GetxController {
           'Unable to load meals. Please check your connection.';
     } finally {
       isLoadingMealsApi.value = false;
+      pruneDeletingAnimations();
       entriesRevision.value++;
     }
   }
@@ -1840,6 +1843,14 @@ class FoodController extends GetxController {
     });
   }
 
+  /// Clears Add Food search so reopening the screen starts empty.
+  void clearSearch() {
+    _debounce?.cancel();
+    searchQuery.value = '';
+    searchResults.clear();
+    isSearching.value = false;
+  }
+
   void logFromHistory(SavedMealItem item, {DateTime? date, String? meal}) {
     if (item.hasServerId || isFavorite(item)) {
       logFavouriteMeal(item, meal: meal, date: date);
@@ -1981,7 +1992,15 @@ class FoodController extends GetxController {
 
   Future<void> _syncCreateMeal(MealEntry entry) async {
     final accessToken = await _mealAccessToken();
-    if (accessToken == null) return;
+    if (accessToken == null) {
+      entries.removeWhere((e) => e.id == entry.id);
+      entriesRevision.value++;
+      AppSnackbar.error(
+        'Sign in to save meals to the server.',
+        title: 'Not signed in',
+      );
+      return;
+    }
 
     try {
       debugPrint(
@@ -1993,33 +2012,43 @@ class FoodController extends GetxController {
       );
 
       final index = entries.indexWhere((e) => e.id == entry.id);
-      if (index >= 0) {
-        entries[index] = created;
+      if (_looksLikeLocalMealId(created.id)) {
+        // Response missing server id — drop draft and reload from API.
+        if (index >= 0) entries.removeAt(index);
+        await refreshMealsFromApi(date: entry.date);
+        return;
       }
 
-      // A refresh that ran while the POST was in flight may have already
-      // merged the server copy in — keep only one entry per server id.
+      if (index >= 0) {
+        entries[index] = created;
+      } else {
+        entries.add(created);
+      }
+
+      apiMeals.removeWhere(
+        (e) => e.id == entry.id || e.id == created.id,
+      );
+      apiMeals.add(created);
+
       _dropDuplicateEntriesById(created.id);
       _markEntriesDirty(celebrationDay: created.date);
-      // POST response already merged; skip full GET /meals refresh.
     } on MealsApiException catch (error) {
       debugPrint('FoodController: create meal API failed: $error');
       mealsApiErrorMessage.value = error.message;
-      AppSnackbar.info(
-        '${entry.food.name} was added to your diary. '
-        'It could not sync to the server yet.',
-        title: 'Saved on device',
-      );
+      entries.removeWhere((e) => e.id == entry.id);
+      entriesRevision.value++;
+      AppSnackbar.error(error.message, title: 'Could not save meal');
     } catch (error) {
       debugPrint('FoodController: create meal API failed: $error');
       mealsApiErrorMessage.value = apiNetworkErrorMessage(
         error,
         action: 'saving meal',
       );
-      AppSnackbar.info(
-        '${entry.food.name} was added to your diary. '
-        'It could not sync to the server yet.',
-        title: 'Saved on device',
+      entries.removeWhere((e) => e.id == entry.id);
+      entriesRevision.value++;
+      AppSnackbar.error(
+        'Could not save ${entry.food.name} to the server.',
+        title: 'Save failed',
       );
     }
   }
@@ -2072,13 +2101,8 @@ class FoodController extends GetxController {
   void _markEntriesDirty({DateTime? celebrationDay}) {
     entries.refresh();
     entriesRevision.value++;
-    unawaited(_persistEntries());
     _notifyStreakController();
     _maybeCelebrateCalorieGoal(day: celebrationDay);
-  }
-
-  Future<void> _persistEntries() async {
-    await _storage.saveMealEntries(entries.toList());
   }
 
   void _notifyStreakController() {
@@ -2149,18 +2173,444 @@ class FoodController extends GetxController {
   List<MealSummary> get todayMealSummaries =>
       MealType.all.map(summaryForMeal).toList();
 
-  void updateEntry(MealEntry entry, {int? grams, String? meal}) {
+  /// Updates a diary meal on the server (`PATCH /meals/:id`).
+  /// Falls back to delete + create if PATCH is unsupported.
+  Future<bool> updateEntry(MealEntry entry, {int? grams, String? meal}) async {
     final index = entries.indexWhere((e) => e.id == entry.id);
-    if (index < 0) return;
+    if (index < 0) return false;
 
-    entries[index] = entry.copyWith(grams: grams, meal: meal);
-    _markEntriesDirty(celebrationDay: entry.date);
+    final updated = entry.copyWith(grams: grams, meal: meal);
+    final previous = entries[index];
+
+    // Optimistic UI — roll back if API fails.
+    entries[index] = updated;
+    _markEntriesDirty(celebrationDay: updated.date);
+
+    final accessToken = await _mealAccessToken();
+    if (accessToken == null) {
+      entries[index] = previous;
+      _markEntriesDirty(celebrationDay: previous.date);
+      AppSnackbar.error(
+        'Sign in to save meal changes to the server.',
+        title: 'Not signed in',
+      );
+      return false;
+    }
+
+    try {
+      if (_looksLikeLocalMealId(updated.id)) {
+        // Never had a server id — create as new, drop draft.
+        entries.removeAt(index);
+        entries.add(updated);
+        await _syncCreateMeal(updated);
+        return true;
+      }
+
+      final saved = await _mealsRepository.updateMeal(
+        accessToken: accessToken,
+        entry: updated,
+      );
+      final i = entries.indexWhere((e) => e.id == entry.id || e.id == saved.id);
+      if (i >= 0) {
+        entries[i] = saved;
+      }
+      apiMeals.removeWhere((e) => e.id == entry.id || e.id == saved.id);
+      apiMeals.add(saved);
+      _markEntriesDirty(celebrationDay: saved.date);
+      return true;
+    } on MealsApiException catch (error) {
+      // Backend may not support PATCH — replace via delete + create.
+      if (error.statusCode == 404 ||
+          error.statusCode == 405 ||
+          error.statusCode == 501) {
+        debugPrint(
+          'FoodController: PATCH unsupported (${error.statusCode}); '
+          'falling back to delete+create',
+        );
+        try {
+          await _mealsRepository.deleteMeal(
+            accessToken: accessToken,
+            mealId: entry.id,
+          );
+          final created = await _mealsRepository.createMeal(
+            accessToken: accessToken,
+            entry: updated,
+          );
+          final i = entries.indexWhere(
+            (e) => e.id == entry.id || e.id == updated.id,
+          );
+          if (i >= 0) {
+            entries[i] = created;
+          } else {
+            entries.add(created);
+          }
+          apiMeals.removeWhere(
+            (e) => e.id == entry.id || e.id == created.id,
+          );
+          apiMeals.add(created);
+          _markEntriesDirty(celebrationDay: created.date);
+          return true;
+        } catch (fallbackError) {
+          debugPrint('FoodController: update fallback failed: $fallbackError');
+        }
+      }
+
+      entries[index] = previous;
+      _markEntriesDirty(celebrationDay: previous.date);
+      mealsApiErrorMessage.value = error.message;
+      AppSnackbar.error(error.message, title: 'Could not update meal');
+      return false;
+    } catch (error) {
+      final rollbackAt = entries.indexWhere(
+        (e) => e.id == updated.id || e.id == entry.id,
+      );
+      if (rollbackAt >= 0) {
+        entries[rollbackAt] = previous;
+      }
+      _markEntriesDirty(celebrationDay: previous.date);
+      AppSnackbar.error(
+        'Could not save changes for ${entry.food.name}.',
+        title: 'Update failed',
+      );
+      return false;
+    }
   }
 
+  /// Removes a meal via `DELETE /meals/:id`, then reloads that day from the API.
+  /// Never deletes with a local-only epoch id — that 404s and the meal comes back.
+  Future<bool> deleteMealEntry(MealEntry entry) async {
+    try {
+      return await _deleteMealEntryBody(entry);
+    } catch (error, stack) {
+      debugPrint(
+        'FoodController: deleteMealEntry unexpected error: $error\n$stack',
+      );
+      mealsApiErrorMessage.value = apiNetworkErrorMessage(
+        error,
+        action: 'deleting meal',
+      );
+      AppSnackbar.error(
+        'Could not delete ${entry.food.name} on the server.',
+        title: 'Delete failed',
+      );
+      return false;
+    }
+  }
+
+  Future<bool> _deleteMealEntryBody(MealEntry entry) async {
+    debugPrint(
+      'FoodController: deleteMealEntry START food=${entry.food.name} '
+      'id=${entry.id} meal=${entry.meal} grams=${entry.grams} '
+      'date=${MealEntry.dateToKey(entry.date)} '
+      'looksLocal=${_looksLikeLocalMealId(entry.id)}',
+    );
+
+    final accessToken = await _mealAccessToken().timeout(
+      const Duration(seconds: 8),
+      onTimeout: () {
+        debugPrint('FoodController: access token resolve timed out');
+        return null;
+      },
+    );
+    if (accessToken == null) {
+      AppSnackbar.error(
+        'Sign in to delete meals from the server.',
+        title: 'Not signed in',
+      );
+      return false;
+    }
+
+    var mealIdForApi = entry.id.trim();
+    var serverMeal = entry;
+
+    if (_looksLikeLocalMealId(mealIdForApi)) {
+      // Prefer in-memory resolve first — sync may have replaced the local id
+      // while the confirm sheet was open (that also disposes the row State).
+      var target = await _resolveServerMealForDelete(entry);
+      if (target == null || _looksLikeLocalMealId(target.id)) {
+        debugPrint(
+          'FoodController: local id — GET meals for '
+          '${MealEntry.dateToKey(entry.date)} before DELETE',
+        );
+        try {
+          if (_refreshMealsFuture != null) {
+            await _refreshMealsFuture!.timeout(const Duration(seconds: 6));
+          }
+          await refreshMealsFromApi(date: entry.date)
+              .timeout(const Duration(seconds: 6));
+        } on TimeoutException {
+          debugPrint(
+            'FoodController: meals refresh timed out during local delete',
+          );
+        }
+        target = await _resolveServerMealForDelete(entry);
+      }
+
+      if (target == null || _looksLikeLocalMealId(target.id)) {
+        debugPrint(
+          'FoodController: meal never reached server — removing local draft '
+          'id=${entry.id}',
+        );
+        entries.removeWhere(
+          (e) => e.id == entry.id || _matchesLoggedMeal(e, entry),
+        );
+        apiMeals.removeWhere((e) => _matchesLoggedMeal(e, entry));
+        entriesRevision.value++;
+        return true;
+      }
+
+      serverMeal = target;
+      mealIdForApi = serverMeal.id.trim();
+      debugPrint(
+        'FoodController: resolved local ${entry.id} → server $mealIdForApi',
+      );
+    }
+
+    try {
+      debugPrint(
+        'FoodController: DELETE ${ApiEndpoints.mealsByIdUrl(mealIdForApi)}',
+      );
+      await _mealsRepository.deleteMeal(
+        accessToken: accessToken,
+        mealId: mealIdForApi,
+      );
+      debugPrint('FoodController: DELETE ok for $mealIdForApi');
+    } on MealsApiException catch (error) {
+      debugPrint(
+        'FoodController: delete meal API failed status=${error.statusCode} '
+        'msg=$error',
+      );
+      if (error.statusCode != 404) {
+        mealsApiErrorMessage.value = error.message;
+        AppSnackbar.error(error.message, title: 'Delete failed');
+        return false;
+      }
+    } catch (error) {
+      debugPrint('FoodController: delete meal API failed: $error');
+      mealsApiErrorMessage.value = apiNetworkErrorMessage(
+        error,
+        action: 'deleting meal',
+      );
+      AppSnackbar.error(
+        'Could not delete ${entry.food.name} on the server.',
+        title: 'Delete failed',
+      );
+      return false;
+    }
+
+    entries.removeWhere(
+      (e) =>
+          e.id == entry.id ||
+          e.id == mealIdForApi ||
+          e.id == serverMeal.id ||
+          _matchesLoggedMeal(e, entry) ||
+          _matchesLoggedMeal(e, serverMeal),
+    );
+    apiMeals.removeWhere(
+      (e) =>
+          e.id == entry.id ||
+          e.id == mealIdForApi ||
+          e.id == serverMeal.id ||
+          _matchesLoggedMeal(e, entry) ||
+          _matchesLoggedMeal(e, serverMeal),
+    );
+    entriesRevision.value++;
+
+    try {
+      if (_refreshMealsFuture != null) {
+        await _refreshMealsFuture!.timeout(const Duration(seconds: 6));
+      }
+      await refreshMealsFromApi(date: entry.date)
+          .timeout(const Duration(seconds: 6));
+    } on TimeoutException {
+      debugPrint('FoodController: post-delete meals refresh timed out');
+    }
+
+    final stillThere = entries.any(
+      (e) =>
+          e.id == mealIdForApi ||
+          _matchesLoggedMeal(e, serverMeal) ||
+          _matchesLoggedMeal(e, entry),
+    );
+    if (stillThere) {
+      debugPrint(
+        'FoodController: meal still present after DELETE+GET — delete failed',
+      );
+      AppSnackbar.error(
+        'Server still has “${entry.food.name}”. Delete did not stick.',
+        title: 'Delete failed',
+      );
+      return false;
+    }
+
+    debugPrint('FoodController: deleteMealEntry DONE for $mealIdForApi');
+    return true;
+  }
+
+  /// Finds the server-backed copy of [entry] (never a local epoch id).
+  Future<MealEntry?> _resolveServerMealForDelete(MealEntry entry) async {
+    final resolvedId = _resolveMealIdForApiDelete(entry);
+    if (resolvedId != null &&
+        resolvedId.isNotEmpty &&
+        !_looksLikeLocalMealId(resolvedId)) {
+      // Prefer the live entry object that carries this id.
+      for (final e in apiMeals) {
+        if (e.id == resolvedId) return e;
+      }
+      for (final e in entries) {
+        if (e.id == resolvedId) return e;
+      }
+      return entry.copyWith(id: resolvedId);
+    }
+
+    // Content match against API-loaded meals that have real ids.
+    for (final e in apiMeals) {
+      if (_looksLikeLocalMealId(e.id)) continue;
+      if (_matchesLoggedMeal(e, entry)) return e;
+    }
+    for (final e in entries) {
+      if (_looksLikeLocalMealId(e.id)) continue;
+      if (_matchesLoggedMeal(e, entry)) return e;
+    }
+
+    // Looser match: same day + meal slot + name (ignore grams drift).
+    for (final e in [...apiMeals, ...entries]) {
+      if (_looksLikeLocalMealId(e.id)) continue;
+      if (MealEntry.normalizeDate(e.date) !=
+          MealEntry.normalizeDate(entry.date)) {
+        continue;
+      }
+      if (e.meal != entry.meal) continue;
+      if (e.food.name.toLowerCase() != entry.food.name.toLowerCase()) continue;
+      return e;
+    }
+
+    return null;
+  }
+
+  /// Prefer [deleteMealEntry]. Kept for call sites that fire-and-forget.
   void removeEntry(MealEntry entry) {
-    entries.removeWhere((e) => e.id == entry.id);
-    _markEntriesDirty(celebrationDay: entry.date);
-    unawaited(_syncDeleteMeal(entry));
+    unawaited(deleteMealEntry(entry));
+  }
+
+  /// Deletes every entry in [group], then clears the in-row delete animation.
+  /// Safe to call from Lottie `onCompleted` after [beginDeletingGroup].
+  Future<bool> commitDeletingGroup(MealLogGroup group) async {
+    final id = group.representative.id;
+    if (_deleteCommitInFlight.contains(id)) {
+      debugPrint(
+        'FoodController: commitDeletingGroup skipped — already in flight id=$id',
+      );
+      return false;
+    }
+    _deleteCommitInFlight.add(id);
+
+    final entriesToDelete = List<MealEntry>.of(group.entries);
+    if (entriesToDelete.isEmpty) {
+      entriesToDelete.add(group.representative);
+    }
+
+    var allOk = true;
+    try {
+      for (final entry in entriesToDelete) {
+        debugPrint(
+          'FoodController: commitDeletingGroup → deleteMealEntry '
+          'id=${entry.id} name=${entry.food.name}',
+        );
+        final ok = await deleteMealEntry(entry);
+        if (!ok) {
+          allOk = false;
+          break;
+        }
+      }
+    } catch (error, stack) {
+      debugPrint(
+        'FoodController: commitDeletingGroup failed: $error\n$stack',
+      );
+      allOk = false;
+      AppSnackbar.error(
+        'Could not delete “${group.representative.food.name}”.',
+        title: 'Delete failed',
+      );
+    } finally {
+      _deleteCommitInFlight.remove(id);
+      // UI clear is owned by [deleteMealGroupWithFeedback] so the trash
+      // animation can finish (API often completes in milliseconds).
+    }
+    return allOk;
+  }
+
+  void beginDeletingGroup(MealLogGroup group) {
+    final id = group.representative.id;
+    if (deletingMealIds.contains(id)) return;
+    deletingMealIds.add(id);
+    _deletingGroups.removeWhere((g) => g.representative.id == id);
+    _deletingGroups.add(group);
+    deletingMealIds.refresh();
+    _deletingGroups.refresh();
+
+    // Safety net for abandoned deletes.
+    Future<void>.delayed(const Duration(seconds: 12), () {
+      if (!deletingMealIds.contains(id)) return;
+      debugPrint(
+        'FoodController: force-clear stuck delete animation id=$id',
+      );
+      _deleteCommitInFlight.remove(id);
+      finishDeletingGroup(group);
+    });
+  }
+
+  /// Confirm-sheet-safe delete: owned by the controller so row dispose
+  /// (`mounted=false` after local→server id sync) cannot abort the request.
+  Future<bool> deleteMealGroupWithFeedback(MealLogGroup group) async {
+    beginDeletingGroup(group);
+    final started = DateTime.now();
+    final allOk = await commitDeletingGroup(group);
+
+    // Keep the trash Lottie on screen long enough to be readable.
+    const minVisible = Duration(milliseconds: 1100);
+    final elapsed = DateTime.now().difference(started);
+    if (elapsed < minVisible) {
+      await Future<void>.delayed(minVisible - elapsed);
+    }
+    finishDeletingGroup(group);
+
+    if (allOk) {
+      AppSnackbar.success(
+        'Removed from your diary.',
+        title: 'Deleted',
+      );
+    }
+    return allOk;
+  }
+
+  void finishDeletingGroup(MealLogGroup group) {
+    final id = group.representative.id;
+    deletingMealIds.remove(id);
+    _deletingGroups.removeWhere((g) => g.representative.id == id);
+    deletingMealIds.refresh();
+    _deletingGroups.refresh();
+  }
+
+  /// Clears any in-progress delete UI (e.g. after refresh or leaving diary).
+  void clearDeletingAnimations() {
+    if (deletingMealIds.isEmpty && _deletingGroups.isEmpty) return;
+    deletingMealIds.clear();
+    _deletingGroups.clear();
+    _deleteCommitInFlight.clear();
+    deletingMealIds.refresh();
+    _deletingGroups.refresh();
+  }
+
+  /// Active delete animations are owned by begin/finishDeletingGroup.
+  /// Do not clear them when a meal leaves memory after DELETE — that made the
+  /// trash Lottie disappear in milliseconds.
+  void pruneDeletingAnimations() {}
+
+  List<MealLogGroup> deletingGroupsForMeal(String meal) {
+    return _deletingGroups
+        .where((g) => g.representative.meal == meal)
+        .toList();
   }
 
   Future<void> cancelRepeatedYesterdayMeals() async {
@@ -2171,78 +2621,14 @@ class FoodController extends GetxController {
     repeatedYesterdayEntries.clear();
 
     for (final meal in meals) {
-      removeEntry(meal);
+      await deleteMealEntry(meal);
     }
 
     entriesRevision.value++;
   }
 
-  Future<void> _syncDeleteMeal(MealEntry entry) async {
-    final accessToken = await _mealAccessToken();
-    if (accessToken == null) {
-      debugPrint(
-        'FoodController: skipping DELETE meals API for ${entry.food.name} '
-        '(no access token)',
-      );
-      return;
-    }
-
-    final mealId = _resolveMealIdForApiDelete(entry);
-    if (mealId == null) {
-      debugPrint(
-        'FoodController: skipping DELETE meals API for ${entry.food.name} '
-        '(no server meal id; localId=${entry.id})',
-      );
-      return;
-    }
-
-    try {
-      debugPrint(
-        'FoodController: calling DELETE meals API at '
-        '${ApiEndpoints.mealsByIdUrl(mealId)}',
-      );
-      await _mealsRepository.deleteMeal(
-        accessToken: accessToken,
-        mealId: mealId,
-      );
-
-      await refreshMealsFromApi(date: entry.date);
-    } on MealsApiException catch (error) {
-      if (error.statusCode == 404) {
-        debugPrint('FoodController: delete meal API returned 404 for $mealId');
-        return;
-      }
-
-      debugPrint('FoodController: delete meal API failed: $error');
-      entries.add(entry);
-      _markEntriesDirty();
-      mealsApiErrorMessage.value = error.message;
-      AppSnackbar.info(
-        '${entry.food.name} was removed from your diary, but it could not '
-        'be deleted on the server yet.',
-        title: 'Removed on device',
-      );
-    } catch (error) {
-      debugPrint('FoodController: delete meal API failed: $error');
-      entries.add(entry);
-      _markEntriesDirty();
-      mealsApiErrorMessage.value = apiNetworkErrorMessage(
-        error,
-        action: 'deleting meal',
-      );
-      AppSnackbar.info(
-        '${entry.food.name} was removed from your diary, but it could not '
-        'be deleted on the server yet.',
-        title: 'Removed on device',
-      );
-    }
-  }
-
   String? _resolveMealIdForApiDelete(MealEntry entry) {
     final entryId = entry.id.trim();
-    if (entryId.isNotEmpty && !_looksLikeLocalMealId(entryId)) {
-      return entryId;
-    }
 
     for (final apiEntry in apiMeals) {
       if (apiEntry.id == entryId && entryId.isNotEmpty) {
@@ -2252,11 +2638,28 @@ class FoodController extends GetxController {
 
     for (final apiEntry in apiMeals) {
       if (_matchesLoggedMeal(apiEntry, entry) &&
-          !_looksLikeLocalMealId(apiEntry.id)) {
+          apiEntry.id.trim().isNotEmpty) {
         return apiEntry.id;
       }
     }
 
+    // Also search in-memory diary entries (API-loaded) for a better id.
+    for (final logged in entries) {
+      if (logged.id == entryId && entryId.isNotEmpty) {
+        // Prefer non-local-looking ids when duplicates exist.
+        if (!_looksLikeLocalMealId(logged.id)) return logged.id;
+      }
+    }
+
+    for (final logged in entries) {
+      if (_matchesLoggedMeal(logged, entry) &&
+          logged.id.trim().isNotEmpty &&
+          !_looksLikeLocalMealId(logged.id)) {
+        return logged.id;
+      }
+    }
+
+    if (entryId.isNotEmpty) return entryId;
     return null;
   }
 
@@ -2275,22 +2678,11 @@ class FoodController extends GetxController {
   }
 
   Future<void> loadRepeatYesterdayCardState() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    final dismissedDate = prefs.getString(_repeatCardDismissKey);
-
-    showRepeatYesterdayCard.value = dismissedDate != today;
+    // Session-only — no local persistence; diary data comes from the API.
+    showRepeatYesterdayCard.value = true;
   }
 
   Future<void> dismissRepeatYesterdayCard() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    await prefs.setString(_repeatCardDismissKey, today);
-
     showRepeatYesterdayCard.value = false;
   }
 

@@ -70,11 +70,14 @@ class AuthController extends GetxController {
       final accessTokenClaims = _decodeJwtClaims(accessToken);
 
       final user = Get.find<UserController>();
+      final displayName = googleUser.displayName?.trim();
       await user.saveGoogleLoginDetails(
         userId: _claimString(accessTokenClaims, 'sub'),
         provider: _claimString(accessTokenClaims, 'provider') ?? 'google',
         email: _claimString(accessTokenClaims, 'email') ?? googleUser.email,
-        name: googleUser.displayName ?? user.user.name,
+        name: (displayName != null && displayName.isNotEmpty)
+            ? displayName
+            : '',
         accessToken: accessToken,
         refreshToken: refreshToken.isEmpty ? null : refreshToken,
         backendResponse: backendResponse,
@@ -83,7 +86,10 @@ class AuthController extends GetxController {
         'AuthController: access token saved length=${accessToken.length}',
       );
 
-      if (UserController.readEmailVerified(backendResponse)) {
+      if (UserController.readEmailVerified(backendResponse) &&
+          user.user.hasProfileBasics) {
+        // Only open home when this account already has API profile basics.
+        // A brand-new email must not inherit "verified → skip setup".
         await user.markOnboardingComplete();
         MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);

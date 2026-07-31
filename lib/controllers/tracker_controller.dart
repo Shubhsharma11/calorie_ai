@@ -82,7 +82,7 @@ class TrackerController extends GetxController {
   final RxList<WaterLogEntry> waterEntries = <WaterLogEntry>[].obs;
   final Rx<WaterPeriod> waterPeriod = WaterPeriod.week.obs;
 
-  final RxDouble currentWeight = 70.0.obs;
+  final RxDouble currentWeight = 0.0.obs;
   final RxList<WeightEntry> weightEntries = <WeightEntry>[].obs;
   final RxMap<DateTime, int> stepsByDate = <DateTime, int>{}.obs;
   final Map<String, int> _stepsBaselineByDate = {};
@@ -136,10 +136,9 @@ class TrackerController extends GetxController {
   void onInit() {
     super.onInit();
     _migrateLegacyWaterCounts();
-    unawaited(_storage.clearWeightEntryLogs());
     unawaited(_loadWeightHistory());
     unawaited(_loadActivityLog());
-    unawaited(refreshWaterFromApi());
+    unawaited(refreshWaterFromApi(force: true));
     _bindWaterGoalListener();
   }
 
@@ -147,6 +146,36 @@ class TrackerController extends GetxController {
   void onReady() {
     super.onReady();
     _bindWaterGoalListener();
+  }
+
+  /// Drop in-memory water/weight so a prior session cannot leak after logout.
+  void clearSessionData() {
+    waterByDate.clear();
+    waterEntries.clear();
+    weightEntries.clear();
+    exerciseEntries.clear();
+    stepsByDate.clear();
+    _stepsBaselineByDate.clear();
+    _lastWaterRefreshAt = null;
+    _lastWeightRefreshAt = null;
+    _lastWeightRefreshKey = null;
+    _waterApi404Logged = false;
+    _waterGoalCelebrationShown = false;
+    currentWeight.value = 0;
+    activityRevision.value++;
+    update();
+    debugPrint('TrackerController: session data cleared');
+  }
+
+  /// Reload water + weight from the API after login.
+  Future<void> reloadAfterLogin() async {
+    _lastWaterRefreshAt = null;
+    _lastWeightRefreshAt = null;
+    _lastWeightRefreshKey = null;
+    await Future.wait([
+      refreshWaterFromApi(force: true),
+      refreshWeightFromApi(),
+    ]);
   }
 
   void _bindWaterGoalListener() {
@@ -751,7 +780,7 @@ class TrackerController extends GetxController {
   void _seedDisplayWeightFromProfile() {
     if (!Get.isRegistered<UserController>()) return;
 
-    final kg = Get.find<UserController>().user.weightKg.toDouble();
+    final kg = (Get.find<UserController>().user.weightKg?.toDouble() ?? 0);
     if (kg > 0) {
       currentWeight.value = kg;
     }
@@ -791,21 +820,19 @@ class TrackerController extends GetxController {
       ..sort((left, right) => left.date.compareTo(right.date));
   }
 
-  /// Keeps [UserModel.weightKg] aligned with weight API history after login/refresh.
+  /// Keeps home "current weight" aligned with weight API history.
+  /// Does not write into onboarding profile / target weight.
   void _syncProfileWeightFromEntries(List<WeightEntry> entries) {
-    if (entries.isEmpty || !Get.isRegistered<UserController>()) return;
+    if (entries.isEmpty) return;
 
     final kg = _resolveDisplayWeight(entries);
     if (kg <= 0) return;
+    if ((currentWeight.value - kg).abs() < 0.05) return;
 
-    final userController = Get.find<UserController>();
-    final rounded = kg.round();
-    if (userController.user.weightKg == rounded) return;
-
-    userController.user.weightKg = rounded;
-    userController.update();
+    currentWeight.value = kg;
+    weightRevision.value++;
     debugPrint(
-      'TrackerController: profile weight synced from API — $rounded kg',
+      'TrackerController: current weight synced from API history — $kg kg',
     );
   }
 
@@ -938,12 +965,6 @@ class TrackerController extends GetxController {
         );
         _upsertWeightEntry(savedEntry);
 
-        debugPrint('TrackerController: refreshing weight history from GET');
-        await refreshWeightForChartPeriod(
-          keepExistingOnEmpty: true,
-          authoritativeEntries: [savedEntry],
-        );
-
         // Always keep the just-logged value as current when logging for today.
         // A stale GET (or profile patch) can otherwise restore the previous weight.
         if (logDate == _today) {
@@ -952,18 +973,36 @@ class TrackerController extends GetxController {
           currentWeight.value = _resolveDisplayWeight(weightEntries);
         }
 
-        _syncLocalProfileAfterWeightLog(
+        _syncLocalDisplayWeightAfterLog(
           kg: kg,
           logDate: logDate,
-          profileUpdatedOnServer: response.profileUpdated,
         );
 
         weightApiErrorMessage.value = null;
         weightRevision.value++;
         debugPrint(
           'TrackerController: weight log complete — '
-          'current=${currentWeight.value}kg history=${weightEntries.length}',
+          'current=${currentWeight.value}kg history=${weightEntries.length} '
+          'profileUpdated=${response.profileUpdated}',
         );
+
+        // Weight API rewrites onboarding profile (goal → maintain, goalWeight ≈
+        // current). Always re-assert the pinned lose/gain target + type.
+        if (Get.isRegistered<UserController>()) {
+          unawaited(
+            Get.find<UserController>().reaffirmPinnedGoalWeightAfterWeightLog(),
+          );
+        }
+
+        // Refresh chart history in the background so Save is never blocked
+        // by a slow/hanging GET.
+        unawaited(
+          refreshWeightForChartPeriod(
+            keepExistingOnEmpty: true,
+            authoritativeEntries: [savedEntry],
+          ),
+        );
+
         return WeightLogOutcome(
           WeightLogStatus.savedAndSynced,
           profileUpdated: response.profileUpdated,
@@ -983,19 +1022,13 @@ class TrackerController extends GetxController {
     return const WeightLogOutcome(WeightLogStatus.failed);
   }
 
-  void _syncLocalProfileAfterWeightLog({
+  /// Updates the Weight Progress "current" display after a today's log.
+  /// Does not change onboarding profile weight or target weight.
+  void _syncLocalDisplayWeightAfterLog({
     required double kg,
     required DateTime logDate,
-    bool profileUpdatedOnServer = false,
   }) {
-    if (logDate != _today || !Get.isRegistered<UserController>()) return;
-
-    final userController = Get.find<UserController>();
-    userController.user.weightKg = kg.round();
-    userController.onProfileUpdated();
-    // Keep tracker on the precise logged value (not only the rounded profile int).
-    // Ignore [profileUpdatedOnServer]; weight API + local log are the source of truth
-    // for currentWeight so a later stale profile payload cannot roll it back.
+    if (logDate != _today) return;
     updateWeight(kg);
   }
 
@@ -1013,7 +1046,10 @@ class TrackerController extends GetxController {
     _applyWeightEntries(entries);
   }
 
-  Future<WeightDeleteOutcome> deleteWeightEntry(WeightEntry entry) async {
+  Future<WeightDeleteOutcome> deleteWeightEntry(
+    WeightEntry entry, {
+    bool applyLocally = true,
+  }) async {
     final entryId = entry.id?.trim();
     if (entryId == null || entryId.isEmpty) {
       return const WeightDeleteOutcome(
@@ -1042,10 +1078,9 @@ class TrackerController extends GetxController {
         accessToken: accessToken,
         weightId: entryId,
       );
-      await refreshWeightForChartPeriod();
-      if (weightEntries.isEmpty) {
-        _seedDisplayWeightFromProfile();
-        weightRevision.value++;
+
+      if (applyLocally) {
+        await _applyWeightDeletedLocally(entryId);
       }
       debugPrint(
         'TrackerController: weight entry deleted — '
@@ -1057,7 +1092,9 @@ class TrackerController extends GetxController {
         debugPrint(
           'TrackerController: delete weight API returned 404 for $entryId',
         );
-        await refreshWeightForChartPeriod();
+        if (applyLocally) {
+          await _applyWeightDeletedLocally(entryId);
+        }
         return const WeightDeleteOutcome(WeightDeleteStatus.deleted);
       }
 
@@ -1074,6 +1111,48 @@ class TrackerController extends GetxController {
         message: 'Weight entry could not be deleted from the server.',
       );
     }
+  }
+
+  /// Keeps the trash Lottie on screen long enough to read (API is often ms).
+  Future<WeightDeleteOutcome> deleteWeightEntryWithFeedback(
+    WeightEntry entry,
+  ) async {
+    final started = DateTime.now();
+    final outcome = await deleteWeightEntry(entry, applyLocally: false);
+
+    const minVisible = Duration(milliseconds: 1100);
+    final elapsed = DateTime.now().difference(started);
+    if (elapsed < minVisible) {
+      await Future<void>.delayed(minVisible - elapsed);
+    }
+
+    if (outcome.status == WeightDeleteStatus.deleted) {
+      final entryId = entry.id?.trim();
+      if (entryId != null && entryId.isNotEmpty) {
+        await _applyWeightDeletedLocally(entryId);
+      }
+    }
+    return outcome;
+  }
+
+  Future<void> _applyWeightDeletedLocally(String entryId) async {
+    // Remove only this entry locally first — never wipe the whole list
+    // if the follow-up GET comes back empty/stale.
+    _removeWeightEntryById(entryId);
+    await refreshWeightForChartPeriod(keepExistingOnEmpty: true);
+
+    if (weightEntries.isEmpty) {
+      _seedDisplayWeightFromProfile();
+      weightRevision.value++;
+    }
+  }
+
+  void _removeWeightEntryById(String entryId) {
+    final remaining = weightEntries
+        .where((item) => (item.id?.trim() ?? '') != entryId)
+        .toList();
+    if (remaining.length == weightEntries.length) return;
+    _applyWeightEntries(remaining);
   }
 
   void syncActivity() {
@@ -1215,11 +1294,12 @@ class TrackerController extends GetxController {
     if (durationMinutes <= 0) return;
 
     final weightKg = Get.isRegistered<UserController>()
-        ? Get.find<UserController>().user.weightKg.toDouble()
-        : 70.0;
+        ? (Get.find<UserController>().user.weightKg?.toDouble() ?? 0)
+        : 0.0;
+    final safeWeight = weightKg > 0 ? weightKg : 70.0; // estimate only
     final calories = ExerciseType.estimateCalories(
       type: type,
-      weightKg: weightKg,
+      weightKg: safeWeight,
       durationMinutes: durationMinutes,
       intensity: intensity,
     );

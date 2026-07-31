@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -11,7 +9,6 @@ import '../core/route_args.dart';
 import '../models/activity_level.dart';
 import '../models/goal_type.dart';
 import '../models/user_model.dart';
-import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/primary_button.dart';
@@ -31,26 +28,22 @@ class DailyCalorieGoalView extends GetView<UserController> {
     final editing = RouteArgs.isEditingFromProfile;
 
     return PopScope(
+      // Onboarding: this is the final setup step — no going back.
       canPop: editing,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        unawaited(
-          controller.goToPreviousOnboardingStep(AppRoutes.dailyCalorieGoal),
-        );
+        if (didPop || !editing) return;
+        Get.back<void>();
       },
       child: Scaffold(
         backgroundColor: _pageBg,
-        appBar: AppAppBar.backOnly(
-          onBack: () {
-            if (editing) {
-              Get.back<void>();
-              return;
-            }
-            unawaited(
-              controller.goToPreviousOnboardingStep(AppRoutes.dailyCalorieGoal),
-            );
-          },
-        ),
+        appBar: editing
+            ? AppAppBar.backOnly(onBack: () => Get.back<void>())
+            : AppBar(
+                backgroundColor: _pageBg,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                automaticallyImplyLeading: false,
+              ),
         body: GetBuilder<UserController>(
           builder: (_) {
             final user = controller.user;
@@ -102,11 +95,11 @@ class DailyCalorieGoalView extends GetView<UserController> {
                         _DailyCaloriesCard(
                           goal: goal,
                           goalType: user.goal ?? GoalType.maintainWeight,
-                          currentWeightKg: user.weightKg.toDouble(),
+                          currentWeightKg: user.weightKg?.toDouble() ?? 0,
                           targetWeightKg: user.goalWeightKg,
                           goalExplanation: _WeightTargetSection.planGoalExplanation(
                             user.goal ?? GoalType.maintainWeight,
-                            user.weightKg.toDouble(),
+                            user.weightKg?.toDouble() ?? 0,
                             user.goalWeightKg,
                           ),
                           showAdjusters: editing,
@@ -188,7 +181,7 @@ class DailyCalorieGoalView extends GetView<UserController> {
                       SizedBox(height: r.scale(24)),
                       _WeightTargetSection(
                         goal: user.goal!,
-                        currentWeightKg: user.weightKg.toDouble(),
+                        currentWeightKg: user.weightKg?.toDouble() ?? 0,
                         userTargetKg: controller.resolvedUserGoalWeightKg!,
                         aiTargetKg: controller.resolvedAiGoalWeightKg!,
                         selected: controller.weightTargetSource.value,

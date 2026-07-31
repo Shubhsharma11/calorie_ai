@@ -4,7 +4,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
 import '../../controllers/tracker_controller.dart';
-import '../../controllers/user_controller.dart';
 import '../../core/app_snackbar.dart';
 import '../../core/dashboard_actions.dart';
 import '../../core/responsive.dart';
@@ -17,14 +16,15 @@ const double _logWeightMaxKg = 300;
 class _WeightLogSheetResult {
   const _WeightLogSheetResult({
     required this.outcome,
-    this.profileSyncError,
   });
 
   final WeightLogOutcome outcome;
-  final String? profileSyncError;
 }
 
 /// Opens the log-weight sheet — date picker + manual kg entry.
+///
+/// Records weight history only (weight API). Does not patch onboarding
+/// or change the user's target weight.
 Future<void> showWeightLogSheet(
   BuildContext context, {
   required double initialWeight,
@@ -120,33 +120,15 @@ class _ManualWeightLogSheetState extends State<_ManualWeightLogSheet> {
     _draftWeight = enteredWeight;
 
     final controller = Get.find<TrackerController>();
-    final userController = Get.find<UserController>();
-    final baseline = userController.captureProfileSyncSnapshot();
-    final today = MealEntry.normalizeDate(DateTime.now());
-    final isToday = _logDate == today;
 
+    // History only — never PATCH onboarding / target weight from this flow.
     final outcome = await controller.logCurrentWeight(
       date: _logDate,
       weightKg: _draftWeight,
     );
 
-    String? profileSyncError;
-    if (isToday &&
-        outcome.status == WeightLogStatus.savedAndSynced &&
-        !outcome.profileUpdated) {
-      profileSyncError = await userController.patchPersonalDetailsIfChanged(
-        baseline,
-      );
-      controller.updateWeight(_draftWeight);
-    }
-
     if (!mounted) return;
-    Navigator.of(context).pop(
-      _WeightLogSheetResult(
-        outcome: outcome,
-        profileSyncError: profileSyncError,
-      ),
-    );
+    Navigator.of(context).pop(_WeightLogSheetResult(outcome: outcome));
   }
 
   @override
@@ -351,14 +333,7 @@ class _ManualWeightLogSheetState extends State<_ManualWeightLogSheet> {
 void _showWeightLogSnackbar(_WeightLogSheetResult result) {
   switch (result.outcome.status) {
     case WeightLogStatus.savedAndSynced:
-      if (result.profileSyncError != null) {
-        AppSnackbar.info(
-          'Weight saved, but profile sync needs another try.',
-          title: 'Weight saved',
-        );
-      } else {
-        AppSnackbar.success('Weight saved.');
-      }
+      AppSnackbar.success('Weight saved.');
     case WeightLogStatus.failed:
       final message = Get.isRegistered<TrackerController>()
           ? Get.find<TrackerController>().weightApiErrorMessage.value

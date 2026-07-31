@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/food_controller.dart';
-import '../controllers/settings_controller.dart';
-import '../controllers/tracker_controller.dart';
+import '../controllers/notifications_controller.dart';
 import '../models/meal_entry.dart';
 import '../routes/app_routes.dart';
 
@@ -35,19 +34,8 @@ abstract final class DashboardActions {
   }
 
   static bool get hasNotificationBadge {
-    if (!Get.isRegistered<SettingsController>()) return false;
-
-    final settings = Get.find<SettingsController>();
-    if (!settings.pushNotifications.value) return false;
-
-    final remindersOn =
-        settings.mealReminders.value || settings.waterReminders.value;
-
-    final waterPending =
-        Get.isRegistered<TrackerController>() &&
-        !Get.find<TrackerController>().isWaterGoalComplete;
-
-    return remindersOn || waterPending;
+    if (!Get.isRegistered<NotificationsController>()) return false;
+    return Get.find<NotificationsController>().unreadCount.value > 0;
   }
 }
 

@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
-/// Goal / finish-line artwork from [finish.svg].
+/// Goal / finish flag icon.
 class FinishIcon extends StatelessWidget {
-  const FinishIcon({super.key, this.size = 22});
-
-  static const asset = 'assets/image/finish.svg';
+  const FinishIcon({super.key, this.size = 22, this.color});
 
   final double size;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: SvgPicture.asset(asset, fit: BoxFit.contain),
+    return Icon(
+      Icons.flag_rounded,
+      size: size,
+      color: color ?? const Color(0xFF4CAF50),
     );
   }
 }

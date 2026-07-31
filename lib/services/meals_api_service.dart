@@ -64,6 +64,28 @@ class MealsApiService {
     return _parseCreateResponse(response, source: entry);
   }
 
+  Future<MealEntry> updateMeal({
+    required String accessToken,
+    required MealEntry entry,
+  }) async {
+    final mealId = entry.id.trim();
+    if (mealId.isEmpty) {
+      throw const MealsApiException('Cannot update a meal without a server id.');
+    }
+
+    final endpoint = ApiEndpoints.mealById(mealId);
+    final body = ApiMealMapper.toUpdateRequestBody(entry);
+    debugPrint('MealsApiService: PATCH ${ApiEndpoints.url(endpoint)} $body');
+
+    final response = await _apiClient.patch(
+      endpoint,
+      headers: apiAuthHeaders(accessToken),
+      body: body,
+    );
+
+    return _parseUpdateResponse(response, source: entry);
+  }
+
   Future<void> deleteMeal({
     required String accessToken,
     required String mealId,
@@ -77,6 +99,35 @@ class MealsApiService {
     );
 
     _parseDeleteResponse(response, mealId: mealId);
+  }
+
+  MealEntry _parseUpdateResponse(
+    http.Response response, {
+    required MealEntry source,
+  }) {
+    final body = response.body.trim();
+    debugPrint('MealsApiService: response ${response.statusCode}: $body');
+
+    final decoded = _tryDecodeJson(body);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = decoded is Map<String, dynamic>
+          ? decoded['message'] as String? ?? decoded['error'] as String?
+          : null;
+      throw MealsApiException(
+        message ??
+            'Update meal failed (${response.statusCode}). '
+            'URL: ${ApiEndpoints.mealsByIdUrl(source.id)}',
+        statusCode: response.statusCode,
+      );
+    }
+
+    if (decoded is Map<String, dynamic>) {
+      return ApiMealMapper.mergeCreateResponse(decoded, source: source);
+    }
+
+    // Some backends return empty 204 — keep updated local fields + same id.
+    return source;
   }
 
   void _parseDeleteResponse(http.Response response, {required String mealId}) {

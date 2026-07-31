@@ -56,17 +56,52 @@ class NotificationService {
     await _requestPermissions();
     await _configureFirebaseMessaging();
 
-    _currentToken = await _messaging.getToken();
-    logFcmToken();
+    _currentToken = await _safeGetFcmToken();
+    await logFcmToken();
 
     _messaging.onTokenRefresh.listen(_handleTokenRefresh);
-    _pendingInitialMessage = await _messaging.getInitialMessage();
+    try {
+      _pendingInitialMessage = await _messaging.getInitialMessage();
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('FCM getInitialMessage skipped: $error');
+      }
+    }
 
     _initialized = true;
   }
 
+  /// iOS needs an APNS token before FCM `getToken()`. Without Push
+  /// entitlements (or on Simulator) that can fail — never crash startup.
+  Future<String?> _safeGetFcmToken() async {
+    try {
+      if (Platform.isIOS) {
+        String? apns = await _messaging.getAPNSToken();
+        for (var attempt = 0; apns == null && attempt < 6; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          apns = await _messaging.getAPNSToken();
+        }
+        if (apns == null) {
+          if (kDebugMode) {
+            debugPrint(
+              'FCM: APNS token not ready yet (check Push Notifications '
+              'capability / physical device). Skipping getToken for now.',
+            );
+          }
+          return null;
+        }
+      }
+      return await _messaging.getToken();
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('FCM getToken skipped: $error');
+      }
+      return null;
+    }
+  }
+
   Future<String?> logFcmToken() async {
-    final token = _currentToken ?? await _messaging.getToken();
+    final token = _currentToken ?? await _safeGetFcmToken();
     _currentToken = token;
     if (kDebugMode) {
       debugPrint('═══════════════════════════════════════');
@@ -104,7 +139,7 @@ class NotificationService {
   }
 
   Future<void> _syncTokenWithBackend({String? accessToken}) async {
-    final token = _currentToken ?? await _messaging.getToken();
+    final token = _currentToken ?? await _safeGetFcmToken();
     if (token == null || token.isEmpty) return;
     _currentToken = token;
 
@@ -375,6 +410,8 @@ class NotificationService {
 
   String _defaultTitle(NotificationType type) {
     switch (type) {
+      case NotificationType.mealReminder:
+        return 'Meal reminder';
       case NotificationType.breakfastReminder:
         return 'Breakfast time';
       case NotificationType.lunchReminder:
@@ -396,14 +433,16 @@ class NotificationService {
       case NotificationType.aiNutritionTips:
         return 'AI nutrition tip';
       case NotificationType.motivational:
-        return 'Fit Buddy AI';
+        return 'FitBuddy AI';
       case NotificationType.unknown:
-        return 'Fit Buddy AI';
+        return 'FitBuddy AI';
     }
   }
 
   String _defaultBody(NotificationType type) {
     switch (type) {
+      case NotificationType.mealReminder:
+        return "Don't forget to log your meal.";
       case NotificationType.breakfastReminder:
         return 'Log your breakfast to stay on track.';
       case NotificationType.lunchReminder:

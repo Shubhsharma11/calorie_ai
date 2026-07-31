@@ -173,6 +173,7 @@ void main() {
         'fat': 10,
         'mealTime': 'breakfast',
         'quantity': 150,
+        'date': '2026-06-23',
       },
     );
   });

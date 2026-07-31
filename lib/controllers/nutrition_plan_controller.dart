@@ -23,7 +23,7 @@ class NutritionPlanController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    unawaited(loadPlan());
+    unawaited(loadPlan(force: true));
   }
 
   void setLoadedPlan(NutritionPlanModel loadedPlan) {
@@ -66,7 +66,10 @@ class NutritionPlanController extends GetxController {
       debugPrint(
         'NutritionPlanController: loaded plan with ${fetchedPlan.tips.length} tips',
       );
-      await userController.applyNutritionPlan(fetchedPlan);
+      await userController.applyNutritionPlan(
+        fetchedPlan,
+        applyTargetWeight: false,
+      );
     } on NutritionPlanApiException catch (error) {
       debugPrint('NutritionPlanController: load failed: $error');
       errorMessage.value = error.message;
@@ -90,4 +93,13 @@ class NutritionPlanController extends GetxController {
   bool get hasApiPlan => plan.value != null;
 
   List<String> get tips => plan.value?.tips ?? [];
+
+  void clearSessionData() {
+    plan.value = null;
+    errorMessage.value = null;
+    isLoading.value = false;
+    _isFetching = false;
+    revision.value++;
+    debugPrint('NutritionPlanController: session data cleared');
+  }
 }

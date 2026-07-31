@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/app_coach_marks.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
 import 'rotating_motivation_text.dart';
@@ -12,6 +13,7 @@ class DashboardHeader extends StatelessWidget {
     this.onSearch,
     this.onCalendar,
     this.onNotifications,
+    this.searchShowcaseKey,
   });
 
   final String firstName;
@@ -19,6 +21,7 @@ class DashboardHeader extends StatelessWidget {
   final VoidCallback? onSearch;
   final VoidCallback? onCalendar;
   final VoidCallback? onNotifications;
+  final GlobalKey? searchShowcaseKey;
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +93,10 @@ class DashboardHeader extends StatelessWidget {
                 ],
               ),
             ),
-            _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearch),
+            _wrapSearchShowcase(
+              context,
+              _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearch),
+            ),
             SizedBox(width: r.scale(8)),
             _HeaderIconButton(
               icon: Icons.calendar_today_rounded,
@@ -106,6 +112,12 @@ class DashboardHeader extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  Widget _wrapSearchShowcase(BuildContext context, Widget child) {
+    final key = searchShowcaseKey;
+    if (key == null) return child;
+    return AppCoachMarks.target(key: key, child: child);
   }
 }
 

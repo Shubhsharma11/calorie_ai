@@ -13,6 +13,8 @@ import '../core/weight_chart_data.dart';
 import '../models/meal_entry.dart';
 import '../models/weight_entry.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/confirm_delete_sheet.dart';
+import '../widgets/delete_lottie.dart';
 import '../widgets/weight_tracker/weight_log_sheet.dart';
 import '../theme/app_colors.dart';
 
@@ -61,7 +63,7 @@ class _WeightTrackerBodyState extends State<_WeightTrackerBody> {
       if (range == null || !mounted) return;
       setState(() {
         _chartPeriod = WeightChartPeriod.custom;
-        _customChartRange = range;
+        _customChartRange = range;  
       });
       widget.controller.setWeightChartPeriod(
         _chartPeriod,
@@ -362,60 +364,14 @@ class _WeightChartCard extends StatelessWidget {
                             Divider(color: AppColors.border),
                         itemBuilder: (context, index) {
                           final entry = visibleEntries[index];
-                          return Dismissible(
+                          return _WeightEntryDeleteRow(
                             key: ValueKey(
                               entry.id ??
-                                  '${entry.date.toIso8601String()}_${entry.kg}',
+                                  '${entry.date.toIso8601String()}_${entry.kg}_$index',
                             ),
-                            direction: DismissDirection.endToStart,
-                            background: Container(
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20),
-                              color: AppColors.error.withValues(alpha: 0.12),
-                              child: Icon(
-                                Icons.delete_outline_rounded,
-                                color: AppColors.error,
-                              ),
-                            ),
-                            confirmDismiss: (_) => _confirmDeleteWeightEntry(
-                              sheetContext,
-                              tracker,
-                              entry,
-                            ),
-                            child: ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: SizedBox(
-                                width: 42,
-                                height: 42,
-                                child: SvgPicture.asset(
-                                  'assets/image/gym.svg',
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                              title: Text(
-                                '${entry.kg.toStringAsFixed(1)} kg',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              subtitle: Text(
-                                intl.DateFormat(
-                                  'EEE, MMM d, yyyy',
-                                ).format(entry.date),
-                              ),
-                              trailing: IconButton(
-                                tooltip: 'Delete entry',
-                                icon: Icon(
-                                  Icons.delete_outline_rounded,
-                                  color: AppColors.error,
-                                ),
-                                onPressed: () => _confirmDeleteWeightEntry(
-                                  sheetContext,
-                                  tracker,
-                                  entry,
-                                ),
-                              ),
-                            ),
+                            entry: entry,
+                            sheetContext: sheetContext,
+                            tracker: tracker,
                           );
                         },
                       ),
@@ -487,6 +443,10 @@ class _RecentWeightRecordsCard extends StatelessWidget {
                         bottom: index == visibleEntries.length - 1 ? 0 : 10,
                       ),
                       child: _RecentWeightRecordTile(
+                        key: ValueKey(
+                          entry.id ??
+                              '${entry.date.toIso8601String()}_${entry.kg}_$index',
+                        ),
                         entry: entry,
                         previousEntry: index + 1 < visibleEntries.length
                             ? visibleEntries[index + 1]
@@ -503,8 +463,9 @@ class _RecentWeightRecordsCard extends StatelessWidget {
   }
 }
 
-class _RecentWeightRecordTile extends StatelessWidget {
+class _RecentWeightRecordTile extends StatefulWidget {
   const _RecentWeightRecordTile({
+    super.key,
     required this.entry,
     required this.previousEntry,
   });
@@ -513,16 +474,89 @@ class _RecentWeightRecordTile extends StatelessWidget {
   final WeightEntry? previousEntry;
 
   @override
+  State<_RecentWeightRecordTile> createState() =>
+      _RecentWeightRecordTileState();
+}
+
+class _RecentWeightRecordTileState extends State<_RecentWeightRecordTile> {
+  bool _deleting = false;
+  bool _started = false;
+
+  Future<void> _onDeletePressed() async {
+    if (_started) return;
+    final confirmed = await _askDeleteWeightEntry(context, widget.entry);
+    if (!confirmed || !mounted) return;
+
+    _started = true;
+    setState(() => _deleting = true);
+    // Play Delete_message while the API runs — don't wait on Lottie to finish.
+    unawaited(_finishDelete());
+  }
+
+  Future<void> _finishDelete() async {
+    if (!Get.isRegistered<TrackerController>()) {
+      if (mounted) {
+        setState(() {
+          _deleting = false;
+          _started = false;
+        });
+      }
+      return;
+    }
+
+    final tracker = Get.find<TrackerController>();
+    final outcome = await tracker.deleteWeightEntryWithFeedback(widget.entry);
+
+    if (outcome.status != WeightDeleteStatus.deleted) {
+      if (mounted) {
+        setState(() {
+          _deleting = false;
+          _started = false;
+        });
+      }
+      AppSnackbar.error(
+        outcome.message ?? 'Weight entry could not be deleted.',
+        title: 'Delete failed',
+      );
+      return;
+    }
+
+    // Show even if this tile already unmounted after list refresh.
+    AppSnackbar.success(
+      'Weight entry deleted.',
+      title: 'Deleted',
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final change = previousEntry == null ? null : entry.kg - previousEntry!.kg;
+    final entry = widget.entry;
+    final previousEntry = widget.previousEntry;
+    final change = previousEntry == null ? null : entry.kg - previousEntry.kg;
     final showChange = change != null && change.abs() >= 0.05;
     final isGain = (change ?? 0) > 0;
+    final radius = BorderRadius.circular(14);
+    const rowHeight = 56.0;
+
+    if (_deleting) {
+      return Material(
+        color: AppColors.error.withValues(alpha: 0.06),
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: DeleteLottieBox(
+          height: rowHeight,
+          size: rowHeight,
+          onCompleted: () {},
+        ),
+      );
+    }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      height: rowHeight,
+      padding: const EdgeInsets.fromLTRB(16, 0, 6, 0),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: radius,
         border: Border.all(color: AppColors.border.withValues(alpha: 0.75)),
       ),
       child: Row(
@@ -530,6 +564,7 @@ class _RecentWeightRecordTile extends StatelessWidget {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   '${entry.kg.toStringAsFixed(2)}kg',
@@ -552,9 +587,10 @@ class _RecentWeightRecordTile extends StatelessWidget {
           ),
           if (showChange)
             Container(
+              margin: const EdgeInsets.only(right: 4),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: AppColors.card,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
@@ -579,6 +615,18 @@ class _RecentWeightRecordTile extends StatelessWidget {
                 ],
               ),
             ),
+          IconButton(
+            tooltip: 'Delete entry',
+            onPressed: _onDeletePressed,
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(8),
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            icon: Icon(
+              Icons.close_rounded,
+              size: 20,
+              color: AppColors.error.withValues(alpha: 0.85),
+            ),
+          ),
         ],
       ),
     );
@@ -707,58 +755,150 @@ class _WeightChartEmptyState extends StatelessWidget {
   }
 }
 
-Future<bool> _confirmDeleteWeightEntry(
-  BuildContext context,
-  TrackerController tracker,
-  WeightEntry entry,
-) async {
-  final confirmed = await showDialog<bool>(
+Future<bool> _askDeleteWeightEntry(BuildContext context, WeightEntry entry) {
+  final dateLabel = intl.DateFormat('EEE, MMM d, yyyy').format(entry.date);
+  final weightLabel = '${entry.kg.toStringAsFixed(1)} kg';
+
+  return showConfirmDeleteSheet(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Delete weight entry?'),
-      content: Text(
-        'Remove ${entry.kg.toStringAsFixed(1)} kg logged on '
-        '${intl.DateFormat('MMM d, yyyy').format(entry.date)}?',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext, true),
-          child: Text(
-            'Delete',
-            style: TextStyle(color: AppColors.error),
-          ),
-        ),
-      ],
-    ),
+    title: 'Delete weight entry?',
+    message:
+        'Remove $weightLabel logged on $dateLabel. '
+        'This can’t be undone.',
   );
-  if (confirmed != true) return false;
+}
 
-  final outcome = await tracker.deleteWeightEntry(entry);
-  if (!context.mounted) return false;
+class _WeightEntryDeleteRow extends StatefulWidget {
+  const _WeightEntryDeleteRow({
+    super.key,
+    required this.entry,
+    required this.sheetContext,
+    required this.tracker,
+  });
 
-  switch (outcome.status) {
-    case WeightDeleteStatus.deleted:
-      AppSnackbar.success('Weight entry deleted.');
-      if (tracker.weightEntries.isEmpty) {
-        Navigator.pop(context);
+  final WeightEntry entry;
+  final BuildContext sheetContext;
+  final TrackerController tracker;
+
+  @override
+  State<_WeightEntryDeleteRow> createState() => _WeightEntryDeleteRowState();
+}
+
+class _WeightEntryDeleteRowState extends State<_WeightEntryDeleteRow> {
+  bool _deleting = false;
+  bool _started = false;
+
+  Future<bool> _onConfirmDismiss(DismissDirection _) async {
+    if (_started) return false;
+    final confirmed = await _askDeleteWeightEntry(context, widget.entry);
+    if (!confirmed || !mounted) return false;
+    _started = true;
+    setState(() => _deleting = true);
+    unawaited(_runDelete());
+    return false;
+  }
+
+  Future<void> _onDeletePressed() async {
+    if (_started) return;
+    final confirmed = await _askDeleteWeightEntry(context, widget.entry);
+    if (!confirmed || !mounted) return;
+    _started = true;
+    setState(() => _deleting = true);
+    unawaited(_runDelete());
+  }
+
+  Future<void> _runDelete() async {
+    final tracker = widget.tracker;
+    final entry = widget.entry;
+    final wasLastVisible = tracker.recentWeightEntries.length <= 1;
+
+    final outcome = await tracker.deleteWeightEntryWithFeedback(entry);
+
+    if (outcome.status != WeightDeleteStatus.deleted) {
+      if (mounted) {
+        setState(() {
+          _deleting = false;
+          _started = false;
+        });
       }
-      return true;
-    case WeightDeleteStatus.failed:
       AppSnackbar.error(
         outcome.message ?? 'Weight entry could not be deleted.',
         title: 'Delete failed',
       );
-      return false;
-    case WeightDeleteStatus.missingId:
-      AppSnackbar.error(
-        outcome.message ?? 'This entry cannot be deleted.',
-        title: 'Delete failed',
-      );
-      return false;
+      return;
+    }
+
+    AppSnackbar.success(
+      'Weight entry deleted.',
+      title: 'Deleted',
+    );
+    if (wasLastVisible &&
+        tracker.weightEntries.isEmpty &&
+        widget.sheetContext.mounted &&
+        Navigator.of(widget.sheetContext).canPop()) {
+      Navigator.pop(widget.sheetContext);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = widget.entry;
+
+    return Dismissible(
+      key: ValueKey(
+        'dismiss_${entry.id ?? '${entry.date.toIso8601String()}_${entry.kg}'}',
+      ),
+      direction: _deleting ? DismissDirection.none : DismissDirection.endToStart,
+      movementDuration: const Duration(milliseconds: 280),
+      confirmDismiss: _onConfirmDismiss,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: AppColors.error.withValues(alpha: 0.12),
+        child: Icon(
+          Icons.delete_outline_rounded,
+          color: AppColors.error,
+        ),
+      ),
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        child: _deleting
+            ? DeleteLottieBox(
+                height: 56,
+                size: 56,
+                onCompleted: () {},
+              )
+            : ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: SizedBox(
+                  width: 42,
+                  height: 42,
+                  child: SvgPicture.asset(
+                    'assets/image/gym.svg',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                title: Text(
+                  '${entry.kg.toStringAsFixed(1)} kg',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  intl.DateFormat('EEE, MMM d, yyyy').format(entry.date),
+                ),
+                trailing: IconButton(
+                  tooltip: 'Delete entry',
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppColors.error,
+                  ),
+                  onPressed: _onDeletePressed,
+                ),
+              ),
+      ),
+    );
   }
 }
 

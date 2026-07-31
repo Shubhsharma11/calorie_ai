@@ -12,6 +12,9 @@ class WeeklyProgressChart extends StatelessWidget {
     required this.days,
     required this.metric,
     this.calorieGoal,
+    this.proteinGoal,
+    this.carbsGoal,
+    this.fatGoal,
     this.onMetricChanged,
     this.showMetricSelector = true,
     this.chartHeight = 140,
@@ -21,6 +24,9 @@ class WeeklyProgressChart extends StatelessWidget {
   final List<DailyNutrition> days;
   final NutritionTrendMetric metric;
   final int? calorieGoal;
+  final int? proteinGoal;
+  final int? carbsGoal;
+  final int? fatGoal;
   final ValueChanged<NutritionTrendMetric>? onMetricChanged;
   final bool showMetricSelector;
   final double chartHeight;
@@ -31,13 +37,27 @@ class WeeklyProgressChart extends StatelessWidget {
   static const double _valueLabelHeight = 18;
   static const double _dayLabelHeight = 22;
 
+  int? get _activeGoal {
+    final goal = switch (metric) {
+      NutritionTrendMetric.calories => calorieGoal,
+      NutritionTrendMetric.protein => proteinGoal,
+      NutritionTrendMetric.carbs => carbsGoal,
+      NutritionTrendMetric.fat => fatGoal,
+    };
+    if (goal == null || goal <= 0) return null;
+    return goal;
+  }
+
   @override
   Widget build(BuildContext context) {
     final values = days.map((d) => d.valueFor(metric)).toList();
+    final goal = _activeGoal;
     final maxValue = _maxChartValue(values);
     final total = values.fold<double>(0, (sum, v) => sum + v);
     final avg = values.isEmpty ? 0.0 : total / values.length;
     final barAreaHeight = chartHeight - _dayLabelHeight;
+    final showGoalLine =
+        goal != null && values.any((v) => v > goal);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -58,13 +78,11 @@ class WeeklyProgressChart extends StatelessWidget {
                 child: Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [
-                    if (metric == NutritionTrendMetric.calories &&
-                        calorieGoal != null &&
-                        calorieGoal! > 0)
+                    if (showGoalLine)
                       Positioned(
                         left: 0,
                         right: 0,
-                        bottom: (calorieGoal! / maxValue * barAreaHeight).clamp(
+                        bottom: (goal / maxValue * barAreaHeight).clamp(
                           0.0,
                           barAreaHeight - 1,
                         ),
@@ -190,25 +208,40 @@ class WeeklyProgressChart extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Flexible(
-              child: Text(
-                'Avg: ${_formatValue(avg)} ${metric.unit}',
-                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Avg  ',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    TextSpan(
+                      text: '${_formatValue(avg)} ${metric.unit}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            if (metric == NutritionTrendMetric.calories && calorieGoal != null)
-              Flexible(
-                child: Text(
-                  'Goal: $calorieGoal ${metric.unit}',
-                  textAlign: TextAlign.end,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
+            if (goal != null)
+              Text(
+                'Goal  $goal ${metric.unit}',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
                 ),
               ),
           ],
@@ -218,20 +251,17 @@ class WeeklyProgressChart extends StatelessWidget {
   }
 
   double _maxChartValue(List<double> values) {
-    var max = values.fold<double>(0, (a, b) => a > b ? a : b);
-    if (metric == NutritionTrendMetric.calories &&
-        calorieGoal != null &&
-        calorieGoal! > max) {
-      max = calorieGoal!.toDouble();
-    }
-    return max > 0 ? max : 1;
+    // Scale to logged values so bars stay readable when intake is below goal.
+    final max = values.fold<double>(0, (a, b) => a > b ? a : b);
+    if (max <= 0) return 1;
+    return max * 1.08;
   }
 
   Color _metricColor(NutritionTrendMetric metric) => switch (metric) {
     NutritionTrendMetric.calories => AppColors.primary,
-    NutritionTrendMetric.protein => Colors.blue,
-    NutritionTrendMetric.carbs => Colors.orange,
-    NutritionTrendMetric.fat => Colors.purple,
+    NutritionTrendMetric.protein => const Color(0xFF2196F3),
+    NutritionTrendMetric.carbs => const Color(0xFFFF9500),
+    NutritionTrendMetric.fat => const Color(0xFF9C27B0),
   };
 
   String _formatValue(double value) {

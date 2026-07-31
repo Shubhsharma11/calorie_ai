@@ -27,8 +27,16 @@ class RepeatYesterdayCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 8, 16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowColor,
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,7 +108,7 @@ class RepeatYesterdayCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               _MetaPill(
-                background: AppColors.card,
+                background: AppColors.primary.withValues(alpha: 0.10),
                 icon: Image.asset(
                   'assets/image/food.png',
                   width: 18,

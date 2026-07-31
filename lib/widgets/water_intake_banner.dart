@@ -5,22 +5,28 @@ import 'package:get/get.dart';
 import '../controllers/food_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../controllers/settings_controller.dart';
+import '../core/app_coach_marks.dart';
 import '../core/responsive.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 
 /// Compact water intake row for the Home screen summary area.
 class WaterIntakeBanner extends StatelessWidget {
-  const WaterIntakeBanner({super.key});
+  const WaterIntakeBanner({super.key, this.coachKey});
 
-  static const _waterBlue = Color(0xFF007AFF);
+  /// Optional coach-mark anchor for the home tour.
+  final GlobalKey? coachKey;
+
+  static const _waterBlue = Color(0xFF4AA3DF);
   static const _maxGlassesShown = 8;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
     if (!Get.isRegistered<TrackerController>()) {
-      return const SizedBox.shrink();
+      const empty = SizedBox.shrink();
+      if (coachKey == null) return empty;
+      return AppCoachMarks.target(key: coachKey!, child: empty);
     }
     final tracker = Get.find<TrackerController>();
     final food = Get.isRegistered<FoodController>()
@@ -69,7 +75,7 @@ class WaterIntakeBanner extends StatelessWidget {
       final shownGoal = goalGlasses.clamp(1, _maxGlassesShown);
       final filledShown = glasses.clamp(0, shownGoal);
 
-      return Container(
+      final card = Container(
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(18),
@@ -114,12 +120,17 @@ class WaterIntakeBanner extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            Text(
-                              headerText,
-                              style: TextStyle(
-                                fontSize: r.scale(13),
-                                fontWeight: FontWeight.w700,
-                                color: color,
+                            Flexible(
+                              child: Text(
+                                headerText,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
+                                style: TextStyle(
+                                  fontSize: r.scale(13),
+                                  fontWeight: FontWeight.w700,
+                                  color: color,
+                                ),
                               ),
                             ),
                             Icon(
@@ -159,23 +170,31 @@ class WaterIntakeBanner extends StatelessWidget {
                                 );
                               }),
                               SizedBox(width: r.scale(8)),
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: r.scale(8),
-                                  vertical: r.scale(4),
+                              ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: r.scale(84),
                                 ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.card.withValues(alpha: 0.85),
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  status,
-                                  style: TextStyle(
-                                    fontSize: r.scale(11),
-                                    fontWeight: FontWeight.w700,
-                                    color: isComplete || overGlasses > 0
-                                        ? color
-                                        : AppColors.textSecondary,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: r.scale(8),
+                                    vertical: r.scale(4),
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.card.withValues(alpha: 0.85),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    status,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: r.scale(11),
+                                      fontWeight: FontWeight.w700,
+                                      color: isComplete || overGlasses > 0
+                                          ? color
+                                          : AppColors.textSecondary,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -208,6 +227,8 @@ class WaterIntakeBanner extends StatelessWidget {
           ),
         ),
       );
+      if (coachKey == null) return card;
+      return AppCoachMarks.target(key: coachKey!, child: card);
     });
   }
 }

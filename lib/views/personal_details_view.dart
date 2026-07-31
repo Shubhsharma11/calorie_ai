@@ -79,15 +79,21 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
 
   void _seedPersonalFieldsFromUser({required bool requireAll}) {
     final u = _user.user;
-    _gender = requireAll || u.gender.isNotEmpty ? u.gender : '';
+    final gender = u.gender?.trim() ?? '';
+    final age = u.age;
+    final heightCm = u.heightCm;
+    final weightKg = u.weightKg;
+    _gender = requireAll || gender.isNotEmpty ? gender : '';
     _ageCtrl = TextEditingController(
-      text: requireAll || u.age > 0 ? '${u.age}' : '',
+      text: requireAll || (age != null && age > 0) ? '${age ?? ''}' : '',
     );
     _heightCmCtrl = TextEditingController(
-      text: requireAll || u.heightCm > 0 ? '${u.heightCm}' : '',
+      text: requireAll || (heightCm != null && heightCm > 0)
+          ? '${heightCm ?? ''}'
+          : '',
     );
-    if (requireAll || u.heightCm > 0) {
-      final feetInches = BodyMeasurementUnits.feetInchesFromCm(u.heightCm);
+    if (requireAll || (heightCm != null && heightCm > 0)) {
+      final feetInches = BodyMeasurementUnits.feetInchesFromCm(heightCm!);
       _heightFeetCtrl = TextEditingController(text: '${feetInches.feet}');
       _heightInchesCtrl = TextEditingController(text: '${feetInches.inches}');
     } else {
@@ -95,10 +101,10 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       _heightInchesCtrl = TextEditingController();
     }
     _weightCtrl = TextEditingController(
-      text: requireAll || u.weightKg > 0
+      text: requireAll || (weightKg != null && weightKg > 0)
           ? _weightUseKg
-              ? '${u.weightKg}'
-              : '${BodyMeasurementUnits.lbsFromKg(u.weightKg)}'
+              ? '${weightKg ?? ''}'
+              : '${BodyMeasurementUnits.lbsFromKg(weightKg!)}'
           : '',
     );
   }
@@ -115,19 +121,19 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
 
     final ageText = _ageCtrl.text.trim();
     if (ageText.isEmpty) {
-      _user.user.age = 0;
+      _user.user.age = null;
     } else {
       final age = int.tryParse(ageText);
       if (age != null) _user.user.age = age;
     }
 
-    _user.user.gender = _gender;
+    _user.user.gender = _gender.trim().isEmpty ? null : _gender;
 
     final height = _parseHeightCm();
-    _user.user.heightCm = height ?? 0;
+    _user.user.heightCm = height;
 
     final weight = _parseWeightKg();
-    _user.user.weightKg = weight ?? 0;
+    _user.user.weightKg = weight?.round();
 
     _user.scheduleOnboardingDraftSave();
   }
@@ -248,8 +254,8 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       ageError = 'Enter your age';
     } else {
       final age = int.tryParse(ageText);
-      if (age == null || age < 1 || age > 100) {
-        ageError = 'Use an age between 1 and 100';
+      if (age == null || age < 13 || age > 100) {
+        ageError = 'Use an age between 13 and 100';
       }
     }
 

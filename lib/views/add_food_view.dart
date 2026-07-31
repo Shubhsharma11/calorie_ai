@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -6,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:lottie/lottie.dart';
 
 import '../controllers/food_controller.dart';
+import '../controllers/main_controller.dart';
 import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
 import '../models/custom_food_preset.dart';
@@ -21,6 +23,8 @@ import '../widgets/filter_chip_pill.dart';
 import '../widgets/food_emoji_avatar.dart';
 import '../widgets/log_history_sheet.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/delete_lottie.dart';
+import '../widgets/no_results_illustration.dart';
 import '../widgets/responsive_page.dart';
 import 'create_custom_food_view.dart';
 
@@ -40,6 +44,8 @@ class _AddFoodViewState extends State<AddFoodView> {
   void initState() {
     super.initState();
     _searchFocusNode = FocusNode();
+    // Always open Add Food with a fresh search field.
+    _food.clearSearch();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Quick items from meals; catalog lists load when their tabs are opened.
       _food.refreshQuickItemsFromApi();
@@ -48,6 +54,7 @@ class _AddFoodViewState extends State<AddFoodView> {
 
   @override
   void dispose() {
+    _food.clearSearch();
     _searchFocusNode.dispose();
     super.dispose();
   }
@@ -84,6 +91,9 @@ class _AddFoodViewState extends State<AddFoodView> {
                   return _SearchResultsList(
                     isSearching: isSearching,
                     foods: _food.filteredFoods,
+                    onCreateFood: () => Get.to<void>(
+                      () => const CreateCustomFoodView(),
+                    ),
                   );
                 }
 
@@ -457,182 +467,27 @@ class _FoodBrowseList extends GetView<FoodController> {
       final createdDate = DateFormat('MMM d, yyyy').format(preset.createdAt);
       final compactTrailing = r.isCompact;
 
-      return Column(
-        children: [
-          ListTile(
-            onTap: () => showCustomMealLogSheet(context, preset: preset),
-            contentPadding: EdgeInsets.symmetric(vertical: r.scale(4)),
-            leading: Container(
-              width: r.scale(44),
-              height: r.scale(44),
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(r.scale(12)),
-              ),
-              child: preset.imageBytes != null
-                  ? Image.memory(
-                      preset.imageBytes!,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                    )
-                  : Icon(
-                      Icons.restaurant_menu_rounded,
-                      color: AppColors.primary,
-                      size: r.scale(22),
-                    ),
-            ),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    preset.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: r.scale(15),
-                    ),
-                  ),
-                ),
-                if (preset.visibility == MealShareVisibility.public)
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: r.scale(8),
-                      vertical: r.scale(2),
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(r.scale(8)),
-                    ),
-                    child: Text(
-                      'Public',
-                      style: TextStyle(
-                        fontSize: r.scale(10),
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${preset.items.length} foods · ${preset.meal}',
-                  style: TextStyle(fontSize: r.scale(12)),
-                ),
-                Text(
-                  'Created $createdDate',
-                  style: TextStyle(
-                    fontSize: r.scale(11),
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                if (compactTrailing)
-                  Padding(
-                    padding: EdgeInsets.only(top: r.scale(4)),
-                    child: Text(
-                      '${preset.totalCalories} kcal',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: r.scale(13),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            trailing: compactTrailing
-                ? PopupMenuButton<String>(
-                    icon: Icon(
-                      Icons.more_vert_rounded,
-                      color: AppColors.textSecondary,
-                      size: r.scale(20),
-                    ),
-                    onSelected: (action) => _onCustomMealAction(
-                      context,
-                      preset: preset,
-                      action: action,
-                    ),
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: 'log',
-                        child: Text('Log meal'),
-                      ),
-                      PopupMenuItem(
-                        value: 'edit',
-                        child: Text('Edit'),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Delete'),
-                      ),
-                    ],
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${preset.totalCalories} kcal',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: r.scale(14),
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        icon: Icon(
-                          Icons.more_vert_rounded,
-                          color: AppColors.textSecondary,
-                          size: r.scale(20),
-                        ),
-                        onSelected: (action) => _onCustomMealAction(
-                          context,
-                          preset: preset,
-                          action: action,
-                        ),
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(
-                            value: 'log',
-                            child: Text('Log meal'),
-                          ),
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Text('Edit'),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-            isThreeLine: compactTrailing,
-          ),
-          if (!isLast) Divider(height: 1, color: AppColors.border),
-        ],
+      return _MyMealDeleteTile(
+        preset: preset,
+        isLast: isLast,
+        createdDate: createdDate,
+        compactTrailing: compactTrailing,
+        onAction: (action, onDeleteRequested) => _onCustomMealAction(
+          context,
+          preset: preset,
+          action: action,
+          onDeleteRequested: onDeleteRequested,
+        ),
+        onConfirmDelete: () => _confirmDeleteMeal(context, preset: preset),
+        onPerformDelete: () => _performDeleteMeal(preset),
       );
     });
   }
 
-  Future<void> _onCustomMealAction(
+  Future<bool> _confirmDeleteMeal(
     BuildContext context, {
     required CustomMealPreset preset,
-    required String action,
   }) async {
-    if (action == 'log') {
-      await showCustomMealLogSheet(context, preset: preset);
-      return;
-    }
-    if (action == 'edit') {
-      await Get.toNamed(AppRoutes.createMeal, arguments: preset);
-      return;
-    }
-    if (action != 'delete') return;
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -652,8 +507,10 @@ class _FoodBrowseList extends GetView<FoodController> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    return confirmed == true;
+  }
 
+  Future<void> _performDeleteMeal(CustomMealPreset preset) async {
     try {
       await controller.removeCustomMealPreset(preset.id);
       AppSnackbar.success(
@@ -666,6 +523,24 @@ class _FoodBrowseList extends GetView<FoodController> {
         title: 'Delete failed',
       );
     }
+  }
+
+  Future<void> _onCustomMealAction(
+    BuildContext context, {
+    required CustomMealPreset preset,
+    required String action,
+    VoidCallback? onDeleteRequested,
+  }) async {
+    if (action == 'log') {
+      await showCustomMealLogSheet(context, preset: preset);
+      return;
+    }
+    if (action == 'edit') {
+      await Get.toNamed(AppRoutes.createMeal, arguments: preset);
+      return;
+    }
+    if (action != 'delete') return;
+    onDeleteRequested?.call();
   }
 
   String? _createdDateLabel(SavedMealItem item) {
@@ -812,7 +687,7 @@ class _CustomFoodCreatorState extends State<_CustomFoodCreator> {
     );
   }
 
-  Future<void> _delete(CustomFoodPreset preset) async {
+  Future<bool> _confirmDeleteFood(CustomFoodPreset preset) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -830,7 +705,10 @@ class _CustomFoodCreatorState extends State<_CustomFoodCreator> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    return confirmed == true;
+  }
+
+  Future<void> _performDeleteFood(CustomFoodPreset preset) async {
     try {
       await _food.removeCustomFoodPreset(preset.id);
       AppSnackbar.success(
@@ -892,63 +770,14 @@ class _CustomFoodCreatorState extends State<_CustomFoodCreator> {
             final item = _savedItem(preset);
             return Padding(
               padding: EdgeInsets.only(bottom: r.scale(8)),
-              child: Material(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(r.scale(12)),
-                clipBehavior: Clip.antiAlias,
-                child: ListTile(
-                  onTap: () => _open(preset),
-                  leading: preset.imageBytes != null
-                      ? Container(
-                          width: r.scale(42),
-                          height: r.scale(42),
-                          clipBehavior: Clip.antiAlias,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(r.scale(12)),
-                          ),
-                          child: Image.memory(
-                            preset.imageBytes!,
-                            fit: BoxFit.cover,
-                            gaplessPlayback: true,
-                          ),
-                        )
-                      : FoodEmojiAvatar(
-                          emoji: preset.food.emoji,
-                          size: r.scale(42),
-                        ),
-                  title: Text(
-                    preset.food.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(
+              child: _MyFoodDeleteTile(
+                preset: preset,
+                subtitle:
                     '${item.servingDescription} · ${item.calories} kcal',
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (action) {
-                      if (action == 'log') {
-                        _open(preset);
-                      } else if (action == 'edit') {
-                        _edit(preset);
-                      } else if (action == 'delete') {
-                        _delete(preset);
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: 'log',
-                        child: Text('Log food'),
-                      ),
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Delete'),
-                      ),
-                    ],
-                  ),
-                ),
+                onOpen: () => _open(preset),
+                onEdit: () => _edit(preset),
+                onConfirmDelete: () => _confirmDeleteFood(preset),
+                onPerformDelete: () => _performDeleteFood(preset),
               ),
             );
           }),
@@ -1051,7 +880,7 @@ class _FavoritesEmptyState extends StatelessWidget {
             left: -r.scale(36),
             right: -r.scale(36),
             bottom: 0,
-            child: ClipPath(
+              child: ClipPath(
               clipper: _MyFoodEmptyClipper(),
               child: ColoredBox(color: AppColors.card),
             ),
@@ -1142,7 +971,7 @@ class _MyMealsEmptyState extends StatelessWidget {
             left: -r.scale(36),
             right: -r.scale(36),
             bottom: 0,
-            child: ClipPath(
+              child: ClipPath(
               clipper: _MyFoodEmptyClipper(),
               child: ColoredBox(color: AppColors.card),
             ),
@@ -1223,7 +1052,7 @@ class _MyFoodEmptyState extends StatelessWidget {
             left: -r.scale(36),
             right: -r.scale(36),
             bottom: 0,
-            child: ClipPath(
+              child: ClipPath(
               clipper: _MyFoodEmptyClipper(),
               child: ColoredBox(color: AppColors.card),
             ),
@@ -1330,10 +1159,12 @@ class _SearchResultsList extends StatelessWidget {
   const _SearchResultsList({
     required this.isSearching,
     required this.foods,
+    required this.onCreateFood,
   });
 
   final bool isSearching;
   final List<FoodItem> foods;
+  final VoidCallback onCreateFood;
 
   @override
   Widget build(BuildContext context) {
@@ -1356,11 +1187,59 @@ class _SearchResultsList extends StatelessWidget {
         SizedBox(height: r.scale(10)),
         Expanded(
           child: foods.isEmpty
-              ? Center(
-                  child: Text(
-                    'No foods found. Try another search.',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
+              ? LayoutBuilder(
+                  builder: (context, constraints) {
+                    final artMax = math.min(
+                      r.scale(180, tablet: 200),
+                      constraints.maxHeight * 0.38,
+                    );
+                    return SingleChildScrollView(
+                      padding: EdgeInsets.symmetric(horizontal: r.scale(24)),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: artMax,
+                              height: artMax,
+                              child: NoResultsIllustration(
+                                maxSize: artMax,
+                                minSize: math.min(88, artMax),
+                              ),
+                            ),
+                            SizedBox(height: r.scale(8)),
+                            Text(
+                              'No results found',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: r.scale(18),
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            SizedBox(height: r.scale(8)),
+                            Text(
+                              'Can’t find it? Create your own food and log it anytime.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: r.scale(13),
+                                height: 1.4,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            SizedBox(height: r.scale(18)),
+                            _AddMyFoodButton(
+                              onPressed: onCreateFood,
+                              label: 'Create Food',
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 )
               : ListView.separated(
                   itemCount: foods.length,
@@ -1423,24 +1302,371 @@ class _SearchBarState extends State<_SearchBar> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      final hasQuery = _controller.searchQuery.value.isNotEmpty;
+
       return TextField(
         controller: _textController,
         focusNode: widget.focusNode,
         decoration: InputDecoration(
           hintText: 'Search for a new food...',
           prefixIcon: const Icon(Icons.search),
-          suffixIcon: _controller.searchQuery.value.isNotEmpty
-              ? IconButton(
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (hasQuery)
+                IconButton(
+                  tooltip: 'Clear',
                   onPressed: () {
                     _textController.clear();
                     _controller.onSearchChanged('');
                   },
                   icon: const Icon(Icons.close_rounded),
-                )
-              : null,
+                ),
+              IconButton(
+                tooltip: 'Scan barcode',
+                onPressed: _openScan,
+                icon: Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
         ),
         onChanged: _controller.onSearchChanged,
       );
     });
+  }
+
+  void _openScan() {
+    widget.focusNode.unfocus();
+    // Return to main, then open the Scan tab.
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    if (Get.isRegistered<MainController>()) {
+      Get.find<MainController>().changeTab(MainController.scanTabIndex);
+    } else {
+      Get.offAllNamed(AppRoutes.main);
+    }
+  }
+}
+
+class _MyFoodDeleteTile extends StatefulWidget {
+  const _MyFoodDeleteTile({
+    required this.preset,
+    required this.subtitle,
+    required this.onOpen,
+    required this.onEdit,
+    required this.onConfirmDelete,
+    required this.onPerformDelete,
+  });
+
+  final CustomFoodPreset preset;
+  final String subtitle;
+  final VoidCallback onOpen;
+  final VoidCallback onEdit;
+  final Future<bool> Function() onConfirmDelete;
+  final Future<void> Function() onPerformDelete;
+
+  @override
+  State<_MyFoodDeleteTile> createState() => _MyFoodDeleteTileState();
+}
+
+class _MyFoodDeleteTileState extends State<_MyFoodDeleteTile> {
+  bool _deleting = false;
+
+  Future<void> _requestDelete() async {
+    if (_deleting) return;
+    final confirmed = await widget.onConfirmDelete();
+    if (!confirmed || !mounted) return;
+    setState(() => _deleting = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    final preset = widget.preset;
+
+    return Material(
+      color: AppColors.card,
+      borderRadius: BorderRadius.circular(r.scale(12)),
+      clipBehavior: Clip.antiAlias,
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        child: _deleting
+            ? DeleteLottieBox(
+                height: r.scale(72),
+                size: r.scale(72),
+                onCompleted: () {
+                  widget.onPerformDelete();
+                },
+              )
+            : ListTile(
+                onTap: widget.onOpen,
+                leading: preset.imageBytes != null
+                    ? Container(
+                        width: r.scale(42),
+                        height: r.scale(42),
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(r.scale(12)),
+                        ),
+                        child: Image.memory(
+                          preset.imageBytes!,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                        ),
+                      )
+                    : FoodEmojiAvatar(
+                        emoji: preset.food.emoji,
+                        size: r.scale(42),
+                      ),
+                title: Text(
+                  preset.food.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(widget.subtitle),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (action) {
+                    if (action == 'log') {
+                      widget.onOpen();
+                    } else if (action == 'edit') {
+                      widget.onEdit();
+                    } else if (action == 'delete') {
+                      _requestDelete();
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'log',
+                      child: Text('Log food'),
+                    ),
+                    PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text('Delete'),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _MyMealDeleteTile extends StatefulWidget {
+  const _MyMealDeleteTile({
+    required this.preset,
+    required this.isLast,
+    required this.createdDate,
+    required this.compactTrailing,
+    required this.onAction,
+    required this.onConfirmDelete,
+    required this.onPerformDelete,
+  });
+
+  final CustomMealPreset preset;
+  final bool isLast;
+  final String createdDate;
+  final bool compactTrailing;
+  final void Function(String action, VoidCallback onDeleteRequested) onAction;
+  final Future<bool> Function() onConfirmDelete;
+  final Future<void> Function() onPerformDelete;
+
+  @override
+  State<_MyMealDeleteTile> createState() => _MyMealDeleteTileState();
+}
+
+class _MyMealDeleteTileState extends State<_MyMealDeleteTile> {
+  bool _deleting = false;
+
+  Future<void> _requestDelete() async {
+    if (_deleting) return;
+    final confirmed = await widget.onConfirmDelete();
+    if (!confirmed || !mounted) return;
+    setState(() => _deleting = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    final preset = widget.preset;
+
+    return Column(
+      children: [
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          child: _deleting
+              ? DeleteLottieBox(
+                  height: r.scale(72),
+                  size: r.scale(72),
+                  onCompleted: () {
+                    widget.onPerformDelete();
+                  },
+                )
+              : ListTile(
+                  onTap: () =>
+                      showCustomMealLogSheet(context, preset: preset),
+                  contentPadding:
+                      EdgeInsets.symmetric(vertical: r.scale(4)),
+                  leading: Container(
+                    width: r.scale(44),
+                    height: r.scale(44),
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(r.scale(12)),
+                    ),
+                    child: preset.imageBytes != null
+                        ? Image.memory(
+                            preset.imageBytes!,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                          )
+                        : Icon(
+                            Icons.restaurant_menu_rounded,
+                            color: AppColors.primary,
+                            size: r.scale(22),
+                          ),
+                  ),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          preset.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: r.scale(15),
+                          ),
+                        ),
+                      ),
+                      if (preset.visibility == MealShareVisibility.public)
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: r.scale(8),
+                            vertical: r.scale(2),
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(r.scale(8)),
+                          ),
+                          child: Text(
+                            'Public',
+                            style: TextStyle(
+                              fontSize: r.scale(10),
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${preset.items.length} foods · ${preset.meal}',
+                        style: TextStyle(fontSize: r.scale(12)),
+                      ),
+                      Text(
+                        'Created ${widget.createdDate}',
+                        style: TextStyle(
+                          fontSize: r.scale(11),
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      if (widget.compactTrailing)
+                        Padding(
+                          padding: EdgeInsets.only(top: r.scale(4)),
+                          child: Text(
+                            '${preset.totalCalories} kcal',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: r.scale(13),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  trailing: widget.compactTrailing
+                      ? PopupMenuButton<String>(
+                          icon: Icon(
+                            Icons.more_vert_rounded,
+                            color: AppColors.textSecondary,
+                            size: r.scale(20),
+                          ),
+                          onSelected: (action) => widget.onAction(
+                            action,
+                            _requestDelete,
+                          ),
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'log',
+                              child: Text('Log meal'),
+                            ),
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Edit'),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Delete'),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${preset.totalCalories} kcal',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: r.scale(14),
+                              ),
+                            ),
+                            PopupMenuButton<String>(
+                              icon: Icon(
+                                Icons.more_vert_rounded,
+                                color: AppColors.textSecondary,
+                                size: r.scale(20),
+                              ),
+                              onSelected: (action) => widget.onAction(
+                                action,
+                                _requestDelete,
+                              ),
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: 'log',
+                                  child: Text('Log meal'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'edit',
+                                  child: Text('Edit'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text('Delete'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                  isThreeLine: widget.compactTrailing,
+                ),
+        ),
+        if (!widget.isLast && !_deleting)
+          Divider(height: 1, color: AppColors.border),
+      ],
+    );
   }
 }

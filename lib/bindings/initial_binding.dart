@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 
+import '../controllers/notifications_controller.dart';
 import '../controllers/theme_controller.dart';
 import '../controllers/user_controller.dart';
 
@@ -12,6 +13,9 @@ class InitialBinding extends Bindings {
     }
     if (!Get.isRegistered<ThemeController>()) {
       Get.put(ThemeController(), permanent: true);
+    }
+    if (!Get.isRegistered<NotificationsController>()) {
+      Get.put(NotificationsController(), permanent: true);
     }
   }
 }

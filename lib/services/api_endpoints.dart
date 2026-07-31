@@ -1,10 +1,10 @@
 abstract final class ApiEndpoints {
 
   
-    static const String baseUrl = 'https://calorie-ai-uzq1.onrender.com';
+    static const String baseUrl = 'https://fitbuddyai.srhsoftwares.com';
 
 
-// static const String baseUrl = 'https://serial-remaining-short-informational.trycloudflare.com';
+// static const String baseUrl = 'https://donations-gps-homepage-francis.trycloudflare.com';
 
 
 
@@ -14,6 +14,11 @@ abstract final class ApiEndpoints {
   static const String logout = '$apiVersion/auth/logout';
   static const String deleteAccount = '$apiVersion/auth/account';
   static const String fcmToken = '$apiVersion/auth/fcm-token';
+  static const String notifications = '$apiVersion/notifications';
+  static const String notificationsUnreadCount =
+      '$apiVersion/notifications/unread-count';
+  static const String notificationsReadAll =
+      '$apiVersion/notifications/read-all';
   static const String onboarding = '$apiVersion/onboarding';
   static const String nutritionPlan = '$apiVersion/nutrition/plan';
   static const String meals = '$apiVersion/meals';
@@ -60,7 +65,8 @@ abstract final class ApiEndpoints {
     return '$meals?$query';
   }
 
-  static String mealById(String mealId) => '$meals/$mealId';
+  static String mealById(String mealId) =>
+      '$meals/${Uri.encodeComponent(mealId)}';
 
   static String myFoodById(String myFoodId) =>
       '$myFoods/${Uri.encodeComponent(myFoodId)}';
@@ -141,6 +147,34 @@ abstract final class ApiEndpoints {
   static String get logoutUrl => url(logout);
   static String get deleteAccountUrl => url(deleteAccount);
   static String get fcmTokenUrl => url(fcmToken);
+  static String get notificationsUrl => url(notifications);
+  static String get notificationsUnreadCountUrl =>
+      url(notificationsUnreadCount);
+  static String get notificationsReadAllUrl => url(notificationsReadAll);
+
+  static String notificationsWithQuery({
+    int? page,
+    int? limit,
+    bool? unreadOnly,
+  }) {
+    final params = <String, String>{};
+    if (page != null) params['page'] = '$page';
+    if (limit != null) params['limit'] = '$limit';
+    if (unreadOnly != null) params['unreadOnly'] = '$unreadOnly';
+    if (params.isEmpty) return notifications;
+
+    final query = params.entries
+        .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
+        .join('&');
+    return '$notifications?$query';
+  }
+
+  static String notificationRead(String notificationId) =>
+      '$notifications/${Uri.encodeComponent(notificationId)}/read';
+
+  static String notificationReadUrl(String notificationId) =>
+      url(notificationRead(notificationId));
+
   static String get onboardingUrl => url(onboarding);
   static String get nutritionPlanUrl => url(nutritionPlan);
   static String get mealsUrl => url(meals);

@@ -27,13 +27,18 @@ class AuthRepository {
     String? refreshToken,
     required Map<String, dynamic> backendResponse,
   }) {
+    // Prefer explicit refresh; fall back to nested fields in backend payload.
+    final resolvedRefresh = (refreshToken != null && refreshToken.isNotEmpty)
+        ? refreshToken
+        : _extractRefreshToken({'backendResponse': backendResponse});
+
     return _storage.saveAuthSession(
       userId: userId,
       provider: provider,
       email: email,
       name: name,
       accessToken: accessToken,
-      refreshToken: refreshToken,
+      refreshToken: resolvedRefresh,
       backendResponse: backendResponse,
     );
   }
@@ -47,6 +52,15 @@ class AuthRepository {
     return _extractRefreshToken(session);
   }
 
+  Future<String?> resolveAccessToken({String? inMemoryToken}) async {
+    if (inMemoryToken != null && inMemoryToken.isNotEmpty) {
+      return inMemoryToken;
+    }
+
+    final session = await loadSession();
+    return _extractAccessToken(session);
+  }
+
   Future<void> deleteAccount({required String accessToken}) async {
     debugPrint('AuthRepository: calling delete account API');
     await _authApi.deleteAccount(accessToken: accessToken);
@@ -54,14 +68,25 @@ class AuthRepository {
     await _signOutFromGoogle();
   }
 
-  Future<LogoutResult> logout({String? refreshToken}) async {
-    final token = await resolveRefreshToken(inMemoryToken: refreshToken);
+  Future<LogoutResult> logout({
+    String? refreshToken,
+    String? accessToken,
+  }) async {
+    final refresh = await resolveRefreshToken(inMemoryToken: refreshToken);
+    final access = await resolveAccessToken(inMemoryToken: accessToken);
     String? backendError;
+    var backendRevoked = false;
 
-    if (token != null && token.isNotEmpty) {
+    if ((refresh != null && refresh.isNotEmpty) ||
+        (access != null && access.isNotEmpty)) {
       try {
-        debugPrint('AuthRepository: calling logout API with refresh token');
-        await _authApi.logoutWithRefreshToken(token);
+        debugPrint(
+          'AuthRepository: calling logout API '
+          '(refresh=${refresh != null && refresh.isNotEmpty}, '
+          'access=${access != null && access.isNotEmpty})',
+        );
+        await _authApi.logout(refreshToken: refresh, accessToken: access);
+        backendRevoked = true;
       } on AuthApiException catch (e, stackTrace) {
         backendError = e.message;
         debugPrint('AuthRepository: backend logout failed: $e\n$stackTrace');
@@ -70,14 +95,16 @@ class AuthRepository {
         debugPrint('AuthRepository: unexpected logout error: $e\n$stackTrace');
       }
     } else {
-      debugPrint('AuthRepository: no refresh token found, clearing local session');
+      debugPrint(
+        'AuthRepository: no tokens found — clearing local session only',
+      );
     }
 
     await clearLocalAuthData();
     await _signOutFromGoogle();
 
     return LogoutResult(
-      backendRevoked: backendError == null && token != null && token.isNotEmpty,
+      backendRevoked: backendRevoked && backendError == null,
       errorMessage: backendError,
     );
   }
@@ -93,6 +120,40 @@ class AuthRepository {
     } catch (e, stackTrace) {
       debugPrint('AuthRepository: Google sign-out failed: $e\n$stackTrace');
     }
+  }
+
+  String? _extractAccessToken(Map<String, dynamic> session) {
+    if (session.isEmpty) return null;
+
+    final direct = session['accessToken'];
+    if (direct is String && direct.isNotEmpty) return direct;
+
+    final backendResponse = session['backendResponse'];
+    if (backendResponse is! Map<String, dynamic>) return null;
+
+    final tokens = backendResponse['tokens'];
+    if (tokens is Map<String, dynamic>) {
+      final nested = tokens['accessToken'];
+      if (nested is String && nested.isNotEmpty) return nested;
+    }
+
+    final nestedDirect = backendResponse['accessToken'];
+    if (nestedDirect is String && nestedDirect.isNotEmpty) {
+      return nestedDirect;
+    }
+
+    final data = backendResponse['data'];
+    if (data is Map<String, dynamic>) {
+      final dataToken = data['accessToken'];
+      if (dataToken is String && dataToken.isNotEmpty) return dataToken;
+      final dataTokens = data['tokens'];
+      if (dataTokens is Map<String, dynamic>) {
+        final t = dataTokens['accessToken'];
+        if (t is String && t.isNotEmpty) return t;
+      }
+    }
+
+    return null;
   }
 
   String? _extractRefreshToken(Map<String, dynamic> session) {
@@ -113,6 +174,17 @@ class AuthRepository {
     final nestedDirect = backendResponse['refreshToken'];
     if (nestedDirect is String && nestedDirect.isNotEmpty) {
       return nestedDirect;
+    }
+
+    final data = backendResponse['data'];
+    if (data is Map<String, dynamic>) {
+      final dataToken = data['refreshToken'];
+      if (dataToken is String && dataToken.isNotEmpty) return dataToken;
+      final dataTokens = data['tokens'];
+      if (dataTokens is Map<String, dynamic>) {
+        final t = dataTokens['refreshToken'];
+        if (t is String && t.isNotEmpty) return t;
+      }
     }
 
     return null;

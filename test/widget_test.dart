@@ -11,7 +11,7 @@ void main() {
   testWidgets('App opens onboarding when logged out', (WidgetTester tester) async {
     Get.put(ThemeController(), permanent: true);
     await tester.pumpWidget(
-      const CalorieAiApp(initialRoute: AppRoutes.onboarding),
+      const FitBuddyAiApp(initialRoute: AppRoutes.onboarding),
     );
     await tester.pump();
 

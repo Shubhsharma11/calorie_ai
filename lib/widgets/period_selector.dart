@@ -51,6 +51,8 @@ class PeriodSelector<T> extends StatelessWidget {
                   child: Text(
                     labelFor(value),
                     textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: fontSize,
                       fontWeight:

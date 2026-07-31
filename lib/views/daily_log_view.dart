@@ -77,15 +77,14 @@ class DailyLogView extends GetView<FoodController> {
                       ),
                       decoration: BoxDecoration(
                         color: viewingToday
-                            ? AppColors.surface
+                            ? AppColors.selectionFill
                             : const Color(0xFFFFF3E0),
                         borderRadius: BorderRadius.circular(20),
-                        border: viewingToday
-                            ? null
-                            : Border.all(
-                                color: const Color(0xFFFF9800)
-                                    .withValues(alpha: 0.45),
-                              ),
+                        border: Border.all(
+                          color: viewingToday
+                              ? AppColors.selectionBorder
+                              : const Color(0xFFFF9800).withValues(alpha: 0.45),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -162,13 +161,12 @@ class DailyLogView extends GetView<FoodController> {
                         child: OutlinedButton.icon(
                           onPressed: () async {
                             await controller.cancelRepeatedYesterdayMeals();
-
-                            AppSnackbar.success(
-                              'Repeated meals removed.',
-                              title: 'Done',
+                            AppSnackbar.info(
+                              'Copied meals were removed from today’s log.',
+                              title: 'Cancelled',
                             );
                           },
-                          icon: const Icon(Icons.close),
+                          icon: const Icon(Icons.close_rounded),
                           label: const Text('Cancel'),
                         ),
                       )
@@ -247,8 +245,16 @@ class _CalorieSummaryCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(r.scale(18)),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowColor,
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,14 +285,22 @@ class _CalorieSummaryCard extends StatelessWidget {
               ),
               const Spacer(),
               if (statusLabel != null)
-                Text(
-                  statusLabel,
-                  style: TextStyle(
-                    fontSize: r.scale(13),
-                    fontWeight: FontWeight.w600,
-                    color: overGoal
-                        ? AppColors.warning
-                        : AppColors.textSecondary,
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: r.scale(10),
+                    vertical: r.scale(5),
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: TextStyle(
+                      fontSize: r.scale(13),
+                      fontWeight: FontWeight.w700,
+                      color: statusColor,
+                    ),
                   ),
                 ),
             ],
@@ -297,7 +311,7 @@ class _CalorieSummaryCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: overGoal ? 1.0 : progress,
               minHeight: 6,
-              backgroundColor: AppColors.border,
+              backgroundColor: AppColors.primary.withValues(alpha: 0.12),
               color: statusColor,
             ),
           ),

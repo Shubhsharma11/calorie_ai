@@ -19,7 +19,9 @@ import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/filter_chip_pill.dart';
 import '../widgets/food_emoji_avatar.dart';
+import '../widgets/no_results_illustration.dart';
 import '../widgets/responsive_page.dart';
+import 'create_custom_food_view.dart';
 
 class CreateMealView extends StatefulWidget {
   const CreateMealView({super.key});
@@ -589,6 +591,16 @@ class _CreateMealViewState extends State<CreateMealView> {
                               ),
                             ),
                           ),
+                        ] else if (_searchController.text.trim().isNotEmpty &&
+                            !_isSearching) ...[
+                          SizedBox(height: r.scale(10)),
+                          _NoSearchResultsCreateFoodHint(
+                            r: r,
+                            query: _searchController.text.trim(),
+                            onCreateFood: () => Get.to<void>(
+                              () => const CreateCustomFoodView(),
+                            ),
+                          ),
                         ],
                         if (_items.isNotEmpty) ...[
                           SizedBox(height: r.scale(16)),
@@ -608,7 +620,7 @@ class _CreateMealViewState extends State<CreateMealView> {
                               onRemove: () => _removeItem(index),
                             );
                           }),
-                        ] else if (_searchResults.isEmpty) ...[
+                        ] else if (_searchController.text.trim().isEmpty) ...[
                           SizedBox(height: r.scale(12)),
                           _EmptyIngredientsHint(r: r),
                         ],
@@ -1593,6 +1605,77 @@ class _EmptyIngredientsHint extends StatelessWidget {
             style: TextStyle(
               fontSize: r.scale(12),
               color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoSearchResultsCreateFoodHint extends StatelessWidget {
+  const _NoSearchResultsCreateFoodHint({
+    required this.r,
+    required this.query,
+    required this.onCreateFood,
+  });
+
+  final Responsive r;
+  final String query;
+  final VoidCallback onCreateFood;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(r.scale(14)),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: SizedBox(
+              width: r.scale(120, tablet: 140),
+              height: r.scale(120, tablet: 140),
+              child: NoResultsIllustration(
+                maxSize: r.scale(120, tablet: 140),
+                minSize: 72,
+              ),
+            ),
+          ),
+          Text(
+            'No foods found for “$query”',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: r.scale(14),
+            ),
+          ),
+          SizedBox(height: r.scale(6)),
+          Text(
+            'Can’t find it? Create your own food and add it to this meal.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: r.scale(12),
+              height: 1.35,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          SizedBox(height: r.scale(12)),
+          FilledButton.icon(
+            onPressed: onCreateFood,
+            icon: const Icon(Icons.add_rounded, size: 20),
+            label: const Text('Create My Food'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(vertical: r.scale(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
         ],

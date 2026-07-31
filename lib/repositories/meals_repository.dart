@@ -50,6 +50,24 @@ class MealsRepository {
     }
   }
 
+  Future<MealEntry> updateMeal({
+    required String accessToken,
+    required MealEntry entry,
+  }) async {
+    try {
+      return await _apiService.updateMeal(
+        accessToken: accessToken,
+        entry: entry,
+      );
+    } on MealsApiException {
+      rethrow;
+    } catch (error) {
+      throw MealsApiException(
+        apiNetworkErrorMessage(error, action: 'updating meal'),
+      );
+    }
+  }
+
   Future<void> deleteMeal({
     required String accessToken,
     required String mealId,

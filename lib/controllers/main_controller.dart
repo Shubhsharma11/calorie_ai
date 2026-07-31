@@ -46,6 +46,7 @@ class MainController extends GetxController {
     if (!Get.isRegistered<ScanController>()) return;
     final scan = Get.find<ScanController>();
     if (index == scanTabIndex) {
+      // Fire-and-forget; camera start requests permission asynchronously.
       scan.resumeBarcodeScan();
     } else {
       scan.pauseBarcodeScan();

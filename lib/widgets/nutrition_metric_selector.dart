@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/nutrition_trend_metric.dart';
-import 'filter_chip_pill.dart';
+import '../theme/app_colors.dart';
 
+/// Compact text tabs for weekly nutrition metrics.
 class NutritionMetricSelector extends StatelessWidget {
   const NutritionMetricSelector({
     super.key,
@@ -15,19 +16,66 @@ class NutritionMetricSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: NutritionTrendMetric.values.map((metric) {
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChipPill(
-              label: metric.label,
+    return Row(
+      children: [
+        for (final metric in NutritionTrendMetric.values)
+          Expanded(
+            child: _MetricTab(
+              label: metric.shortLabel,
               selected: metric == selected,
               onTap: () => onChanged(metric),
             ),
-          );
-        }).toList(),
+          ),
+      ],
+    );
+  }
+}
+
+class _MetricTab extends StatelessWidget {
+  const _MetricTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              height: 2.5,
+              width: selected ? 28 : 0,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

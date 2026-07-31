@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
+import '../controllers/main_controller.dart';
+import '../core/app_coach_marks.dart';
 import '../theme/app_colors.dart';
 
 class FloatingBottomNavBar extends StatelessWidget {
   const FloatingBottomNavBar({
     super.key,
-    required this.selectedIndex,
     required this.onTap,
     required this.items,
+    this.coachKeys,
   });
 
-  final int selectedIndex;
   final ValueChanged<int> onTap;
   final List<({IconData icon, String label})> items;
+  final List<GlobalKey?>? coachKeys;
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +24,7 @@ class FloatingBottomNavBar extends StatelessWidget {
     // Always lift using viewPadding (home indicator / Android nav).
     final systemBottom = MediaQuery.viewPaddingOf(context).bottom;
     final bottomGap = (systemBottom > 0 ? systemBottom : 8.0) + 10;
+    final main = Get.find<MainController>();
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottomGap),
@@ -49,18 +53,36 @@ class FloatingBottomNavBar extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: List.generate(items.length, (index) {
                       final item = items[index];
-                      final selected = index == selectedIndex;
                       final isCenter = index == items.length ~/ 2;
+                      final coachKey =
+                          coachKeys != null && index < coachKeys!.length
+                              ? coachKeys![index]
+                              : null;
 
-                      return Expanded(
-                        child: _NavItem(
+                      Widget navItem = Obx(
+                        () => _NavItem(
                           icon: item.icon,
                           label: item.label,
-                          selected: selected,
+                          selected: main.tabIndex.value == index,
                           isCenter: isCenter,
                           onTap: () => onTap(index),
+                          compact: coachKey != null,
                         ),
                       );
+
+                      if (coachKey != null) {
+                        // Tight target around the visible control — not the
+                        // full 90px Expanded cell (that left a huge tip gap).
+                        navItem = Align(
+                          alignment: Alignment.bottomCenter,
+                          child: AppCoachMarks.target(
+                            key: coachKey,
+                            child: navItem,
+                          ),
+                        );
+                      }
+
+                      return Expanded(child: navItem);
                     }),
                   ),
                 ),
@@ -241,6 +263,7 @@ class _NavItem extends StatelessWidget {
     required this.selected,
     required this.isCenter,
     required this.onTap,
+    this.compact = false,
   });
 
   final IconData icon;
@@ -248,6 +271,7 @@ class _NavItem extends StatelessWidget {
   final bool selected;
   final bool isCenter;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -263,8 +287,9 @@ class _NavItem extends StatelessWidget {
         splashColor: Colors.transparent,
         highlightColor: Colors.transparent,
         child: SizedBox(
-          height: 90,
+          height: compact ? null : 90,
           child: Column(
+            mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               if (isCenter)
@@ -299,7 +324,7 @@ class _NavItem extends StatelessWidget {
                   color: selected ? activeColor : inactiveColor,
                 ),
               ),
-              SizedBox(height: isCenter ? 6 : 10),
+              SizedBox(height: isCenter ? 6 : (compact ? 6 : 10)),
             ],
           ),
         ),

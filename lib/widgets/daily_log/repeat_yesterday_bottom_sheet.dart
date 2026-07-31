@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../../controllers/food_controller.dart';
+import '../../core/app_snackbar.dart';
 import '../../models/meal_entry.dart';
 import '../../models/meal_type.dart';
 import '../../theme/app_colors.dart';
@@ -230,7 +231,13 @@ class _RepeatYesterdayBottomSheetState
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            AppSnackbar.info(
+                              'No meals were copied. You can try again anytime.',
+                              title: 'Cancelled',
+                            );
+                          },
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.textPrimary,
                             side: BorderSide(color: AppColors.border),

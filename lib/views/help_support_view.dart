@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:get/get.dart';
 
+import '../controllers/user_controller.dart';
+import '../core/app_coach_marks.dart';
 import '../core/responsive.dart';
+import '../services/local_storage_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
@@ -43,7 +47,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
       question: 'How does food scanning work?',
       answer:
           'Open the Scan tab and point your camera at a product barcode. '
-          'Fit Buddy AI looks up nutrition data from Open Food Facts and lets '
+          'FitBuddy AI looks up nutrition data from Open Food Facts and lets '
           'you add it to your log.',
     ),
     (
@@ -172,6 +176,25 @@ class _HelpSupportViewState extends State<HelpSupportView> {
             }),
             SizedBox(height: r.scale(24)),
             Text(
+              'APP TOUR',
+              style: TextStyle(
+                fontSize: r.scale(12),
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondaryOf(context),
+                letterSpacing: 0.6,
+              ),
+            ),
+            SizedBox(height: r.scale(12)),
+            _ContactCard(
+              icon: Icons.tour_outlined,
+              title: 'Replay app tour',
+              subtitle: 'Highlight Home and navigation features',
+              detail: 'Takes about a minute',
+              actionLabel: 'Start tour',
+              onAction: () => _replayTour(context),
+            ),
+            SizedBox(height: r.scale(24)),
+            Text(
               'CONTACT US',
               style: TextStyle(
                 fontSize: r.scale(12),
@@ -184,12 +207,12 @@ class _HelpSupportViewState extends State<HelpSupportView> {
             _ContactCard(
               icon: Icons.email_outlined,
               title: 'Email Support',
-              subtitle: 'support@calorieai.app',
+              subtitle: 'support@fitbuddyai.app',
               detail: 'We typically reply within 24 hours',
               actionLabel: 'Copy Email',
               onAction: () => _copyToClipboard(
                 context,
-                'support@calorieai.app',
+                'support@fitbuddyai.app',
                 'Email copied to clipboard',
               ),
             ),
@@ -198,7 +221,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
               icon: Icons.bug_report_outlined,
               title: 'Report a Problem',
               subtitle: 'Found a bug or issue?',
-              detail: 'Help us improve Fit Buddy AI',
+              detail: 'Help us improve FitBuddy AI',
               actionLabel: 'Send Report',
               onAction: () => _showMessage(
                 context,
@@ -208,7 +231,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
             SizedBox(height: r.scale(16)),
             Center(
               child: Text(
-                'Fit Buddy AI v1.0.0',
+                'FitBuddy AI v1.0.0',
                 style: TextStyle(
                   fontSize: r.scale(12),
                   color: AppColors.textSecondaryOf(context),
@@ -227,6 +250,18 @@ class _HelpSupportViewState extends State<HelpSupportView> {
   void _copyToClipboard(BuildContext context, String text, String message) {
     Clipboard.setData(ClipboardData(text: text));
     _showMessage(context, message);
+  }
+
+  Future<void> _replayTour(BuildContext context) async {
+    final userId = Get.isRegistered<UserController>()
+        ? Get.find<UserController>().userId.trim()
+        : '';
+    final storage = LocalStorageService(
+      null,
+      userId.isEmpty ? null : userId,
+    );
+    Get.back<void>();
+    await AppCoachMarks.replay(storage);
   }
 
   void _showMessage(BuildContext context, String message) {

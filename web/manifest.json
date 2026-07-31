@@ -1,11 +1,11 @@
 {
-    "name": "Fit Buddy AI",
-    "short_name": "Fit Buddy",
+    "name": "FitBuddy AI",
+    "short_name": "FitBuddy",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Fit Buddy AI - nutrition tracking app.",
+    "description": "FitBuddy AI - nutrition tracking app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

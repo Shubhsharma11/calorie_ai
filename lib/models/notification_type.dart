@@ -1,7 +1,8 @@
 import '../routes/app_routes.dart';
 
-/// Supported push notification categories for Fit Buddy AI.
+/// Supported push notification categories for FitBuddy AI.
 enum NotificationType {
+  mealReminder('meal_reminder'),
   breakfastReminder('breakfast_reminder'),
   lunchReminder('lunch_reminder'),
   dinnerReminder('dinner_reminder'),
@@ -35,8 +36,21 @@ enum NotificationType {
     );
   }
 
+  static String routeForMealTime(String? mealTime) {
+    switch (mealTime?.toLowerCase()) {
+      case 'breakfast':
+      case 'lunch':
+      case 'dinner':
+      case 'snack':
+        return AppRoutes.addFood;
+      default:
+        return AppRoutes.addFood;
+    }
+  }
+
   String get route {
     switch (this) {
+      case NotificationType.mealReminder:
       case NotificationType.breakfastReminder:
       case NotificationType.lunchReminder:
       case NotificationType.dinnerReminder:
@@ -64,6 +78,7 @@ enum NotificationType {
 
   String get channelId {
     switch (this) {
+      case NotificationType.mealReminder:
       case NotificationType.breakfastReminder:
       case NotificationType.lunchReminder:
       case NotificationType.dinnerReminder:
@@ -89,6 +104,7 @@ enum NotificationType {
 
   String get channelName {
     switch (this) {
+      case NotificationType.mealReminder:
       case NotificationType.breakfastReminder:
       case NotificationType.lunchReminder:
       case NotificationType.dinnerReminder:
@@ -115,6 +131,7 @@ enum NotificationType {
 
   String get channelDescription {
     switch (this) {
+      case NotificationType.mealReminder:
       case NotificationType.breakfastReminder:
       case NotificationType.lunchReminder:
       case NotificationType.dinnerReminder:
@@ -135,7 +152,7 @@ enum NotificationType {
       case NotificationType.motivational:
         return 'Daily motivational messages';
       case NotificationType.unknown:
-        return 'General Fit Buddy AI notifications';
+        return 'General FitBuddy AI notifications';
     }
   }
 }

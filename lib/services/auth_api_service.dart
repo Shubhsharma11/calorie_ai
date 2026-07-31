@@ -81,30 +81,51 @@ class AuthApiService {
     }
   }
 
-  Future<void> logoutWithRefreshToken(String refreshToken) async {
+  /// Revokes session on the server.
+  /// Prefer [refreshToken]; always send [accessToken] as Bearer when available
+  /// so logout still hits the API even if refresh is missing.
+  Future<void> logout({
+    String? refreshToken,
+    String? accessToken,
+  }) async {
+    final hasRefresh = refreshToken != null && refreshToken.isNotEmpty;
+    final hasAccess = accessToken != null && accessToken.isNotEmpty;
+
+    if (!hasRefresh && !hasAccess) {
+      throw const AuthApiException(
+        'No access or refresh token available for logout.',
+      );
+    }
+
+    final body = <String, dynamic>{};
+    if (hasRefresh) body['refreshToken'] = refreshToken;
+    if (hasAccess) body['accessToken'] = accessToken;
+
     debugPrint(
       'AuthApiService: POST ${ApiEndpoints.logoutUrl} '
-      'Content-Type: application/json body: {refreshToken: ***}',
+      'refresh=${hasRefresh ? 'yes' : 'no'} '
+      'access=${hasAccess ? 'yes' : 'no'}',
     );
 
     final response = await _apiClient.post(
       ApiEndpoints.logout,
-      body: {'refreshToken': refreshToken},
+      headers: hasAccess ? apiAuthHeaders(accessToken) : null,
+      body: body,
     );
 
-    final body = response.body.trim();
+    final responseBody = response.body.trim();
     debugPrint(
       'AuthApiService: logout response ${response.statusCode}: '
-      '${_redactTokenFields(body)}',
+      '${_redactTokenFields(responseBody)}',
     );
-    final decoded = _tryDecodeJson(body);
+    final decoded = _tryDecodeJson(responseBody);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final message = decoded is Map<String, dynamic>
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw AuthApiException(
-        message ?? 'Backend logout failed (${response.statusCode}). $body',
+        message ?? 'Backend logout failed (${response.statusCode}). $responseBody',
       );
     }
   }

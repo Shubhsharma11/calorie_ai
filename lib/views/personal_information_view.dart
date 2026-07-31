@@ -103,15 +103,15 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
   Future<void> _editAge(UserModel user) async {
     final result = await _showNumberDialog(
       title: 'Age',
-      initialValue: '${user.age}',
+      initialValue: user.age != null ? '${user.age}' : '',
       unit: 'years',
       maxLength: 3,
     );
     if (result == null) return;
     final age = int.tryParse(result);
-    if (age == null || age < 1 || age > 100) {
+    if (age == null || age < 13 || age > 100) {
       AppSnackbar.error(
-        'Please enter a valid age between 1 and 100.',
+        'Please enter a valid age between 13 and 100.',
         title: 'Invalid age',
       );
       return;
@@ -165,7 +165,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
   Future<void> _editHeight(UserModel user) async {
     final result = await _showNumberDialog(
       title: 'Height',
-      initialValue: '${user.heightCm}',
+      initialValue: user.heightCm != null ? '${user.heightCm}' : '',
       unit: 'cm',
       maxLength: 3,
     );
@@ -185,7 +185,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
   Future<void> _editWeight(UserModel user) async {
     final result = await _showNumberDialog(
       title: 'Weight',
-      initialValue: '${user.weightKg}',
+      initialValue: user.weightKg != null ? '${user.weightKg}' : '',
       unit: 'kg',
       maxLength: 3,
     );
@@ -320,14 +320,15 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
               if (_userController.isLoadingProfile)
                 const LinearProgressIndicator(minHeight: 2),
               Expanded(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    r.scale(20, tablet: 28),
-                    r.scale(12),
-                    r.scale(20, tablet: 28),
-                    r.scale(24),
-                  ),
-                  child: Column(
+                child: ClipRect(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      r.scale(20, tablet: 28),
+                      r.scale(12),
+                      r.scale(20, tablet: 28),
+                      r.scale(32) + MediaQuery.viewInsetsOf(context).bottom * 0.1,
+                    ),
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
@@ -344,7 +345,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
                       _InfoRow(
                         label: 'Age',
                         subtitle: 'Your current age',
-                        value: '${user.age}',
+                        value: user.age != null ? '${user.age}' : '—',
                         unit: 'years',
                         onTap: () => _editAge(user),
                       ),
@@ -352,7 +353,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
                       _InfoRow(
                         label: 'Gender',
                         subtitle: 'Select your gender',
-                        value: user.gender,
+                        value: user.gender ?? '—',
                         onTap: () => _editGender(user),
                       ),
                       SizedBox(height: r.scale(22)),
@@ -361,7 +362,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
                       _InfoRow(
                         label: 'Height',
                         subtitle: 'Your height',
-                        value: '${user.heightCm}',
+                        value: user.heightCm != null ? '${user.heightCm}' : '—',
                         unit: 'cm',
                         onTap: () => _editHeight(user),
                       ),
@@ -369,7 +370,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
                       _InfoRow(
                         label: 'Weight',
                         subtitle: 'Your current weight',
-                        value: '${user.weightKg}',
+                        value: user.weightKg != null ? '${user.weightKg}' : '—',
                         unit: 'kg',
                         onTap: () => _editWeight(user),
                       ),
@@ -386,6 +387,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
                       SizedBox(height: r.scale(22)),
                       const _WhyWeNeedThisCard(),
                     ],
+                  ),
                   ),
                 ),
               ),

@@ -2,304 +2,65 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/custom_meal_preset.dart';
-import '../models/custom_food_preset.dart';
 import '../models/exercise_entry.dart';
-import '../models/health_concern.dart';
-import '../models/meal_entry.dart';
-import '../models/saved_meal_item.dart';
 
-/// Persists meal logs and streak metadata locally.
+/// Device-only prefs. Meals, weight, water, profile, and nutrition are API-only.
+///
+/// Kept on disk:
+/// - auth session (required to stay signed in)
+/// - welcome intro + coach marks (one-time device UX)
+/// - pedometer baselines / step opt-in (Health Connect is device-local)
 class LocalStorageService {
-LocalStorageService([this._prefs, this.userId]);
+  LocalStorageService([this._prefs, this.userId]);
 
-final String? userId;
+  final String? userId;
 
   SharedPreferences? _prefs;
- String _mealKey() {
-  return 'meal_entries_v1_${userId ?? "guest"}';
-}
-  static const _favoriteMealsKey = 'favorite_meals_v1';
-  static const _customMealsKey = 'custom_meals_v1';
-  static const _customFoodsKey = 'custom_foods_v1';
-  static const _dismissedBreakfastSuggestionKey =
-      'dismissed_breakfast_suggestion_v1';
-  static const _longestStreakKey = 'longest_streak';
-  static const _celebratedMilestonesKey = 'celebrated_streak_milestones';
-  static const _calorieAdjustmentKey = 'manual_calorie_adjustment';
-  static const _nutritionTargetsKey = 'nutrition_targets_v1';
-  static const _healthProblemKey = 'health_problem_v2';
-  static const _healthProblemLegacyKey = 'health_problem_v1';
+
+  static const _authSessionKey = 'auth_session_v1';
+  static const _coachMarksSeenKey = 'coach_marks_seen_v1';
+  static const _welcomeIntroSeenKey = 'welcome_intro_seen_v1';
   static const _activityLogKey = 'activity_log_v1';
   static const _stepTrackingEnabledKey = 'step_tracking_enabled_v1';
-  static const _authSessionKey = 'auth_session_v1';
-  static const _onboardingCompletedKey = 'onboarding_completed_v1';
-  static const _onboardingStepKey = 'onboarding_step_v1';
-  static const _onboardingDraftKey = 'onboarding_draft_v1';
+  static const _legacyKeysWipedKey = 'legacy_api_cache_wiped_v3';
 
   Future<SharedPreferences> get _storage async =>
       _prefs ??= await SharedPreferences.getInstance();
 
- Future<List<MealEntry>> loadMealEntries()async {
-  
-  final prefs = await _storage;
-  
-  
-  final raw = prefs.getString(_mealKey());
-
-  if (raw == null || raw.isEmpty) return [];
-
-  final list = jsonDecode(raw) as List<dynamic>;
-  return list
-      .map((item) => MealEntry.fromJson(item as Map<String, dynamic>))
-      .toList();
-}
-
-Future<void> saveMealEntries(List<MealEntry> entries) async {
-  final prefs = await _storage;
-  final encoded = jsonEncode(entries.map((e) => e.toJson()).toList());
-
-await prefs.setString(_mealKey(), encoded);
-}
-
-  Future<List<SavedMealItem>> loadFavoriteMeals() async {
+  /// One-shot wipe of old meal/profile/onboarding caches from earlier builds.
+  Future<void> wipeLegacyApiCachesIfNeeded() async {
     final prefs = await _storage;
-    final raw = prefs.getString(_favoriteMealsKey);
-    if (raw == null || raw.isEmpty) return [];
+    if (prefs.getBool(_legacyKeysWipedKey) ?? false) return;
 
-    final list = jsonDecode(raw) as List<dynamic>;
-    return list
-        .map((item) => SavedMealItem.fromJson(item as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<void> saveFavoriteMeals(List<SavedMealItem> items) async {
-    final prefs = await _storage;
-    final encoded = jsonEncode(items.map((item) => item.toJson()).toList());
-    await prefs.setString(_favoriteMealsKey, encoded);
-  }
-
-  Future<List<CustomMealPreset>> loadCustomMeals() async {
-    final prefs = await _storage;
-    final raw = prefs.getString(_customMealsKey);
-    if (raw == null || raw.isEmpty) return [];
-
-    final list = jsonDecode(raw) as List<dynamic>;
-    return list
-        .map(
-          (item) =>
-              CustomMealPreset.fromJson(item as Map<String, dynamic>),
-        )
-        .toList();
-  }
-
-  Future<void> saveCustomMeals(List<CustomMealPreset> meals) async {
-    final prefs = await _storage;
-    final encoded = jsonEncode(meals.map((meal) => meal.toJson()).toList());
-    await prefs.setString(_customMealsKey, encoded);
-  }
-
-  Future<List<CustomFoodPreset>> loadCustomFoods() async {
-    final prefs = await _storage;
-    final raw = prefs.getString(_customFoodsKey);
-    if (raw == null || raw.isEmpty) return [];
-
-    final list = jsonDecode(raw) as List<dynamic>;
-    return list
-        .map(
-          (item) =>
-              CustomFoodPreset.fromJson(item as Map<String, dynamic>),
-        )
-        .toList();
-  }
-
-  Future<void> saveCustomFoods(List<CustomFoodPreset> foods) async {
-    final prefs = await _storage;
-    final encoded = jsonEncode(foods.map((food) => food.toJson()).toList());
-    await prefs.setString(_customFoodsKey, encoded);
-  }
-
-  Future<String?> loadDismissedBreakfastSuggestionDate() async {
-    final prefs = await _storage;
-    return prefs.getString(_dismissedBreakfastSuggestionKey);
-  }
-
-  Future<void> saveDismissedBreakfastSuggestionDate(String dateKey) async {
-    final prefs = await _storage;
-    await prefs.setString(_dismissedBreakfastSuggestionKey, dateKey);
-  }
-
-  Future<int> loadLongestStreak() async {
-    final prefs = await _storage;
-    return prefs.getInt(_longestStreakKey) ?? 0;
-  }
-
-  Future<void> saveLongestStreak(int value) async {
-    final prefs = await _storage;
-    await prefs.setInt(_longestStreakKey, value);
-  }
-
-  Future<Set<int>> loadCelebratedMilestones() async {
-    final prefs = await _storage;
-    final raw = prefs.getStringList(_celebratedMilestonesKey);
-    if (raw == null) return {};
-    return raw.map(int.parse).toSet();
-  }
-
-  Future<void> saveCelebratedMilestones(Set<int> milestones) async {
-    final prefs = await _storage;
-    final sorted = milestones.toList()..sort();
-    await prefs.setStringList(
-      _celebratedMilestonesKey,
-      sorted.map((m) => m.toString()).toList(),
-    );
-  }
-
-  Future<int> loadCalorieAdjustment() async {
-    final prefs = await _storage;
-    return prefs.getInt(_calorieAdjustmentKey) ?? 0;
-  }
-
-  Future<void> saveCalorieAdjustment(int value) async {
-    final prefs = await _storage;
-    await prefs.setInt(_calorieAdjustmentKey, value);
-  }
-
-  Future<void> saveNutritionTargets({
-    int? baseCalories,
-    int? dailyCalories,
-    int? proteinG,
-    int? carbsG,
-    int? fatG,
-  }) async {
-    final prefs = await _storage;
-    final encoded = jsonEncode({
-      'baseCalories': baseCalories,
-      'dailyCalories': dailyCalories,
-      'proteinG': proteinG,
-      'carbsG': carbsG,
-      'fatG': fatG,
-    });
-    await prefs.setString(_nutritionTargetsKey, encoded);
-  }
-
-  Future<Map<String, int?>> loadNutritionTargets() async {
-    final prefs = await _storage;
-    final raw = prefs.getString(_nutritionTargetsKey);
-    if (raw == null || raw.isEmpty) return {};
-
-    final decoded = jsonDecode(raw) as Map<String, dynamic>;
-    int? readInt(String key) {
-      final value = decoded[key];
-      if (value is int) return value;
-      if (value is num) return value.round();
-      return null;
+    const legacy = <String>[
+      'longest_streak',
+      'celebrated_streak_milestones',
+      'manual_calorie_adjustment',
+      'nutrition_targets_v1',
+      'health_problem_v2',
+      'health_problem_v1',
+      'onboarding_completed_v1',
+      'onboarding_step_v1',
+      'onboarding_draft_v1',
+      'weight_entries_v1',
+      'home_tutorial_seen_v1',
+      'home_tutorial_pending_v1',
+      'favorite_meals_v1',
+      'custom_meals_v1',
+      'custom_foods_v1',
+      'goal_start_weight_kg_v1',
+    ];
+    for (final key in legacy) {
+      await prefs.remove(key);
     }
-
-    return {
-      'baseCalories': readInt('baseCalories'),
-      'dailyCalories': readInt('dailyCalories'),
-      'proteinG': readInt('proteinG'),
-      'carbsG': readInt('carbsG'),
-      'fatG': readInt('fatG'),
-    };
-  }
-
-  Future<List<HealthConcern>> loadHealthConcerns() async {
-    final prefs = await _storage;
-    final raw =
-        prefs.getString(_healthProblemKey) ??
-        prefs.getString(_healthProblemLegacyKey);
-    if (raw == null || raw.isEmpty) return [];
-
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic>) return [];
-
-    final concernsRaw = decoded['concerns'];
-    if (concernsRaw is List) {
-      return concernsRaw
-          .whereType<Map<String, dynamic>>()
-          .map(HealthConcern.fromJson)
-          .where((concern) => concern.category.isNotEmpty)
-          .toList();
+    // Guest / per-user meal dumps from old builds.
+    for (final key in prefs.getKeys()) {
+      if (key.startsWith('meal_entries_v1_') ||
+          key.startsWith('goal_start_weight_kg_v1')) {
+        await prefs.remove(key);
+      }
     }
-
-    return _migrateLegacyHealthProblem(decoded);
-  }
-
-  List<HealthConcern> _migrateLegacyHealthProblem(Map<String, dynamic> decoded) {
-    final category = (decoded['category'] as String? ?? '').trim();
-    if (category.isEmpty) return [];
-    if (category == HealthConcern.noneCategory) {
-      return [HealthConcern.none()];
-    }
-
-    final description = decoded['description'] as String? ?? '';
-    final duration = decoded['duration'] as String?;
-    final severity = decoded['severity'] as String?;
-    final medication = decoded['medication'] as String?;
-
-    final categories = category
-        .split(',')
-        .map((value) => value.trim())
-        .where((value) => value.isNotEmpty)
-        .toList();
-
-    return categories
-        .map(
-          (value) => HealthConcern(
-            category: value,
-            description: description,
-            duration: duration,
-            severity: severity,
-            medication: medication,
-          ),
-        )
-        .toList();
-  }
-
-  Future<void> saveHealthConcerns(List<HealthConcern> concerns) async {
-    final prefs = await _storage;
-    final encoded = jsonEncode({
-      'concerns': concerns.map((concern) => concern.toJson()).toList(),
-    });
-    await prefs.setString(_healthProblemKey, encoded);
-  }
-
-  @Deprecated('Use loadHealthConcerns')
-  Future<Map<String, String?>> loadHealthProblem() async {
-    final concerns = await loadHealthConcerns();
-    if (concerns.isEmpty) return {};
-    if (concerns.length == 1 && concerns.first.isNone) {
-      return {'category': HealthConcern.noneCategory};
-    }
-    final first = concerns.first;
-    return {
-      'category': concerns.map((concern) => concern.category).join(', '),
-      'description': first.description,
-      'duration': first.duration,
-      'severity': first.severity,
-      'medication': first.medication,
-    };
-  }
-
-  @Deprecated('Use saveHealthConcerns')
-  Future<void> saveHealthProblem({
-    required String category,
-    required String description,
-    String? duration,
-    String? severity,
-    String? medication,
-  }) async {
-    final prefs = await _storage;
-    final encoded = jsonEncode({
-      'category': category,
-      'description': description,
-      'duration': duration,
-      'severity': severity,
-      'medication': medication,
-    });
-    await prefs.setString(_healthProblemKey, encoded);
+    await prefs.setBool(_legacyKeysWipedKey, true);
   }
 
   Future<Map<String, dynamic>> loadAuthSession() async {
@@ -338,68 +99,39 @@ await prefs.setString(_mealKey(), encoded);
     await prefs.remove(_authSessionKey);
   }
 
-  Future<bool> isOnboardingCompleted() async {
+  /// True after the user finishes (or skips) the welcome intro slides.
+  Future<bool> isWelcomeIntroSeen() async {
     final prefs = await _storage;
-    return prefs.getBool(_onboardingCompletedKey) ?? false;
+    return prefs.getBool(_welcomeIntroSeenKey) ?? false;
   }
 
-  Future<void> saveOnboardingCompleted({required bool completed}) async {
+  Future<void> saveWelcomeIntroSeen({required bool seen}) async {
     final prefs = await _storage;
-    await prefs.setBool(_onboardingCompletedKey, completed);
+    await prefs.setBool(_welcomeIntroSeenKey, seen);
   }
 
-  Future<String?> loadOnboardingStep() async {
+  Future<bool> isCoachMarksSeen() async {
     final prefs = await _storage;
-    final step = prefs.getString(_onboardingStepKey);
-    if (step == null || step.isEmpty) return null;
-    return step;
+    return prefs.getBool(_coachMarksKeyForUser) ?? false;
   }
 
-  Future<void> saveOnboardingStep(String route) async {
+  Future<void> saveCoachMarksSeen({required bool seen}) async {
     final prefs = await _storage;
-    await prefs.setString(_onboardingStepKey, route);
+    await prefs.setBool(_coachMarksKeyForUser, seen);
   }
 
-  Future<Map<String, dynamic>?> loadOnboardingDraft() async {
-    final prefs = await _storage;
-    final raw = prefs.getString(_onboardingDraftKey);
-    if (raw == null || raw.isEmpty) return null;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) return decoded;
-      if (decoded is Map) {
-        return decoded.map((key, value) => MapEntry(key.toString(), value));
-      }
-    } catch (_) {}
-    return null;
+  String get _coachMarksKeyForUser {
+    final id = userId?.trim();
+    if (id != null && id.isNotEmpty) {
+      return '${_coachMarksSeenKey}_$id';
+    }
+    return _coachMarksSeenKey;
   }
 
-  Future<void> saveOnboardingDraft(Map<String, dynamic> draft) async {
-    final prefs = await _storage;
-    await prefs.setString(_onboardingDraftKey, jsonEncode(draft));
-  }
-
-  Future<void> clearOnboardingProgress() async {
-    final prefs = await _storage;
-    await prefs.remove(_onboardingStepKey);
-    await prefs.remove(_onboardingDraftKey);
-  }
-
+  /// Clears session-adjacent leftovers on logout. Auth is cleared separately.
   Future<void> clearUserProfileCache() async {
-    final prefs = await _storage;
-    await prefs.remove(_healthProblemKey);
-    await prefs.remove(_healthProblemLegacyKey);
-    await prefs.remove(_calorieAdjustmentKey);
-    await prefs.remove(_nutritionTargetsKey);
-    await prefs.remove(_onboardingCompletedKey);
-    await prefs.remove(_onboardingStepKey);
-    await prefs.remove(_onboardingDraftKey);
-  }
-
-  /// Removes legacy on-device weight logs. Weight history is API-only now.
-  Future<void> clearWeightEntryLogs() async {
-    final prefs = await _storage;
-    await prefs.remove('weight_entries_v1');
+    // Profile / meals / onboarding are API-owned — nothing to clear on disk.
+    // Keep welcome intro + coach marks (device UX).
   }
 
   Future<Map<String, int>> loadStepsByDate() async {
@@ -462,8 +194,6 @@ await prefs.setString(_mealKey(), encoded);
 
   Future<bool> loadStepTrackingEnabled() async {
     final prefs = await _storage;
-    // Default on so the app can request native health permissions like
-    // other fitness apps, unless the user explicitly disconnected.
     return prefs.getBool(_stepTrackingEnabledKey) ?? true;
   }
 

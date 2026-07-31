@@ -46,7 +46,7 @@ abstract final class ApiWaterMapper {
     for (final entry in entries) {
       final day = entry.normalizedDate;
       totals[day] = (totals[day] ?? 0) + entry.amountMl;
-    }
+    } 
 
     final dailyTotalMl = _readMl(
       data['dailyTotalMl'] ??

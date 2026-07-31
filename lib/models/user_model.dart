@@ -5,8 +5,10 @@ import 'goal_type.dart';
 import 'health_concern.dart';
 import '../core/weight_goal_calculator.dart';
 
+/// In-memory profile. Body metrics are nullable until the API / onboarding
+/// supplies them — never invent John / 70kg / age-25 placeholders.
 class UserModel {
-  String name = 'John';
+  String name = '';
   String email = '';
 
   String get firstName {
@@ -17,11 +19,23 @@ class UserModel {
 
   Uint8List? profilePhotoBytes;
   GoalType? goal;
-  int age = 25;
-  String gender = 'Male';
-  int heightCm = 170;
-  int weightKg = 70;
+
+  int? age;
+  String? gender;
+  int? heightCm;
+  int? weightKg;
+
   double? manualGoalWeightKg;
+
+  /// Absolute lose/gain target from Goals / onboarding.
+  /// Never updated by Weight Progress logs — only by explicit goal edits.
+  double? pinnedGoalWeightKg;
+
+  /// Goal type chosen in Goals / onboarding (survives weight-API profile mutations).
+  GoalType? pinnedGoalType;
+
+  /// Weight when the current target was set (from API `startWeight`, not disk).
+  double? goalStartWeightKg;
   List<HealthConcern> healthConcerns = [];
 
   bool get hasHealthConcernsConfigured => healthConcerns.isNotEmpty;
@@ -55,22 +69,75 @@ class UserModel {
     DateTime.now().day,
   ).add(const Duration(days: 90));
 
-  bool get isGoalWeightManual => manualGoalWeightKg != null;
+  /// True once onboarding/API has filled real body metrics.
+  bool get hasProfileBasics {
+    final a = age;
+    final h = heightCm;
+    final w = weightKg;
+    final g = gender?.trim() ?? '';
+    return a != null &&
+        a > 0 &&
+        h != null &&
+        h > 0 &&
+        w != null &&
+        w > 0 &&
+        g.isNotEmpty;
+  }
 
-  double get recommendedGoalWeightKg =>
-      WeightGoalCalculator.recommendedGoalWeight(
-        goal: goal,
-        weightKg: weightKg,
-        heightCm: heightCm,
-        age: age,
-        gender: gender,
-      );
+  bool get isGoalWeightManual =>
+      manualGoalWeightKg != null || pinnedGoalWeightKg != null;
 
-  /// Active target — manual override or suggested recommendation.
-  double get goalWeightKg => manualGoalWeightKg ?? recommendedGoalWeightKg;
+  double get recommendedGoalWeightKg {
+    if (!hasProfileBasics) return 0;
+    return WeightGoalCalculator.recommendedGoalWeight(
+      goal: goal,
+      weightKg: weightKg!,
+      heightCm: heightCm!,
+      age: age!,
+      gender: gender!,
+    );
+  }
 
-  double get bmr =>
-      10 * weightKg + 6.25 * heightCm - 5 * age + (gender == 'Male' ? 5 : -161);
+  /// Active target for home + profile.
+  ///
+  /// Lose/gain always use the pinned onboarding/goal target — never a live
+  /// recalculation from the latest weigh-in.
+  double get goalWeightKg {
+    final effectiveGoal = pinnedGoalType ?? goal;
+    final current = weightKg?.toDouble() ?? 0;
+    if (effectiveGoal == GoalType.maintainWeight) {
+      return current;
+    }
+    if (pinnedGoalWeightKg != null) return pinnedGoalWeightKg!;
+    if (manualGoalWeightKg != null) return manualGoalWeightKg!;
+    return recommendedGoalWeightKg;
+  }
+
+  void pinGoalWeight(double kg, {GoalType? goalType}) {
+    final clamped = kg.clamp(40.0, 200.0);
+    pinnedGoalWeightKg = clamped;
+    manualGoalWeightKg = clamped;
+    if (goalType != null) {
+      pinnedGoalType = goalType;
+      goal = goalType;
+    } else if (goal != null && goal != GoalType.maintainWeight) {
+      pinnedGoalType = goal;
+    }
+  }
+
+  void clearPinnedGoalWeight() {
+    pinnedGoalWeightKg = null;
+    manualGoalWeightKg = null;
+    pinnedGoalType = null;
+  }
+
+  double get bmr {
+    if (!hasProfileBasics) return 0;
+    return 10 * weightKg! +
+        6.25 * heightCm! -
+        5 * age! +
+        (gender == 'Male' ? 5 : -161);
+  }
 
   double get _activityMultiplier => switch (activityLevel) {
     ActivityLevel.sedentary => 1.2,
@@ -81,11 +148,15 @@ class UserModel {
   };
 
   /// Calories to maintain current weight (TDEE).
-  int get maintenanceCalories =>
-      (bmr * _activityMultiplier).round().clamp(1200, 4000);
+  int get maintenanceCalories {
+    if (!hasProfileBasics) return 0;
+    return (bmr * _activityMultiplier).round().clamp(1200, 4000);
+  }
 
-  /// Calorie goal from profile (before manual add/deduct).
+  /// Client fallback calorie goal from body metrics (before manual add/deduct).
+  /// Prefer [dailyCalorieGoal] which is API-first.
   int get calculatedDailyCalorieGoal {
+    if (!hasProfileBasics) return 0;
     final tdee = maintenanceCalories;
 
     if (goal == null || goal == GoalType.maintainWeight) {
@@ -99,7 +170,7 @@ class UserModel {
     );
     final daysUntilTarget = targetDate.difference(today).inDays.clamp(1, 730);
     final weeks = daysUntilTarget / 7.0;
-    final weightDiff = goalWeightKg - weightKg;
+    final weightDiff = goalWeightKg - weightKg!;
 
     if (weightDiff.abs() < 0.1) return tdee;
 
@@ -110,14 +181,16 @@ class UserModel {
     return (tdee + cappedAdjustment).clamp(1200, 4000);
   }
 
-  /// Final daily calorie goal — prefers persisted API plan calories.
+  /// API nutrition plan first; otherwise calculate only when profile exists.
   int get dailyCalorieGoal {
-    if (nutritionPlanDailyCalories != null) {
-      return nutritionPlanDailyCalories!.clamp(1200, 4000);
+    final plan = nutritionPlanDailyCalories;
+    if (plan != null && plan > 0) {
+      return plan.clamp(0, 10000);
     }
+    if (!hasProfileBasics) return 0;
     return (calculatedDailyCalorieGoal + manualCalorieAdjustment).clamp(
-      1200,
-      4000,
+      0,
+      10000,
     );
   }
 
@@ -129,7 +202,7 @@ class UserModel {
     return manualCalorieAdjustment != 0;
   }
 
-  double get weightChangeKg => goalWeightKg - weightKg;
+  double get weightChangeKg => goalWeightKg - (weightKg?.toDouble() ?? 0);
 
   /// Onboarding API timeline: `1week` | `2week` | `1month` | `custom`.
   String get goalTimeline {
@@ -163,16 +236,20 @@ class UserModel {
   int get fatGoalG =>
       nutritionPlanFatG ?? (dailyCalorieGoal * 0.30 / 9).round();
 
-  void resetToDefaults() {
-    name = 'John';
+  /// Clears to an empty session — not fake defaults.
+  void clear() {
+    name = '';
     email = '';
     profilePhotoBytes = null;
     goal = null;
-    age = 25;
-    gender = 'Male';
-    heightCm = 170;
-    weightKg = 70;
+    age = null;
+    gender = null;
+    heightCm = null;
+    weightKg = null;
     manualGoalWeightKg = null;
+    pinnedGoalWeightKg = null;
+    pinnedGoalType = null;
+    goalStartWeightKg = null;
     healthConcerns = [];
     manualCalorieAdjustment = 0;
     nutritionPlanBaseCalories = null;
@@ -187,4 +264,7 @@ class UserModel {
       DateTime.now().day,
     ).add(const Duration(days: 90));
   }
+
+  /// Alias kept for existing call sites.
+  void resetToDefaults() => clear();
 }

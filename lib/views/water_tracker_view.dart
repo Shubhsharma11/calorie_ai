@@ -16,7 +16,8 @@ import '../widgets/water_progress_chart.dart';
 class WaterTrackerView extends GetView<TrackerController> {
   const WaterTrackerView({super.key});
 
-  static const _waterBlue = Color(0xFF007AFF);
+  /// Soft water accent — secondary to brand green, not loud system blue.
+  static const _waterAccent = Color(0xFF4AA3DF);
 
   double _chartHeightFor(WaterPeriod period, Responsive r) => switch (period) {
         WaterPeriod.month => r.scale(130, tablet: 150, desktop: 170),
@@ -24,6 +25,19 @@ class WaterTrackerView extends GetView<TrackerController> {
         WaterPeriod.today || WaterPeriod.yesterday =>
           r.scale(140, tablet: 160, desktop: 180),
       };
+
+  BoxDecoration _cardDecoration() => BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowColor,
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +63,9 @@ class WaterTrackerView extends GetView<TrackerController> {
           final overGlasses =
               glasses > goalGlasses ? glasses - goalGlasses : 0;
           final glassWord = glasses == 1 ? 'glass' : 'glasses';
+          final progressColor = controller.isWaterGoalComplete
+              ? AppColors.primary
+              : _waterAccent;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -58,149 +75,187 @@ class WaterTrackerView extends GetView<TrackerController> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppColors.textSecondary,
-                  fontSize: 15,
+                  fontSize: r.scale(14),
                   height: 1.4,
                 ),
               ),
-              const SizedBox(height: 24),
-              Text(
-                '$glasses',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 44,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
-              ),
-              Text(
-                glassWord,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'of $goalGlasses glasses today · ${formatWaterMl(waterMl)}',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
-              ),
-              if (overGlasses > 0) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '+$overGlasses extra glass${overGlasses == 1 ? '' : 'es'}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: _waterBlue,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 24),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: LinearProgressIndicator(
-                  value: controller.waterProgress,
-                  minHeight: 14,
-                  backgroundColor: AppColors.surface,
-                  color: controller.isWaterGoalComplete
-                      ? AppColors.primary
-                      : _waterBlue,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: _QuickAddButton(
-                      label: '+1 glass',
-                      onTap: controller.addWater,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _QuickAddButton(
-                      label: '+2 glasses',
-                      onTap: () => controller.addWaterMl(
-                        TrackerController.mlPerGlass * 2,
+              SizedBox(height: r.scale(18)),
+              Container(
+                decoration: _cardDecoration(),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.fromLTRB(
+                        r.scale(16),
+                        r.scale(20),
+                        r.scale(16),
+                        r.scale(18),
+                      ),
+                      color: AppColors.isDark(context)
+                          ? AppColors.surface
+                          : const Color(0xFFF7FBF8),
+                      child: Column(
+                        children: [
+                          Text(
+                            '$glasses',
+                            style: TextStyle(
+                              fontSize: r.scale(40),
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                              height: 1,
+                            ),
+                          ),
+                          SizedBox(height: r.scale(4)),
+                          Text(
+                            glassWord,
+                            style: TextStyle(
+                              fontSize: r.scale(15),
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primaryDark,
+                            ),
+                          ),
+                          SizedBox(height: r.scale(6)),
+                          Text(
+                            'of $goalGlasses glasses today · ${formatWaterMl(waterMl)}',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: r.scale(13),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (overGlasses > 0) ...[
+                            SizedBox(height: r.scale(6)),
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: r.scale(10),
+                                vertical: r.scale(4),
+                              ),
+                              decoration: BoxDecoration(
+                                color: _waterAccent.withValues(alpha: 0.12),
+                                borderRadius:
+                                    BorderRadius.circular(r.scale(999)),
+                              ),
+                              child: Text(
+                                '+$overGlasses extra glass${overGlasses == 1 ? '' : 'es'}',
+                                style: TextStyle(
+                                  color: _waterAccent,
+                                  fontSize: r.scale(12),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                          SizedBox(height: r.scale(16)),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(r.scale(999)),
+                            child: LinearProgressIndicator(
+                              value: controller.waterProgress,
+                              minHeight: r.scale(10),
+                              backgroundColor: AppColors.isDark(context)
+                                  ? AppColors.border
+                                  : Colors.white.withValues(alpha: 0.9),
+                              color: progressColor,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _QuickAddButton(
-                      label: 'Custom',
-                      icon: Icons.tune_rounded,
-                      onTap: () => _showCustomAmountSheet(context),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: FilledButton.tonal(
-                  onPressed: waterMl > 0 ? controller.removeWater : null,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    backgroundColor: const Color(0xFFFFE8E6),
-                    foregroundColor: const Color(0xFFC45C54),
-                    disabledBackgroundColor:
-                        AppColors.surface.withValues(alpha: 0.7),
-                    disabledForegroundColor:
-                        AppColors.textSecondary.withValues(alpha: 0.45),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.remove_rounded, size: 16),
-                      SizedBox(width: 4),
-                      Text(
-                        'Remove 1 glass',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        r.scale(12),
+                        r.scale(12),
+                        r.scale(12),
+                        r.scale(14),
                       ),
-                    ],
-                  ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _QuickAddButton(
+                                  label: '+1 glass',
+                                  onTap: controller.addWater,
+                                ),
+                              ),
+                              SizedBox(width: r.scale(8)),
+                              Expanded(
+                                child: _QuickAddButton(
+                                  label: '+2 glasses',
+                                  onTap: () => controller.addWaterMl(
+                                    TrackerController.mlPerGlass * 2,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: r.scale(8)),
+                              Expanded(
+                                child: _QuickAddButton(
+                                  label: 'Custom',
+                                  icon: Icons.tune_rounded,
+                                  onTap: () =>
+                                      _showCustomAmountSheet(context),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (waterMl > 0) ...[
+                            SizedBox(height: r.scale(8)),
+                            _RemoveGlassButton(
+                              onTap: controller.removeWater,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Hydration History',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              SizedBox(height: r.scale(16)),
+              Container(
+                decoration: _cardDecoration(),
+                clipBehavior: Clip.antiAlias,
+                padding: EdgeInsets.fromLTRB(
+                  r.scale(14),
+                  r.scale(14),
+                  r.scale(14),
+                  r.scale(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Hydration History',
+                      style: TextStyle(
+                        fontSize: r.scale(16),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: r.scale(12)),
+                    PeriodSelector(
+                      values: WaterPeriod.values,
+                      selected: period,
+                      labelFor: controller.periodLabelFor,
+                      onChanged: controller.setWaterPeriod,
+                      fontSize: r.scale(11),
+                    ),
+                    SizedBox(height: r.scale(14)),
+                    WaterProgressChart(
+                      days: controller.activeWaterDays,
+                      waterGoalMl: goalMl,
+                      chartHeight: chartHeight,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              PeriodSelector(
-                values: WaterPeriod.values,
-                selected: period,
-                labelFor: controller.periodLabelFor,
-                onChanged: controller.setWaterPeriod,
-                fontSize: 11,
-              ),
-              const SizedBox(height: 16),
-              WaterProgressChart(
-                days: controller.activeWaterDays,
-                waterGoalMl: goalMl,
-                chartHeight: chartHeight,
-              ),
-              const SizedBox(height: 32),
+              SizedBox(height: r.scale(20)),
               Text(
                 '1 glass = ${TrackerController.mlPerGlass} ml',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: r.scale(12),
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -261,8 +316,6 @@ class _CustomWaterAmountSheetState extends State<_CustomWaterAmountSheet> {
 
   void _submit(int ml) {
     if (ml <= 0) return;
-    // Pop first so the sheet doesn't drop onto the system bar while
-    // the keyboard is still animating away.
     widget.onAdd(ml);
     if (mounted) Navigator.of(context).pop();
   }
@@ -280,10 +333,9 @@ class _CustomWaterAmountSheetState extends State<_CustomWaterAmountSheet> {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final keyboard = media.viewInsets.bottom;
-    // Keep clear of home indicator / nav bar when the keyboard is closed.
-    final bottomPad = keyboard > 0
-        ? keyboard + 12
-        : media.padding.bottom + 20;
+    final bottomPad =
+        keyboard > 0 ? keyboard + 12 : media.padding.bottom + 20;
+    final r = context.responsive;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 4, 20, bottomPad),
@@ -291,19 +343,22 @@ class _CustomWaterAmountSheetState extends State<_CustomWaterAmountSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Add water',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              fontSize: r.scale(18),
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: r.scale(8)),
           Text(
             'Quick glasses or enter an exact amount in ml.',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: r.scale(13),
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: r.scale(16)),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -313,9 +368,14 @@ class _CustomWaterAmountSheetState extends State<_CustomWaterAmountSheet> {
                   label: Text(
                     glasses == 1 ? '+1 glass' : '+$glasses glasses',
                   ),
-                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                  backgroundColor: AppColors.surface,
-                  side: BorderSide(color: AppColors.border),
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryDark,
+                  ),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                  side: BorderSide(
+                    color: AppColors.primary.withValues(alpha: 0.18),
+                  ),
                   onPressed: () =>
                       _submit(glasses * TrackerController.mlPerGlass),
                 ),
@@ -330,7 +390,7 @@ class _CustomWaterAmountSheetState extends State<_CustomWaterAmountSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: r.scale(16)),
           Row(
             children: [
               Expanded(
@@ -366,11 +426,72 @@ class _CustomWaterAmountSheetState extends State<_CustomWaterAmountSheet> {
                   final ml = int.tryParse(_textController.text.trim()) ?? 0;
                   _submit(ml);
                 },
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.onPrimary,
+                ),
                 child: const Text('Add'),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RemoveGlassButton extends StatelessWidget {
+  const _RemoveGlassButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  static const _softRemove = Color(0xFFD97878);
+  static const _softRemoveFill = Color(0xFFFFF5F5);
+  static const _softRemoveBorder = Color(0xFFE8B4B4);
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    final radius = BorderRadius.circular(r.scale(12));
+
+    return Material(
+      color: _softRemoveFill,
+      borderRadius: radius,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: radius,
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(
+            horizontal: r.scale(18),
+            vertical: r.scale(12),
+          ),
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            border: Border.all(color: _softRemoveBorder),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.remove_rounded,
+                size: r.scale(16),
+                color: _softRemove,
+              ),
+              SizedBox(width: r.scale(6)),
+              Text(
+                'Remove 1 glass',
+                style: TextStyle(
+                  fontSize: r.scale(12),
+                  fontWeight: FontWeight.w700,
+                  color: _softRemove,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -389,29 +510,53 @@ class _QuickAddButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton.tonal(
-      onPressed: onTap,
-      style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        backgroundColor: WaterTrackerView._waterBlue.withValues(alpha: 0.12),
-        foregroundColor: WaterTrackerView._waterBlue,
-      ),
-      child: icon != null
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 18),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ],
-            )
-          : Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w700),
+    final r = context.responsive;
+
+    return Material(
+      color: AppColors.primary.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(r.scale(12)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: r.scale(12)),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(r.scale(12)),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.16),
             ),
+          ),
+          alignment: Alignment.center,
+          child: icon != null
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      icon,
+                      size: r.scale(15),
+                      color: AppColors.primaryDark,
+                    ),
+                    SizedBox(width: r.scale(4)),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: r.scale(12),
+                        color: AppColors.primaryDark,
+                      ),
+                    ),
+                  ],
+                )
+              : Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: r.scale(12),
+                    color: AppColors.primaryDark,
+                  ),
+                ),
+        ),
+      ),
     );
   }
 }

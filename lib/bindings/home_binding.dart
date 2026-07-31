@@ -5,6 +5,7 @@ import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
 import '../controllers/nutrition_plan_controller.dart';
 import '../controllers/main_controller.dart';
+import '../controllers/notifications_controller.dart';
 import '../controllers/scan_controller.dart';
 import '../controllers/settings_controller.dart';
 // import '../controllers/streak_controller.dart';
@@ -45,6 +46,8 @@ class HomeBinding extends Bindings {
     if (!Get.isRegistered<NutritionPlanController>()) {
       Get.put(NutritionPlanController(), permanent: true);
     }
-
+    if (!Get.isRegistered<NotificationsController>()) {
+      Get.put(NotificationsController(), permanent: true);
+    }
   }
 }

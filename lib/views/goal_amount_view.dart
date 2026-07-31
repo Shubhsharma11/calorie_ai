@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../controllers/settings_controller.dart';
+import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_snackbar.dart';
 import '../core/body_measurement_units.dart';
@@ -41,6 +42,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
   DateTime? _pickedTargetDate;
   bool _customTimeframe = false;
   String? _errorText;
+  bool _isSaving = false;
 
   static const double _minChangeKg = 0.5;
   static const double _maxChangeKg = 50;
@@ -56,6 +58,14 @@ class _GoalAmountViewState extends State<GoalAmountView> {
   GoalType get _goal => _user.user.goal ?? GoalType.loseWeight;
 
   bool get _isLose => _goal == GoalType.loseWeight;
+
+  double get _currentKg {
+    if (Get.isRegistered<TrackerController>()) {
+      final kg = Get.find<TrackerController>().currentWeight.value;
+      if (kg > 0) return kg;
+    }
+    return _user.user.weightKg?.toDouble() ?? 0;
+  }
 
   @override
   void initState() {
@@ -78,7 +88,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
 
   void _bootstrapFromUser() {
     final u = _user.user;
-    final currentKg = u.weightKg.toDouble();
+    final currentKg = _currentKg;
     final diffKg = (u.goalWeightKg - currentKg).abs();
     _amountDisplay = diffKg >= _minChangeKg
         ? _fromKg(diffKg.clamp(_minChangeKg, _maxChangeKg))
@@ -154,9 +164,9 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     if (RouteArgs.isEditingFromProfile) return;
 
     final amountKg = _amountKg;
-    final current = _user.user.weightKg.toDouble();
+    final current = _currentKg;
     final target = _isLose ? current - amountKg : current + amountKg;
-    _user.user.manualGoalWeightKg = target.clamp(_minWeightKg, _maxWeightKg);
+    _user.user.pinGoalWeight(target.clamp(_minWeightKg, _maxWeightKg));
     _user.user.targetDate = _targetDate;
     _user.scheduleOnboardingDraftSave();
   }
@@ -226,7 +236,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     }
 
     final amountKg = _amountKg;
-    final current = _user.user.weightKg.toDouble();
+    final current = _currentKg;
     if (_isLose) {
       final maxLossKg = current - _minWeightKg;
       if (maxLossKg < _minChangeKg) {
@@ -259,11 +269,13 @@ class _GoalAmountViewState extends State<GoalAmountView> {
   }
 
   Future<void> _onContinue({required bool fromProfile}) async {
+    if (_isSaving) return;
+
     final error = _validate();
     setState(() => _errorText = error);
     if (error != null) return;
 
-    final current = _user.user.weightKg.toDouble();
+    final current = _currentKg;
     final target = _isLose ? current - _amountKg : current + _amountKg;
     _user.setGoalWeight(target, manual: true);
     _user.user.targetDate = _targetDate;
@@ -275,7 +287,10 @@ class _GoalAmountViewState extends State<GoalAmountView> {
         AppSnackbar.info('No changes to save.', title: 'Nothing changed');
         return;
       }
+      setState(() => _isSaving = true);
       final saveError = await _user.patchOnboarding(patch);
+      if (!mounted) return;
+      setState(() => _isSaving = false);
       if (saveError != null) {
         AppSnackbar.error(saveError, title: 'Save failed');
         return;
@@ -429,7 +444,10 @@ class _GoalAmountViewState extends State<GoalAmountView> {
           ),
           action: PrimaryButton(
             label: fromProfile ? 'Save' : 'Continue',
-            onPressed: () => _onContinue(fromProfile: fromProfile),
+            isLoading: _isSaving,
+            onPressed: _isSaving
+                ? null
+                : () => _onContinue(fromProfile: fromProfile),
           ),
         ),
       ),
@@ -518,9 +536,9 @@ class _SectionHeader extends StatelessWidget {
     return Text(
       label,
       style: TextStyle(
-        fontSize: r.scale(14, tablet: 15),
-        fontWeight: FontWeight.w600,
-        color: AppColors.textSecondary,
+        fontSize: r.scale(18, tablet: 20, desktop: 21),
+        fontWeight: FontWeight.w800,
+        color: AppColors.textPrimary,
       ),
     );
   }

@@ -41,31 +41,66 @@ class FoodApiService {
   }
 
   Future<FoodItem?> lookupBarcode(String barcode) async {
+    final cleaned = barcode.trim();
+    if (cleaned.isEmpty) return null;
+
     final response = await _apiClient.get(
-      ApiEndpoints.openFoodFactsProduct(barcode),
+      ApiEndpoints.openFoodFactsProduct(cleaned),
       baseUrl: ApiEndpoints.openFoodFactsBaseUrl,
+      headers: const {
+        // Open Food Facts asks clients to identify themselves.
+        'User-Agent': 'FitBuddyAI/1.0 (Flutter; https://fitbuddyai.app)',
+        'Accept': 'application/json',
+      },
     );
     if (response.statusCode != 200) return null;
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    if (data['status'] != 1) return null;
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) return null;
 
-    final product = data['product'] as Map<String, dynamic>?;
-    if (product == null) return null;
+    final status = decoded['status'];
+    final found = status == 1 || status == true || status == '1';
+    if (!found) return null;
+
+    final product = decoded['product'];
+    if (product is! Map<String, dynamic>) return null;
 
     return _parseProduct(product);
   }
 
   FoodItem _parseProduct(Map<String, dynamic> item) {
-    final nutriments = item['nutriments'] as Map<String, dynamic>? ?? {};
- 
+    final nutriments = item['nutriments'] is Map
+        ? Map<String, dynamic>.from(item['nutriments'] as Map)
+        : <String, dynamic>{};
+
+    final name = (item['product_name'] as String?)?.trim().isNotEmpty == true
+        ? (item['product_name'] as String).trim()
+        : (item['product_name_en'] as String?)?.trim().isNotEmpty == true
+            ? (item['product_name_en'] as String).trim()
+            : 'Unknown product';
+
     return FoodItem(
-      name: (item['product_name'] as String?)?.trim() ?? 'Unknown',
-      caloriesPer100g: (nutriments['energy-kcal_100g'] as num?)?.round() ?? 0,
-      protein: (nutriments['proteins_100g'] as num?)?.toDouble() ?? 0,
-      carbs: (nutriments['carbohydrates_100g'] as num?)?.toDouble() ?? 0,
-      fat: (nutriments['fat_100g'] as num?)?.toDouble() ?? 0,
+      name: name,
+      caloriesPer100g: _readKcal(nutriments),
+      protein: _asDouble(nutriments['proteins_100g']),
+      carbs: _asDouble(nutriments['carbohydrates_100g']),
+      fat: _asDouble(nutriments['fat_100g']),
       emoji: '🍱',
     );
+  }
+
+  int _readKcal(Map<String, dynamic> nutriments) {
+    final direct = nutriments['energy-kcal_100g'] ?? nutriments['energy-kcal'];
+    if (direct is num) return direct.round();
+
+    final kj = nutriments['energy-kj_100g'] ?? nutriments['energy_100g'];
+    if (kj is num) return (kj / 4.184).round();
+    return 0;
+  }
+
+  double _asDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0;
+    return 0;
   }
 }

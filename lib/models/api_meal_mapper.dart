@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'food_item.dart';
 import 'meal_entry.dart';
 import 'meal_type.dart';
@@ -45,7 +47,13 @@ abstract final class ApiMealMapper {
       'fat': _roundMacro(entry.fat),
       'mealTime': entry.meal.toLowerCase(),
       'quantity': entry.grams,
+      'date': MealEntry.dateToKey(entry.date),
     };
+  }
+
+  /// Body for `PATCH /meals/:id` — same fields as create, without forcing id.
+  static Map<String, dynamic> toUpdateRequestBody(MealEntry entry) {
+    return toCreateRequestBody(entry);
   }
 
   static MealEntry mergeCreateResponse(
@@ -53,9 +61,19 @@ abstract final class ApiMealMapper {
     required MealEntry source,
   }) {
     final data = _unwrapData(json);
-    final parsed = entryFromApiJson(data, fallbackDate: source.date);
-    if (parsed != null) {
+    final nested = _firstMap(data, const ['meal', 'entry', 'item', 'foodLog']);
+    final candidates = <Map<String, dynamic>>[
+      data,
+      if (nested != null) nested,
+      json,
+    ];
+
+    for (final map in candidates) {
+      final parsed = entryFromApiJson(map, fallbackDate: source.date);
+      if (parsed == null) continue;
+      final id = _readId(map);
       return parsed.copyWith(
+        id: (id != null && id.isNotEmpty) ? id : parsed.id,
         food: parsed.food.name == 'Food' ? source.food : parsed.food,
         grams: parsed.grams > 0 ? parsed.grams : source.grams,
         meal: parsed.meal,
@@ -63,11 +81,18 @@ abstract final class ApiMealMapper {
       );
     }
 
-    final id = _readId(data);
-    if (id != null && id.isNotEmpty) {
-      return source.copyWith(id: id);
+    for (final map in candidates) {
+      final id = _readId(map);
+      if (id != null && id.isNotEmpty) {
+        return source.copyWith(id: id);
+      }
     }
 
+    debugPrint(
+      'ApiMealMapper: create response had no meal id; keys=${json.keys.toList()} '
+      'dataKeys=${data.keys.toList()}',
+    );
+    // Keep source only as a temporary draft; caller must refresh from GET.
     return source;
   }
 
@@ -105,8 +130,18 @@ abstract final class ApiMealMapper {
         fallbackDate ??
         DateTime.now();
 
+    final parsedId = _readId(json);
+    if (parsedId == null || parsedId.isEmpty) {
+      // Never invent a local epoch id for API meals — that breaks DELETE.
+      debugPrint(
+        'ApiMealMapper: skipping meal missing server id; '
+        'keys=${json.keys.toList()} name=${json['name'] ?? json['foodName']}',
+      );
+      return null;
+    }
+
     return MealEntry(
-      id: _readId(json),
+      id: parsedId,
       date: date,
       food: food,
       grams: grams,
@@ -277,11 +312,28 @@ abstract final class ApiMealMapper {
   }
 
   static String? _readId(Map<String, dynamic> json) {
-    for (final key in const ['id', '_id', 'mealId', 'meal_id']) {
+    for (final key in const [
+      'id',
+      '_id',
+      'mealId',
+      'meal_id',
+      'uuid',
+      'UID',
+      'uid',
+    ]) {
       final value = json[key];
       if (value == null) continue;
+      if (value is Map) {
+        // Mongo extended JSON: { "$oid": "..." }
+        final oid = value[r'$oid'] ?? value['oid'] ?? value['id'];
+        if (oid != null) {
+          final id = oid.toString().trim();
+          if (id.isNotEmpty) return id;
+        }
+        continue;
+      }
       final id = value.toString().trim();
-      if (id.isNotEmpty) return id;
+      if (id.isNotEmpty && id != 'null') return id;
     }
     return null;
   }

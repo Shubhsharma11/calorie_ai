@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
-/// Exercise / calories-burn artwork from [training.svg].
+/// Exercise / calories-burn icon.
 class TrainingIcon extends StatelessWidget {
-  const TrainingIcon({super.key, this.size = 22});
-
-  static const asset = 'assets/image/training.svg';
+  const TrainingIcon({super.key, this.size = 22, this.color});
 
   final double size;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: SvgPicture.asset(asset, fit: BoxFit.contain),
+    return Icon(
+      Icons.local_fire_department_rounded,
+      size: size,
+      color: color ?? const Color(0xFFFF9500),
     );
   }
 }

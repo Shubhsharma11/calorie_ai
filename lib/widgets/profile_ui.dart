@@ -232,15 +232,21 @@ class ProfileGoalProgressCard extends StatelessWidget {
   const ProfileGoalProgressCard({
     super.key,
     required this.progress,
+    this.goalSet = true,
+    this.detail,
   });
 
   final double progress;
+  final bool goalSet;
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
     final r = context.responsive;
     final progressPct = (progress * 100).round();
+    final label = goalSet ? '$progressPct%' : '—';
+    final barValue = goalSet ? progress : 0.0;
 
     return Container(
       decoration: BoxDecoration(
@@ -266,7 +272,7 @@ class ProfileGoalProgressCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '$progressPct%',
+                label,
                 style: TextStyle(
                   fontSize: r.scale(16),
                   fontWeight: FontWeight.w700,
@@ -275,11 +281,21 @@ class ProfileGoalProgressCard extends StatelessWidget {
               ),
             ],
           ),
+          if (detail != null) ...[
+            SizedBox(height: r.scale(4)),
+            Text(
+              detail!,
+              style: TextStyle(
+                fontSize: r.scale(12),
+                color: AppColors.textSecondaryOf(context),
+              ),
+            ),
+          ],
           SizedBox(height: r.scale(12)),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
-              value: progress,
+              value: barValue,
               minHeight: r.scale(8),
               backgroundColor: AppColors.borderOf(context),
               color: AppColors.primary,

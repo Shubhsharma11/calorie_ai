@@ -118,6 +118,8 @@ class OnboardingRequestModel {
     required this.goalWeightUnit,
     required this.goalTimeline,
     this.goalTimelineCustomDate,
+    this.startWeight,
+    this.startWeightUnit,
   });
 
   final OnboardingPersonalDetails personalDetails;
@@ -128,6 +130,8 @@ class OnboardingRequestModel {
   final String goalWeightUnit;
   final String goalTimeline;
   final String? goalTimelineCustomDate;
+  final num? startWeight;
+  final String? startWeightUnit;
 
   OnboardingHealthProblem? get primaryHealthProblem =>
       healthProblems.isEmpty ? null : healthProblems.first;
@@ -143,6 +147,8 @@ class OnboardingRequestModel {
       'goalTimeline': goalTimeline,
       if (goalTimelineCustomDate != null)
         'goalTimelineCustomDate': goalTimelineCustomDate,
+      if (startWeight != null) 'startWeight': startWeight,
+      if (startWeightUnit != null) 'startWeightUnit': startWeightUnit,
     };
   }
 
@@ -164,12 +170,26 @@ class OnboardingRequestModel {
       throw const OnboardingPayloadException('Activity level is not set.');
     }
 
+    final age = user.age;
+    final gender = user.gender;
+    final heightCm = user.heightCm;
+    final weightKg = user.weightKg;
+    if (age == null ||
+        gender == null ||
+        gender.trim().isEmpty ||
+        heightCm == null ||
+        weightKg == null) {
+      throw const OnboardingPayloadException(
+        'Personal details are incomplete.',
+      );
+    }
+
     return OnboardingRequestModel(
       personalDetails: OnboardingPersonalDetails(
-        age: user.age,
-        gender: user.gender,
-        heightCm: user.heightCm,
-        weight: user.weightKg,
+        age: age,
+        gender: gender,
+        heightCm: heightCm,
+        weight: weightKg,
         weightUnit: 'kg',
       ),
       goalType: goal.apiValue,
@@ -181,6 +201,10 @@ class OnboardingRequestModel {
       goalWeightUnit: 'kg',
       goalTimeline: user.goalTimeline,
       goalTimelineCustomDate: user.goalTimelineCustomDate,
+      startWeight: user.goalStartWeightKg != null
+          ? _roundGoalWeight(user.goalStartWeightKg!)
+          : _roundGoalWeight(weightKg.toDouble()),
+      startWeightUnit: 'kg',
     );
   }
 
@@ -206,6 +230,29 @@ class OnboardingPatchModel {
   final Map<String, dynamic>? extraFields;
 
   bool get isEmpty => toJson().isEmpty;
+
+  /// True when this patch changes goal type / target weight / timeline.
+  bool get touchesGoalFields {
+    if (goal != null) return true;
+    final extras = extraFields;
+    if (extras == null || extras.isEmpty) return false;
+    const goalKeys = {
+      'goalWeight',
+      'targetWeight',
+      'goal_weight',
+      'target_weight',
+      'isGoalWeightManual',
+      'is_goal_weight_manual',
+      'targetDate',
+      'target_date',
+      'goalTimeline',
+      'goal_timeline',
+      'goalTimelineCustomDate',
+      'startWeight',
+      'goalStartWeight',
+    };
+    return extras.keys.any(goalKeys.contains);
+  }
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -251,12 +298,24 @@ class OnboardingPatchModel {
   }
 
   factory OnboardingPatchModel.personalDetails(UserModel user) {
+    final age = user.age;
+    final gender = user.gender;
+    final heightCm = user.heightCm;
+    final weightKg = user.weightKg;
+    if (age == null ||
+        gender == null ||
+        gender.trim().isEmpty ||
+        heightCm == null ||
+        weightKg == null) {
+      return const OnboardingPatchModel._();
+    }
+
     return OnboardingPatchModel._(
       personalDetails: OnboardingPersonalDetails(
-        age: user.age,
-        gender: user.gender,
-        heightCm: user.heightCm,
-        weight: user.weightKg,
+        age: age,
+        gender: gender,
+        heightCm: heightCm,
+        weight: weightKg,
         weightUnit: 'kg',
       ).toJson(),
     );
@@ -300,12 +359,19 @@ class OnboardingPatchModel {
     double goalWeightKg, {
     String? goalTimeline,
     String? goalTimelineCustomDate,
+    double? startWeightKg,
+    GoalType? goalType,
   }) {
     return OnboardingPatchModel._(
+      goal: goalType?.apiValue,
       extraFields: {
         'goalWeight': goalWeightKg,
         'goalWeightUnit': 'kg',
         'isGoalWeightManual': true,
+        if (startWeightKg != null) ...{
+          'startWeight': startWeightKg,
+          'startWeightUnit': 'kg',
+        },
         if (goalTimeline != null && goalTimeline.isNotEmpty)
           'goalTimeline': goalTimeline,
         if (goalTimelineCustomDate != null && goalTimelineCustomDate.isNotEmpty)
@@ -342,6 +408,10 @@ class OnboardingPatchModel {
     if ((user.goalWeightKg - baseline.goalWeightKg).abs() > 0.01) {
       extras['goalWeight'] = user.goalWeightKg;
       extras['goalWeightUnit'] = 'kg';
+      if (user.goalStartWeightKg != null) {
+        extras['startWeight'] = user.goalStartWeightKg;
+        extras['startWeightUnit'] = 'kg';
+      }
     }
     if (user.isGoalWeightManual != baseline.isGoalWeightManual) {
       extras['isGoalWeightManual'] = user.isGoalWeightManual;

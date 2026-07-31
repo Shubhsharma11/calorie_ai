@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
 import '../controllers/dashboard_controller.dart';
@@ -6,6 +7,7 @@ import '../controllers/food_controller.dart';
 // import '../controllers/streak_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
+import '../core/app_coach_marks.dart';
 import '../core/dashboard_actions.dart';
 import '../core/macro_emojis.dart';
 import '../core/responsive.dart';
@@ -39,17 +41,22 @@ class DashboardView extends GetView<DashboardController> {
       color: AppColors.primary,
       child: ResponsivePage(
         scrollable: true,
+        scrollController: controller.homeScrollController,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            DashboardHeader(
-              firstName: user.firstName,
-              showNotificationBadge: DashboardActions.hasNotificationBadge,
-              onSearch: DashboardActions.openFoodSearch,
-              onCalendar: () => DashboardActions.openCalendar(context),
-              onNotifications: () =>
-                  DashboardActions.openNotifications(context),
-            ),
+            Obx(() {
+              final hasBadge = DashboardActions.hasNotificationBadge;
+              return DashboardHeader(
+                firstName: user.firstName,
+                showNotificationBadge: hasBadge,
+                onSearch: DashboardActions.openFoodSearch,
+                onCalendar: () => DashboardActions.openCalendar(context),
+                onNotifications: () =>
+                    DashboardActions.openNotifications(context),
+                searchShowcaseKey: AppCoachMarks.searchKey,
+              );
+            }),
             Obx(() {
               food.selectedLogDate.value;
               if (controller.isViewingToday) {
@@ -70,12 +77,10 @@ class DashboardView extends GetView<DashboardController> {
             // const _StreakSection(),
             // SizedBox(height: r.scale(20)),
             const _CalorieSection(),
-            SizedBox(height: r.scale(20)),
-            const _MacroSection(),
             SizedBox(height: r.scale(12)),
-            const WaterIntakeBanner(),
+            WaterIntakeBanner(coachKey: AppCoachMarks.waterKey),
             SizedBox(height: r.scale(12)),
-            const WeightTrackerBanner(),
+            WeightTrackerBanner(coachKey: AppCoachMarks.weightKey),
             SizedBox(height: r.scale(28)),
             const _SecondarySection(),
           ],
@@ -109,6 +114,7 @@ class _CalorieSection extends GetView<DashboardController> {
   @override
   Widget build(BuildContext context) {
     final food = Get.find<FoodController>();
+    final user = Get.find<UserController>().user;
 
     return Obx(() {
       food.entriesRevision.value;
@@ -117,6 +123,7 @@ class _CalorieSection extends GetView<DashboardController> {
         Get.find<TrackerController>().activityRevision.value;
       }
       Get.find<UserController>().calorieGoalRevision.value;
+      final nutrition = controller.viewingNutrition;
 
       return CalorieOverviewCard(
         eaten: controller.foodCalories,
@@ -129,29 +136,8 @@ class _CalorieSection extends GetView<DashboardController> {
         netOver: controller.isNetOverCalorieGoal,
         netRemaining: controller.netCaloriesRemaining,
         netCaloriesOver: controller.netCaloriesOver,
-        onAddFood: () => Get.toNamed(AppRoutes.addFood),
-        onViewSummary: () => Get.toNamed(AppRoutes.dailySummary),
-        onCaloriesBurn: () => Get.toNamed(AppRoutes.caloriesBurn),
-      );
-    });
-  }
-}
-
-class _MacroSection extends GetView<DashboardController> {
-  const _MacroSection();
-
-  @override
-  Widget build(BuildContext context) {
-    final food = Get.find<FoodController>();
-    final user = Get.find<UserController>().user;
-
-    return Obx(() {
-      food.entriesRevision.value;
-      food.selectedLogDate.value;
-      Get.find<UserController>().calorieGoalRevision.value;
-      final nutrition = controller.viewingNutrition;
-
-      return MacroNutritionCard(
+        showcaseKey: AppCoachMarks.calorieKey,
+        addFoodShowcaseKey: AppCoachMarks.addFoodKey,
         macros: [
           MacroNutritionData(
             label: 'Carbs',
@@ -187,6 +173,9 @@ class _MacroSection extends GetView<DashboardController> {
             lottieScale: 0.95,
           ),
         ],
+        onAddFood: () => Get.toNamed(AppRoutes.addFood),
+        onViewSummary: () => Get.toNamed(AppRoutes.dailySummary),
+        onCaloriesBurn: () => Get.toNamed(AppRoutes.caloriesBurn),
       );
     });
   }
@@ -202,12 +191,17 @@ class _SecondarySection extends GetView<DashboardController> {
     return Obx(() {
       food.entriesRevision.value;
       food.selectedLogDate.value;
+      Get.find<UserController>().calorieGoalRevision.value;
+      final user = Get.find<UserController>().user;
       final goal = controller.calorieGoal;
       final weeklyMetric = controller.weeklyMetric.value;
 
       return _SecondaryContent(
         food: food,
         goal: goal,
+        proteinGoal: user.proteinGoalG,
+        carbsGoal: user.carbsGoalG,
+        fatGoal: user.fatGoalG,
         weeklyMetric: weeklyMetric,
         weeklyNutrition: controller.weeklyNutrition,
         onMetricChanged: controller.setWeeklyMetric,
@@ -222,6 +216,9 @@ class _SecondaryContent extends StatelessWidget {
   const _SecondaryContent({
     required this.food,
     required this.goal,
+    required this.proteinGoal,
+    required this.carbsGoal,
+    required this.fatGoal,
     required this.weeklyMetric,
     required this.weeklyNutrition,
     required this.onMetricChanged,
@@ -231,6 +228,9 @@ class _SecondaryContent extends StatelessWidget {
 
   final FoodController food;
   final int goal;
+  final int proteinGoal;
+  final int carbsGoal;
+  final int fatGoal;
   final NutritionTrendMetric weeklyMetric;
   final List<DailyNutrition> weeklyNutrition;
   final ValueChanged<NutritionTrendMetric> onMetricChanged;
@@ -240,33 +240,89 @@ class _SecondaryContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final sectionTitle = TextStyle(
-      fontSize: r.scale(18, tablet: 19, desktop: 20),
-      fontWeight: FontWeight.w600,
-    );
     final meals = food.selectedDateMeals;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Weekly Progress', style: sectionTitle),
-        SizedBox(height: r.scale(12)),
-        WeeklyProgressChart(
-          days: weeklyNutrition,
-          metric: weeklyMetric,
-          calorieGoal: goal,
-          onMetricChanged: onMetricChanged,
-          chartHeight: r.scale(140, tablet: 160, desktop: 180),
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: AppColors.border.withValues(alpha: 0.35),
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              r.scale(18),
+              r.scale(14),
+              r.scale(18),
+              r.scale(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: r.scale(45),
+                      height: r.scale(45),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(r.scale(5)),
+                        child: SvgPicture.asset(
+                          'assets/image/bar.svg',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: r.scale(12)),
+                    Expanded(
+                      child: Text(
+                        'Weekly Progress',
+                        style: TextStyle(
+                          fontSize: r.scale(17),
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: r.scale(14)),
+                WeeklyProgressChart(
+                  days: weeklyNutrition,
+                  metric: weeklyMetric,
+                  calorieGoal: goal,
+                  proteinGoal: proteinGoal,
+                  carbsGoal: carbsGoal,
+                  fatGoal: fatGoal,
+                  onMetricChanged: onMetricChanged,
+                  chartHeight: r.scale(140, tablet: 160, desktop: 180),
+                ),
+              ],
+            ),
+          ),
         ),
         SizedBox(height: r.scale(28)),
-        Text(viewingToday ? 'Today' : dateLabel, style: sectionTitle),
+        Text(
+          viewingToday ? 'Today' : dateLabel,
+          style: TextStyle(
+            fontSize: r.scale(18, tablet: 19, desktop: 20),
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
         SizedBox(height: r.scale(12)),
         if (meals.isEmpty)
-          _MealPreview(
-            meal: 'Meals',
-            hint: viewingToday
-                ? 'Tap "Add your first meal" above or use + Add Food'
-                : 'Nothing was logged this day',
+          _TodayEmptyState(
+            viewingToday: viewingToday,
+            onAddFood: () => Get.toNamed(AppRoutes.addFood),
           )
         else
           Column(
@@ -280,15 +336,6 @@ class _SecondaryContent extends StatelessWidget {
                 )
                 .toList(),
           ),
-        SizedBox(height: r.scale(12)),
-        TextButton.icon(
-          onPressed: () => Get.toNamed(AppRoutes.addFood),
-          icon: Icon(Icons.add, color: AppColors.primary),
-          label: Text(
-            'Add Food',
-            style: TextStyle(color: AppColors.primary),
-          ),
-        ),
       ],
     );
   }
@@ -308,8 +355,11 @@ class _MealPreview extends StatelessWidget {
       margin: EdgeInsets.only(bottom: r.scale(10)),
       padding: EdgeInsets.all(r.scale(16)),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppColors.border.withValues(alpha: 0.35),
+        ),
       ),
       child: Row(
         children: [
@@ -319,8 +369,17 @@ class _MealPreview extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(meal, style: TextStyle(fontWeight: FontWeight.w600)),
-                Text(hint, style: TextStyle(color: AppColors.textSecondary)),
+                Text(
+                  meal,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  hint,
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
               ],
             ),
           ),
@@ -329,3 +388,107 @@ class _MealPreview extends StatelessWidget {
     );
   }
 }
+
+class _TodayEmptyState extends StatelessWidget {
+  const _TodayEmptyState({
+    required this.viewingToday,
+    required this.onAddFood,
+  });
+
+  final bool viewingToday;
+  final VoidCallback onAddFood;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Container(
+      padding: EdgeInsets.all(r.scale(18)),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.border.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: r.scale(42),
+                height: r.scale(42),
+                decoration: BoxDecoration(
+                  color: AppColors.selectionFill,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.restaurant_menu_rounded,
+                  color: AppColors.primary,
+                  size: r.scale(22),
+                ),
+              ),
+              SizedBox(width: r.scale(12)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Meals',
+                      style: TextStyle(
+                        fontSize: r.scale(18),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: r.scale(2)),
+                    Text(
+                      viewingToday
+                          ? 'Add Food to log your first meal today.'
+                          : 'Nothing was logged this day.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: r.scale(13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (viewingToday) ...[
+            SizedBox(height: r.scale(16)),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onAddFood,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.onPrimary,
+                  elevation: 0,
+                  padding: EdgeInsets.symmetric(
+                    vertical: r.scale(12),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                icon: Icon(Icons.add_rounded, size: r.scale(18)),
+                label: Text(
+                  'Add Food',
+                  style: TextStyle(
+                    fontSize: r.scale(15),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+

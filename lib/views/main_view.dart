@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/main_controller.dart';
+import '../controllers/dashboard_controller.dart';
+import '../controllers/user_controller.dart';
+import '../core/app_coach_marks.dart';
 import '../core/app_route_observer.dart';
 import '../core/responsive.dart';
+import '../services/local_storage_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/floating_bottom_nav_bar.dart';
 import 'analytics_view.dart';
@@ -12,9 +16,14 @@ import 'dashboard_view.dart';
 import 'profile_view.dart';
 import 'scan_view.dart';
 
-class MainView extends GetView<MainController> {
+class MainView extends StatefulWidget {
   const MainView({super.key});
 
+  @override
+  State<MainView> createState() => _MainViewState();
+}
+
+class _MainViewState extends State<MainView> {
   static const _tabs = [
     (icon: Icons.home, label: 'Home'),
     (icon: Icons.menu_book, label: 'Diary'),
@@ -31,13 +40,40 @@ class MainView extends GetView<MainController> {
     ProfileView(),
   ];
 
+  final _storage = LocalStorageService();
+  bool _markedCoachMarksSeen = false;
+
+  LocalStorageService get _coachStorage {
+    final id = Get.isRegistered<UserController>()
+        ? Get.find<UserController>().userId.trim()
+        : '';
+    if (id.isEmpty) return _storage;
+    return LocalStorageService(null, id);
+  }
+
+  void _onCoachMarksFinished() {
+    if (_markedCoachMarksSeen) return;
+    _markedCoachMarksSeen = true;
+    if (Get.isRegistered<MainController>()) {
+      Get.find<MainController>().resetToHomeTab();
+    }
+    if (Get.isRegistered<DashboardController>()) {
+      // After overlay teardown, land at the top of Home.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Get.find<DashboardController>().scrollHomeToTop();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
     final r = context.responsive;
+    final controller = Get.find<MainController>();
 
+    late final Widget shell;
     if (r.isWide) {
-      return Scaffold(
+      shell = Scaffold(
         body: SafeArea(
           child: Row(
             children: [
@@ -68,20 +104,24 @@ class MainView extends GetView<MainController> {
           ),
         ),
       );
-    }
-
-    return Scaffold(
-      body: const SafeArea(
-        bottom: false,
-        child: _TabStack(pages: _pages),
-      ),
-      bottomNavigationBar: Obx(
-        () => FloatingBottomNavBar(
-          selectedIndex: controller.tabIndex.value,
+    } else {
+      shell = Scaffold(
+        body: const SafeArea(
+          bottom: false,
+          child: _TabStack(pages: _pages),
+        ),
+        bottomNavigationBar: FloatingBottomNavBar(
           onTap: controller.changeTab,
           items: _tabs,
+          coachKeys: AppCoachMarks.navKeys,
         ),
-      ),
+      );
+    }
+
+    return CoachMarkHost(
+      storage: _coachStorage,
+      onFinished: _onCoachMarksFinished,
+      child: shell,
     );
   }
 }

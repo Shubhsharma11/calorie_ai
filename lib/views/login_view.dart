@@ -25,7 +25,7 @@ class LoginView extends GetView<AuthController> {
         title: const Text('Terms of Service'),
         content: const SingleChildScrollView(
           child: Text(
-            'By using Fit Buddy AI, you agree to track nutrition and health '
+            'By using FitBuddy AI, you agree to track nutrition and health '
             'data responsibly. Do not use this app as a substitute for '
             'professional medical advice. You are responsible for the '
             'accuracy of the information you enter.',
@@ -49,7 +49,7 @@ class LoginView extends GetView<AuthController> {
         title: const Text('Privacy Policy'),
         content: const SingleChildScrollView(
           child: Text(
-            'Fit Buddy AI stores your profile, goals, and food logs on your '
+            'FitBuddy AI stores your profile, goals, and food logs on your '
             'device to personalize your experience. We do not sell your '
             'personal data. You can update or clear your information from '
             'the app settings at any time.',
@@ -74,7 +74,7 @@ class LoginView extends GetView<AuthController> {
     final horizontal = r.scale(24, tablet: 32);
     final compact = r.height < 720;
 
-    final logoSize = r.scale(compact ? 52 : 58, tablet: 64);
+    final logoSize = r.scale(compact ? 60 : 68, tablet: 76);
     final buttonHeight = r.scale(compact ? 52 : 56, tablet: 58);
     final buttonGap = r.scale(compact ? 10 : 12);
     final sectionGap = r.scale(compact ? 20 : 24);
@@ -289,7 +289,7 @@ class _BrandHeader extends StatelessWidget {
                 letterSpacing: -0.2,
               ),
               children: const [
-                TextSpan(text: 'Calorie '),
+                TextSpan(text: 'FitBuddy '),
                 TextSpan(
                   text: 'AI',
                   style: TextStyle(color: AppColors.primary),
@@ -320,7 +320,7 @@ class _AppLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconSize = size * 0.58;
+    final iconSize = size * 0.84;
 
     return Container(
       width: size,

@@ -16,7 +16,7 @@ class WaterProgressChart extends StatelessWidget {
   final int waterGoalMl;
   final double chartHeight;
 
-  static const Color _waterBlue = Color(0xFF007AFF);
+  static const Color _waterBlue = Color(0xFF4AA3DF);
   static const double _dayLabelHeight = 22;
   static const double _valueLabelHeight = 18;
 
@@ -47,13 +47,14 @@ class WaterProgressChart extends StatelessWidget {
                 child: Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [
-                    // Horizontal grid lines
+                    // Horizontal grid lines should align to the bar plot area,
+                    // not the reserved value-label strip above it.
                     ...List.generate(3, (i) {
                       final t = (i + 1) / 4;
                       return Positioned(
                         left: 0,
                         right: 0,
-                        bottom: barAreaHeight * t,
+                        bottom: _valueLabelHeight + (plotHeight * t),
                         child: Container(
                           height: 1,
                           color: AppColors.border.withValues(alpha: 0.55),
@@ -239,14 +240,14 @@ class WaterProgressChart extends StatelessWidget {
                   ),
                 ),
               ),
-              Flexible(
+              Flexible( 
                 child: Text(
                   'On goal: $daysOnGoal/${days.length} days',
                   textAlign: TextAlign.end,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 13, 
                     fontWeight:
-                        daysOnGoal > 0 ? FontWeight.w700 : FontWeight.w500,
+                        daysOnGoal > 0 ? FontWeight.w700 : FontWeight.w500, 
                     color: daysOnGoal > 0
                         ? AppColors.primary
                         : AppColors.textSecondary,
@@ -369,6 +370,8 @@ class _GoalStatusCard extends StatelessWidget {
                           : 'Daily goal achieved!'
                       : '$remainingGlasses glass'
                           '${remainingGlasses == 1 ? '' : 'es'} to goal',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: met ? AppColors.primary : AppColors.textPrimary,
@@ -377,6 +380,8 @@ class _GoalStatusCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '$glasses of $goalGlasses glasses · ${formatWaterMl(intake.totalMl)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,

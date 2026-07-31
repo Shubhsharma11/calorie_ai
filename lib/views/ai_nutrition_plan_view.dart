@@ -157,7 +157,7 @@ class _AiNutritionPlanViewState extends State<AiNutritionPlanView> {
   }) {
     final currentKg = Get.isRegistered<TrackerController>()
         ? Get.find<TrackerController>().currentWeight.value
-        : user.weightKg.toDouble();
+        : user.weightKg?.toDouble() ?? 0;
     final targetKg = planTargetKg ?? user.goalWeightKg;
     final deltaKg = targetKg - currentKg;
 

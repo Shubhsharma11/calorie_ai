@@ -7,7 +7,6 @@ import 'package:calorie_ai/models/weight_entry.dart';
 import 'package:calorie_ai/repositories/auth_repository.dart';
 import 'package:calorie_ai/repositories/weight_repository.dart';
 import 'package:calorie_ai/services/api_client.dart';
-import 'package:calorie_ai/services/local_storage_service.dart';
 import 'package:calorie_ai/services/weight_api_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
@@ -16,7 +15,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeAuthRepository extends AuthRepository {
-  _FakeAuthRepository(this._session, {super.storage});
+  _FakeAuthRepository(this._session);
 
   final Map<String, dynamic> _session;
 
@@ -45,7 +44,6 @@ void main() {
         'refreshToken': 'refresh-token',
         'backendResponse': {'success': true},
       }),
-      storage: LocalStorageService(),
     );
 
     await controller.localProfileReady;
@@ -75,7 +73,6 @@ void main() {
           },
         },
       }),
-      storage: LocalStorageService(),
     );
 
     await controller.localProfileReady;
@@ -90,7 +87,6 @@ void main() {
   test('resolveAccessTokenWithDiagnostics reports storage failure', () async {
     final controller = UserController(
       authRepository: _FakeAuthRepository({}),
-      storage: LocalStorageService(),
     );
 
     await controller.localProfileReady;
@@ -156,7 +152,6 @@ void main() {
         'refreshToken': 'refresh-token',
         'backendResponse': {'success': true},
       }),
-      storage: LocalStorageService(),
     );
     Get.put(userController, permanent: true);
     await userController.localProfileReady;
@@ -166,7 +161,6 @@ void main() {
     );
     final tracker = TrackerController(
       weightRepository: weightRepository,
-      storage: LocalStorageService(),
     );
 
     final outcome = await tracker.logCurrentWeight(
@@ -236,7 +230,6 @@ void main() {
         'refreshToken': 'refresh-token',
         'backendResponse': {'success': true},
       }),
-      storage: LocalStorageService(),
     );
     Get.put(userController, permanent: true);
     await userController.localProfileReady;
@@ -245,7 +238,6 @@ void main() {
       weightRepository: WeightRepository(
         apiService: WeightApiService(apiClient: ApiClient(client: client)),
       ),
-      storage: LocalStorageService(),
     );
 
     final outcome = await tracker.logCurrentWeight(
@@ -299,7 +291,6 @@ void main() {
         'refreshToken': 'refresh-token',
         'backendResponse': {'success': true},
       }),
-      storage: LocalStorageService(),
     );
     Get.put(userController, permanent: true);
     await userController.localProfileReady;
@@ -309,7 +300,6 @@ void main() {
       weightRepository: WeightRepository(
         apiService: WeightApiService(apiClient: ApiClient(client: client)),
       ),
-      storage: LocalStorageService(),
     );
 
     await tracker.refreshWeightFromApi();
@@ -361,7 +351,6 @@ void main() {
         'refreshToken': 'refresh-token',
         'backendResponse': {'success': true},
       }),
-      storage: LocalStorageService(),
     );
     Get.put(userController, permanent: true);
     await userController.localProfileReady;
@@ -370,7 +359,6 @@ void main() {
       weightRepository: WeightRepository(
         apiService: WeightApiService(apiClient: ApiClient(client: client)),
       ),
-      storage: LocalStorageService(),
     );
 
     tracker.weightEntries.assignAll([
