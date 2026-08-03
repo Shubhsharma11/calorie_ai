@@ -1,11 +1,10 @@
 abstract final class ApiEndpoints {
 
   
-    // static const String baseUrl = 'https://fitbuddyai.srhsoftwares.com';
+    static const String baseUrl = 'https://fitbuddyai.srhsoftwares.com';
 
 
-static const String baseUrl = 'https://belts-economies-bra-graphical.trycloudflare.com';
-
+// static const String baseUrl = 'https://collectibles-healing-assumptions-thumbzilla.trycloudflare.com';
 
 
 

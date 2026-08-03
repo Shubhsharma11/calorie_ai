@@ -24,8 +24,8 @@ import 'theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Keep the native launch screen up while startup finishes — no second
-  // Flutter splash with the same FitBuddy logo.
+  // One splash only: native launch screen stays up while startup finishes,
+  // then we open the real first screen (no second Flutter splash).
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
@@ -42,7 +42,6 @@ Future<String> _resolveInitialRoute() async {
   final settings = Get.find<SettingsController>();
   final user = Get.find<UserController>();
 
-  // Restore auth from disk only — never block launch on network/profile.
   try {
     await LocalStorageService().wipeLegacyApiCachesIfNeeded();
     await user.loadAuthSession();
@@ -50,7 +49,6 @@ Future<String> _resolveInitialRoute() async {
     debugPrint('Startup auth restore failed: $error\n$stackTrace');
   }
 
-  // Side inits can finish after first frame; cap wait so splash never sticks.
   await Future.any<void>([
     Future.wait<void>([
       _ignoreInitErrors(theme.loadTheme(), 'theme'),
@@ -84,8 +82,6 @@ Future<String> _resolveInitialRoute() async {
     try {
       await LocalStorageService().saveWelcomeIntroSeen(seen: true);
     } catch (_) {}
-
-    // Route from persisted session; profile continues hydrating in background.
     return user.resolveSetupResumeRoute();
   }
 

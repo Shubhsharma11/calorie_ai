@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../controllers/theme_controller.dart';
 import '../controllers/user_controller.dart';
 import '../routes/app_routes.dart';
 import '../services/local_storage_service.dart';
+import '../theme/app_colors.dart';
 
 /// Fallback only — startup normally resolves the route in [main] so the
 /// native launch screen is the single FitBuddy brand moment.
@@ -15,8 +17,6 @@ class SplashView extends StatefulWidget {
 }
 
 class _SplashViewState extends State<SplashView> {
-  static const _bg = Color(0xFFF4FAF6);
-
   @override
   void initState() {
     super.initState();
@@ -30,8 +30,6 @@ class _SplashViewState extends State<SplashView> {
     try {
       final user = Get.find<UserController>();
       final storage = LocalStorageService();
-
-      // Session-only — do not wait on network profile hydrate.
       await user.loadAuthSession();
 
       if (user.isLoggedIn && user.accessToken.isNotEmpty) {
@@ -61,10 +59,15 @@ class _SplashViewState extends State<SplashView> {
 
   @override
   Widget build(BuildContext context) {
-    // Match native splash background only — no second logo.
-    return const Scaffold(
-      backgroundColor: _bg,
-      body: SizedBox.expand(),
+    final isDark = Get.isRegistered<ThemeController>()
+        ? Get.find<ThemeController>().effectiveBrightness == Brightness.dark
+        : AppColors.isDark(context);
+    // Match native splash: white in light, black in dark (logo12 canvas).
+    final bg = isDark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
+
+    return Scaffold(
+      backgroundColor: bg,
+      body: const SizedBox.expand(),
     );
   }
 }

@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Full Fitbuddy logo centered — visible immediately while Flutter boots. -->
+<!-- Full Fit Buddy logo (leaf + wordmark), sized so phones never crop it. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_background" />
-    <item>
+    <item
+        android:width="220dp"
+        android:height="176dp"
+        android:gravity="center">
         <bitmap
-            android:gravity="center"
+            android:gravity="fill"
             android:src="@drawable/splash_logo" />
     </item>
 </layer-list>

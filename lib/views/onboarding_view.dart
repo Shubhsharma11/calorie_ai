@@ -11,8 +11,8 @@ import '../routes/app_routes.dart';
 import '../services/local_storage_service.dart';
 import '../theme/app_colors.dart';
 
-/// Clean welcome carousel: hero + title + body + CTA.
-/// No feature grids — those cramped every device size.
+/// Welcome carousel matching the FitBuddy onboarding design:
+/// hero → logo → title → body → 3 feature columns → dots → Next.
 class OnboardingView extends StatefulWidget {
   const OnboardingView({super.key});
 
@@ -32,27 +32,75 @@ class _OnboardingViewState extends State<OnboardingView> {
       darkImage: 'assets/image/sp1_dark.png',
       title: 'Eat Healthy',
       titleAccent: 'Live Healthy',
-      body:
-          'Log meals in seconds and build better eating habits that actually stick.',
-      highlights: ['Meal logging', 'Daily habits', 'Stay consistent'],
+      body: 'Track meals and build better eating habits every day.',
+      features: [
+        _FeatureItem(
+          asset: 'assets/image/profile_heart.png',
+          darkAsset: 'assets/image/profile_heart_dark.png',
+          title: 'Personalized',
+          subtitle: 'Plans & insights just for you',
+        ),
+        _FeatureItem(
+          asset: 'assets/image/run.png',
+          darkAsset: 'assets/image/run_dark.png',
+          title: 'Activity Tracking',
+          subtitle: 'Track workouts & stay active',
+        ),
+        _FeatureItem(
+          asset: 'assets/image/drop_water.png',
+          darkAsset: 'assets/image/drop_water_dark.png',
+          title: 'Hydration',
+          subtitle: 'Drink water & stay hydrated',
+        ),
+      ],
     ),
     _OnboardPage(
       image: 'assets/image/sp2.png',
       darkImage: 'assets/image/sp2_dark.png',
       title: 'AI-Powered',
       titleAccent: 'Tracking',
-      body:
-          'Scan a barcode or search — FitBuddy fills in calories so you don’t have to guess.',
-      highlights: ['Barcode scan', 'Smart search', 'Live calories'],
+      body: 'Scan a barcode or search — FitBuddy fills in calories for you.',
+      features: [
+        _FeatureItem(
+          icon: Icons.qr_code_scanner_rounded,
+          title: 'Barcode Scan',
+          subtitle: 'Log packaged foods fast',
+        ),
+        _FeatureItem(
+          icon: Icons.search_rounded,
+          title: 'Smart Search',
+          subtitle: 'Find any meal in seconds',
+        ),
+        _FeatureItem(
+          icon: Icons.local_fire_department_rounded,
+          title: 'Live Calories',
+          subtitle: 'See intake update instantly',
+        ),
+      ],
     ),
     _OnboardPage(
       image: 'assets/image/sp3.png',
       darkImage: 'assets/image/sp3_dark.png',
       title: 'Personalized',
       titleAccent: 'For You',
-      body:
-          'Goals, macros, and reminders tailored to your body and lifestyle.',
-      highlights: ['Custom goals', 'Weight progress', 'Water reminders'],
+      body: 'Goals, macros, and reminders tailored to your lifestyle.',
+      features: [
+        _FeatureItem(
+          icon: Icons.flag_rounded,
+          title: 'Custom Goals',
+          subtitle: 'Targets that fit your plan',
+        ),
+        _FeatureItem(
+          icon: Icons.show_chart_rounded,
+          title: 'Weight Progress',
+          subtitle: 'Watch your journey grow',
+        ),
+        _FeatureItem(
+          icon: Icons.notifications_active_rounded,
+          title: 'Reminders',
+          subtitle: 'Stay on track each day',
+        ),
+      ],
     ),
   ];
 
@@ -85,9 +133,9 @@ class _OnboardingViewState extends State<OnboardingView> {
     AppColors.syncFromContext(context);
     final r = context.responsive;
     final isDark = AppColors.isDark(context);
-    final bg = AppColors.backgroundOf(context);
-    final horizontal = r.scale(24, tablet: 40, desktop: 48);
-    final buttonHeight = r.scale(52, tablet: 56, desktop: 58);
+    final bg = isDark ? AppColors.backgroundOf(context) : Colors.white;
+    final horizontal = r.scale(22, tablet: 40, desktop: 48);
+    final buttonHeight = r.scale(54, tablet: 56, desktop: 58);
     final short = r.height < 720;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -99,28 +147,35 @@ class _OnboardingViewState extends State<OnboardingView> {
             )
           : SystemUiOverlayStyle.dark.copyWith(
               statusBarColor: Colors.transparent,
+              systemNavigationBarColor: Colors.white,
+              systemNavigationBarIconBrightness: Brightness.dark,
             ),
       child: Scaffold(
         backgroundColor: bg,
         body: Stack(
-          clipBehavior: Clip.none,
           children: [
-            Positioned(
-              top: r.scale(-28),
-              right: r.scale(-56, tablet: -36),
-              child: IgnorePointer(
-                child: Container(
-                  width: r.scale(220, tablet: 200),
-                  height: r.scale(220, tablet: 200),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.primary.withValues(
-                      alpha: isDark ? 0.12 : 0.08,
+            if (isDark)
+              Positioned(
+                top: r.scale(-40),
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: Container(
+                    height: r.scale(280),
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(0, -0.2),
+                        radius: 0.95,
+                        colors: [
+                          AppColors.primary.withValues(alpha: 0.14),
+                          AppColors.darkHeaderWash.withValues(alpha: 0.55),
+                          Colors.transparent,
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
             SafeArea(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: horizontal),
@@ -129,11 +184,9 @@ class _OnboardingViewState extends State<OnboardingView> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: Obx(() {
-                        final isLast = _controller.pageIndex.value ==
-                            _pages.length - 1;
-                        if (isLast) {
-                          return SizedBox(height: r.scale(40));
-                        }
+                        final isLast =
+                            _controller.pageIndex.value == _pages.length - 1;
+                        if (isLast) return SizedBox(height: r.scale(40));
                         return TextButton(
                           onPressed: _finish,
                           style: TextButton.styleFrom(
@@ -168,7 +221,7 @@ class _OnboardingViewState extends State<OnboardingView> {
                         },
                       ),
                     ),
-                    SizedBox(height: r.scale(short ? 8 : 12)),
+                    SizedBox(height: r.scale(short ? 10 : 14)),
                     Obx(() {
                       final current = _controller.pageIndex.value;
                       return Row(
@@ -178,18 +231,20 @@ class _OnboardingViewState extends State<OnboardingView> {
                           (i) => AnimatedContainer(
                             duration: const Duration(milliseconds: 280),
                             curve: Curves.easeOutCubic,
-                            margin: EdgeInsets.symmetric(
-                              horizontal: r.scale(4),
-                            ),
+                            margin:
+                                EdgeInsets.symmetric(horizontal: r.scale(4)),
                             width: current == i
-                                ? r.scale(24, tablet: 28)
+                                ? r.scale(28, tablet: 32)
                                 : r.scale(8),
                             height: r.scale(8),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(20),
                               color: current == i
                                   ? AppColors.primary
-                                  : AppColors.borderOf(context),
+                                  : (isDark
+                                      ? AppColors.darkBorder
+                                          .withValues(alpha: 0.9)
+                                      : const Color(0xFFD8E0D8)),
                             ),
                           ),
                         ),
@@ -199,8 +254,8 @@ class _OnboardingViewState extends State<OnboardingView> {
                     ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: r.formMaxWidth),
                       child: Obx(() {
-                        final isLast = _controller.pageIndex.value ==
-                            _pages.length - 1;
+                        final isLast =
+                            _controller.pageIndex.value == _pages.length - 1;
                         return SizedBox(
                           height: buttonHeight,
                           width: double.infinity,
@@ -210,17 +265,19 @@ class _OnboardingViewState extends State<OnboardingView> {
                               backgroundColor: AppColors.primary,
                               foregroundColor: AppColors.onPrimary,
                               elevation: 0,
+                              shadowColor: Colors.transparent,
                               textStyle: TextStyle(
                                 fontSize: r.scale(16, tablet: 17),
                                 fontWeight: FontWeight.w700,
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(
-                                  r.scale(14, tablet: 16),
+                                  r.scale(16, tablet: 18),
                                 ),
                               ),
                             ),
-                            child: Text(isLast ? 'Get Started' : 'Continue'),
+                            child:
+                                Text(isLast ? 'Get Started →' : 'Next →'),
                           ),
                         );
                       }),
@@ -253,8 +310,8 @@ class _OnboardSlide extends StatelessWidget {
     AppColors.syncFromContext(context);
     final r = responsive;
     final isDark = AppColors.isDark(context);
-    final titleSize = r.scale(short ? 28 : 32, tablet: 36, desktop: 40);
-    final bodySize = r.scale(short ? 15 : 16, tablet: 17, desktop: 18);
+    final titleSize = r.scale(short ? 30 : 34, tablet: 38, desktop: 42);
+    final bodySize = r.scale(short ? 14.5 : 15.5, tablet: 16.5, desktop: 17);
 
     return Center(
       child: ConstrainedBox(
@@ -267,7 +324,7 @@ class _OnboardSlide extends StatelessWidget {
               flex: short ? 5 : 6,
               child: Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: r.scale(8, tablet: 16),
+                  horizontal: r.scale(4, tablet: 12),
                 ),
                 child: _OnboardImage(
                   assetPath:
@@ -276,15 +333,19 @@ class _OnboardSlide extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: r.scale(short ? 16 : 24)),
+            SizedBox(height: r.scale(short ? 8 : 12)),
+           
+            SizedBox(height: r.scale(short ? 12 : 16)),
             Text.rich(
               TextSpan(
                 style: TextStyle(
                   fontSize: titleSize,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimaryOf(context),
-                  height: 1.2,
-                  letterSpacing: -0.4,
+                  color: isDark
+                      ? AppColors.textPrimaryOf(context)
+                      : const Color(0xFF1A1F2C),
+                  height: 1.18,
+                  letterSpacing: -0.5,
                 ),
                 children: [
                   TextSpan(text: '${page.title}\n'),
@@ -298,7 +359,7 @@ class _OnboardSlide extends StatelessWidget {
             ),
             SizedBox(height: r.scale(10, tablet: 12)),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: r.scale(12)),
+              padding: EdgeInsets.symmetric(horizontal: r.scale(18)),
               child: Text(
                 page.body,
                 textAlign: TextAlign.center,
@@ -310,17 +371,22 @@ class _OnboardSlide extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: r.scale(short ? 14 : 20)),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: r.scale(8),
-              runSpacing: r.scale(8),
+            SizedBox(height: r.scale(short ? 16 : 22)),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final label in page.highlights)
-                  _HighlightChip(label: label),
+                for (var i = 0; i < page.features.length; i++) ...[
+                  if (i > 0) SizedBox(width: r.scale(8)),
+                  Expanded(
+                    child: _FeatureColumn(
+                      item: page.features[i],
+                      compact: short,
+                    ),
+                  ),
+                ],
               ],
             ),
-            SizedBox(height: r.scale(short ? 8 : 12)),
+            SizedBox(height: r.scale(short ? 6 : 10)),
           ],
         ),
       ),
@@ -328,38 +394,137 @@ class _OnboardSlide extends StatelessWidget {
   }
 }
 
-class _HighlightChip extends StatelessWidget {
-  const _HighlightChip({required this.label});
 
-  final String label;
+  
+
+
+
+
+class _FeatureColumn extends StatelessWidget {
+  const _FeatureColumn({
+    required this.item,
+    required this.compact,
+  });
+
+  final _FeatureItem item;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
     final isDark = AppColors.isDark(context);
+    final r = context.responsive;
+    final iconBox = r.scale(compact ? 42 : 46, tablet: 50);
+    final asset = isDark
+        ? (item.darkAsset ?? item.asset)
+        : item.asset;
 
+    return Column(
+      children: [
+        if (asset != null)
+          SizedBox(
+            width: iconBox,
+            height: iconBox,
+            child: Image.asset(
+              asset,
+              width: iconBox,
+              height: iconBox,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+              errorBuilder: (_, error, stackTrace) => _FeatureIconChip(
+                icon: item.icon ?? Icons.circle,
+                size: iconBox,
+                isDark: isDark,
+              ),
+            ),
+          )
+        else
+          _FeatureIconChip(
+            icon: item.icon ?? Icons.circle,
+            size: iconBox,
+            isDark: isDark,
+          ),
+        SizedBox(height: r.scale(compact ? 8 : 10)),
+        Text(
+          item.title,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: r.scale(compact ? 12 : 13, tablet: 14),
+            fontWeight: FontWeight.w700,
+            height: 1.2,
+            color: AppColors.textPrimaryOf(context),
+          ),
+        ),
+        SizedBox(height: r.scale(4)),
+        Text(
+          item.subtitle,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: r.scale(compact ? 10.5 : 11.5, tablet: 12.5),
+            fontWeight: FontWeight.w400,
+            height: 1.3,
+            color: AppColors.textSecondaryOf(context),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FeatureIconChip extends StatelessWidget {
+  const _FeatureIconChip({
+    required this.icon,
+    required this.size,
+    required this.isDark,
+  });
+
+  final IconData icon;
+  final double size;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      width: size,
+      height: size,
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark
-              ? AppColors.darkBorder.withValues(alpha: 0.9)
-              : AppColors.border.withValues(alpha: 0.9),
-        ),
+        color: isDark
+            ? AppColors.primary.withValues(alpha: 0.14)
+            : const Color(0xFFE8F8EE),
+        borderRadius: BorderRadius.circular(size * 0.28),
+        border: isDark
+            ? Border.all(
+                color: AppColors.primary.withValues(alpha: 0.28),
+              )
+            : null,
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textPrimaryOf(context),
-          height: 1.1,
-        ),
+      child: Icon(
+        icon,
+        size: size * 0.5,
+        color: isDark ? AppColors.primary : const Color(0xFF2E9B4E),
       ),
     );
   }
+}
+
+class _FeatureItem {
+  const _FeatureItem({
+    required this.title,
+    required this.subtitle,
+    this.icon,
+    this.asset,
+    this.darkAsset,
+  }) : assert(icon != null || asset != null);
+
+  final IconData? icon;
+  final String? asset;
+  final String? darkAsset;
+  final String title;
+  final String subtitle;
 }
 
 class _OnboardPage {
@@ -368,8 +533,8 @@ class _OnboardPage {
     required this.title,
     required this.titleAccent,
     required this.body,
+    required this.features,
     this.darkImage,
-    this.highlights = const [],
   });
 
   final String image;
@@ -377,7 +542,7 @@ class _OnboardPage {
   final String title;
   final String titleAccent;
   final String body;
-  final List<String> highlights;
+  final List<_FeatureItem> features;
 }
 
 /// Renders PNG assets normally, and SVG assets that may wrap an embedded PNG.

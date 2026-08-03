@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#FFFFFF</color>
-    <!-- Matches AppColors.lightPageBackground for seamless Flutter splash handoff -->
-    <color name="splash_background">#F4FAF6</color>
+    <!-- Light theme splash -->
+    <color name="splash_background">#FFFFFF</color>
 </resources>
