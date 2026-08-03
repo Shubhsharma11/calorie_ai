@@ -17,17 +17,19 @@
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
                             <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="SplashLogo" translatesAutoresizingMaskIntoConstraints="NO" id="YRO-k0-Ey4">
-                                <rect key="frame" x="57.5" y="240.5" width="260" height="186"/>
+                                <rect key="frame" x="47.5" y="223.5" width="280" height="220"/>
                                 <constraints>
-                                    <constraint firstAttribute="width" constant="260" id="splash-logo-w"/>
-                                    <constraint firstAttribute="height" constant="186" id="splash-logo-h"/>
+                                    <constraint firstAttribute="width" constant="280" id="splash-logo-w"/>
+                                    <constraint firstAttribute="height" constant="220" id="splash-logo-h"/>
                                 </constraints>
                             </imageView>
                         </subviews>
-                        <color key="backgroundColor" red="0.95686274509803926" green="0.98039215686274506" blue="0.96470588235294119" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" name="SplashBackground"/>
                         <constraints>
                             <constraint firstItem="YRO-k0-Ey4" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="1a2-6s-vTC"/>
                             <constraint firstItem="YRO-k0-Ey4" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="4X2-HB-Rrh"/>
+                            <constraint firstItem="YRO-k0-Ey4" firstAttribute="leading" relation="greaterThanOrEqual" secondItem="Ze5-6b-2t3" secondAttribute="leading" constant="32" id="splash-lead"/>
+                            <constraint firstItem="Ze5-6b-2t3" firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="YRO-k0-Ey4" secondAttribute="trailing" constant="32" id="splash-trail"/>
                         </constraints>
                     </view>
                 </viewController>
@@ -37,6 +39,6 @@
         </scene>
     </scenes>
     <resources>
-        <image name="SplashLogo" width="260" height="186"/>
+        <image name="SplashLogo" width="280" height="220"/>
     </resources>
 </document>
