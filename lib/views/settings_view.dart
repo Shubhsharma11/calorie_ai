@@ -333,22 +333,8 @@ class _NotificationsSettings extends StatelessWidget {
             enabled: pushEnabled && settings.waterReminders.value,
             onTap: () => onPickWaterInterval(context),
           ),
-          _SettingsSwitchTile(
-            icon: Icons.track_changes_rounded,
-            title: 'Goal Progress Alerts',
-            subtitle: 'Updates when you are close to daily targets',
-            value: settings.goalProgressAlerts.value,
-            enabled: pushEnabled,
-            onChanged: settings.toggleGoalProgressAlerts,
-          ),
-          _SettingsSwitchTile(
-            icon: Icons.local_fire_department_rounded,
-            title: 'Streak Reminders',
-            subtitle: 'Remind you to log meals and keep your streak',
-            value: settings.streakReminders.value,
-            enabled: pushEnabled,
-            onChanged: settings.toggleStreakReminders,
-          ),
+         
+          
           _SettingsSwitchTile(
             icon: Icons.insights_rounded,
             title: 'Weekly Report',

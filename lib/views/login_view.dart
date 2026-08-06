@@ -183,14 +183,17 @@ class LoginView extends GetView<AuthController> {
                                       ),
                                     ),
                                     SizedBox(height: sectionGap),
-                                    Obx(
-                                      () => _SocialLoginButton(
+                                    Obx(() {
+                                      final googleLoading =
+                                          controller.isSigningInWithGoogle.value;
+                                      final anyLoading = controller.isSigningIn;
+                                      return _SocialLoginButton(
                                         height: buttonHeight,
                                         isDark: isDark,
-                                        label: controller.isSigningIn.value
+                                        label: googleLoading
                                             ? 'Signing in...'
                                             : 'Continue with Google',
-                                        icon: controller.isSigningIn.value
+                                        icon: googleLoading
                                             ? SizedBox(
                                                 width: 24,
                                                 height: 24,
@@ -206,22 +209,44 @@ class LoginView extends GetView<AuthController> {
                                                   compact ? 22 : 24,
                                                 ),
                                               ),
-                                        isLoading: controller.isSigningIn.value,
+                                        isLoading: anyLoading,
                                         onPressed: controller.loginWithGoogle,
-                                      ),
-                                    ),
+                                      );
+                                    }),
                                     SizedBox(height: buttonGap),
-                                  Platform.isIOS?  _SocialLoginButton(
-                                      height: buttonHeight,
-                                      isDark: isDark,
-                                      label: 'Continue with Apple',
-                                      icon: _SocialIcon(
-                                        asset: _appleAsset,
-                                        size: r.scale(compact ? 22 : 24),
-                                        tintForDarkMode: true,
-                                      ),
-                                      onPressed: _continue,
-                                    ):SizedBox.shrink(),
+                                    if (Platform.isIOS)
+                                      Obx(() {
+                                        final appleLoading =
+                                            controller.isSigningInWithApple.value;
+                                        final anyLoading =
+                                            controller.isSigningIn;
+                                        return _SocialLoginButton(
+                                          height: buttonHeight,
+                                          isDark: isDark,
+                                          label: appleLoading
+                                              ? 'Signing in...'
+                                              : 'Continue with Apple',
+                                          icon: appleLoading
+                                              ? SizedBox(
+                                                  width: 24,
+                                                  height: 24,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2.3,
+                                                    color: AppColors.primary,
+                                                  ),
+                                                )
+                                              : _SocialIcon(
+                                                  asset: _appleAsset,
+                                                  size: r.scale(
+                                                    compact ? 22 : 24,
+                                                  ),
+                                                  tintForDarkMode: true,
+                                                ),
+                                          isLoading: anyLoading,
+                                          onPressed: controller.loginWithApple,
+                                        );
+                                      }),
                                   ],
                                 ),
                               ),

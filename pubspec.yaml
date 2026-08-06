@@ -20,18 +20,24 @@ dependencies:
   firebase_core: ^4.11.0
   firebase_auth: ^6.5.4
   firebase_messaging: ^16.4.1
+  firebase_analytics: ^12.0.0
   flutter_local_notifications: ^19.4.0
   google_sign_in: ^7.2.0
+ 
+  sign_in_with_apple: ^6.1.0
   pedometer: ^4.2.0
   permission_handler: ^12.0.3
   health: ^13.3.1
   lottie: ^3.5.0
   image_cropper: ^12.2.1
+  firebase_crashlytics: ^5.2.7
+  firebase_performance: ^0.11.4+6
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  
 
 flutter_launcher_icons:
   android: true

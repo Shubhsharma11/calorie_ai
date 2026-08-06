@@ -20,6 +20,7 @@ import '../routes/app_routes.dart';
 import '../core/app_snackbar.dart';
 import '../core/weight_goal_calculator.dart';
 import '../services/auth_api_service.dart';
+import '../services/analytics_service.dart';
 import '../services/notification_service.dart';
 import '../services/nutrition_plan_api_service.dart';
 import '../services/onboarding_api_service.dart';
@@ -1482,6 +1483,9 @@ class UserController extends GetxController {
     await clearOnboardingProgress();
     await _persistCurrentAuthSession();
     _notifyDashboard();
+    unawaited(
+      AnalyticsService.logGoalCompleted(goalType: 'onboarding'),
+    );
     MainController.resetHomeTabIfRegistered();
     Get.offAllNamed(AppRoutes.main);
   }
@@ -2011,6 +2015,7 @@ class UserController extends GetxController {
       _clearApiOwnedControllers();
       _clearInMemoryAuthState();
       user.resetToDefaults();
+      unawaited(AnalyticsService.clearUser());
 
       MainController.resetHomeTabIfRegistered();
       Get.offAllNamed(AppRoutes.login);

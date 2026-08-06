@@ -69,6 +69,7 @@ extension AnalyticsPeriodInfo on AnalyticsPeriod {
 
   String get title => switch (this) {
     AnalyticsPeriod.week => 'This week',
+    
     AnalyticsPeriod.month => 'This month',
     AnalyticsPeriod.year => 'Last 12 months',
     AnalyticsPeriod.custom => 'Custom range',

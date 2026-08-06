@@ -38,19 +38,19 @@ class _OnboardingViewState extends State<OnboardingView> {
           asset: 'assets/image/profile_heart.png',
           darkAsset: 'assets/image/profile_heart_dark.png',
           title: 'Personalized',
-          subtitle: 'Plans & insights just for you',
+
         ),
         _FeatureItem(
           asset: 'assets/image/run.png',
           darkAsset: 'assets/image/run_dark.png',
           title: 'Activity Tracking',
-          subtitle: 'Track workouts & stay active',
+         
         ),
         _FeatureItem(
           asset: 'assets/image/drop_water.png',
           darkAsset: 'assets/image/drop_water_dark.png',
           title: 'Hydration',
-          subtitle: 'Drink water & stay hydrated',
+      
         ),
       ],
     ),
@@ -62,19 +62,19 @@ class _OnboardingViewState extends State<OnboardingView> {
       body: 'Scan a barcode or search — FitBuddy fills in calories for you.',
       features: [
         _FeatureItem(
-          icon: Icons.qr_code_scanner_rounded,
-          title: 'Barcode Scan',
-          subtitle: 'Log packaged foods fast',
+          asset: 'assets/image/barcode.png',
+          title: 'Scan & Log',
+      
         ),
         _FeatureItem(
-          icon: Icons.search_rounded,
+            asset: 'assets/image/search.png',
           title: 'Smart Search',
-          subtitle: 'Find any meal in seconds',
+ 
         ),
         _FeatureItem(
-          icon: Icons.local_fire_department_rounded,
-          title: 'Live Calories',
-          subtitle: 'See intake update instantly',
+        asset: 'assets/image/progress.png',
+          title: 'Track Progress',
+         
         ),
       ],
     ),
@@ -86,19 +86,19 @@ class _OnboardingViewState extends State<OnboardingView> {
       body: 'Goals, macros, and reminders tailored to your lifestyle.',
       features: [
         _FeatureItem(
-          icon: Icons.flag_rounded,
-          title: 'Custom Goals',
-          subtitle: 'Targets that fit your plan',
+           asset: 'assets/image/nutrition.png',
+          title: 'Nutrition Measure',
+  
         ),
         _FeatureItem(
-          icon: Icons.show_chart_rounded,
+           asset: 'assets/image/weight_progress.png',
           title: 'Weight Progress',
-          subtitle: 'Watch your journey grow',
+       
         ),
         _FeatureItem(
-          icon: Icons.notifications_active_rounded,
-          title: 'Reminders',
-          subtitle: 'Stay on track each day',
+                  asset: 'assets/image/drop_water.png',
+          title: 'Water Reminder',
+   
         ),
       ],
     ),
@@ -448,28 +448,23 @@ class _FeatureColumn extends StatelessWidget {
         Text(
           item.title,
           textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
+         maxLines: 1,
+softWrap: false,
+overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: r.scale(compact ? 12 : 13, tablet: 14),
+           fontSize: r.scale(compact ? 10 : 12, tablet: 13),
             fontWeight: FontWeight.w700,
             height: 1.2,
             color: AppColors.textPrimaryOf(context),
           ),
         ),
         SizedBox(height: r.scale(4)),
-        Text(
-          item.subtitle,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: r.scale(compact ? 10.5 : 11.5, tablet: 12.5),
-            fontWeight: FontWeight.w400,
-            height: 1.3,
-            color: AppColors.textSecondaryOf(context),
-          ),
-        ),
+        SizedBox(
+  height: r.scale(32, tablet: 36),
+  
+    ),
+
+
       ],
     );
   }
@@ -514,7 +509,7 @@ class _FeatureIconChip extends StatelessWidget {
 class _FeatureItem {
   const _FeatureItem({
     required this.title,
-    required this.subtitle,
+    
     this.icon,
     this.asset,
     this.darkAsset,
@@ -524,7 +519,7 @@ class _FeatureItem {
   final String? asset;
   final String? darkAsset;
   final String title;
-  final String subtitle;
+ 
 }
 
 class _OnboardPage {

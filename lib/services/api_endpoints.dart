@@ -10,6 +10,7 @@ abstract final class ApiEndpoints {
 
   static const String apiVersion = '/api/v1';
   static const String googleAuth = '$apiVersion/auth/google';
+ static const String appleAuth = '$apiVersion/auth/apple';
   static const String logout = '$apiVersion/auth/logout';
   static const String deleteAccount = '$apiVersion/auth/account';
   static const String fcmToken = '$apiVersion/auth/fcm-token';
@@ -29,6 +30,7 @@ abstract final class ApiEndpoints {
   static const String myFoods = '$apiVersion/my-foods';
   static const String favouriteMeals = '$apiVersion/favourite-meals';
   static const String searchFoods = '$apiVersion/search/foods';
+ 
 
 
 
@@ -160,6 +162,7 @@ abstract final class ApiEndpoints {
   }
 
   static String get googleAuthUrl => url(googleAuth);
+  static String get appleAuthUrl => url(appleAuth);
   static String get logoutUrl => url(logout);
   static String get deleteAccountUrl => url(deleteAccount);
   static String get fcmTokenUrl => url(fcmToken);

@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../models/user_model.dart';
 import '../widgets/profile_avatar.dart';
 
+
 class ProfileView extends GetView<UserController> {
   const ProfileView({super.key});
 
@@ -101,6 +102,8 @@ class ProfileView extends GetView<UserController> {
                                 )
                               : null,
                         ),
+
+       
                         _ProfileMenuRow(
                           icon: Icons.logout_rounded,
                           title: 'Logout',

@@ -510,7 +510,7 @@ class _AnimatedRing extends StatelessWidget {
                       fit: BoxFit.scaleDown,
                       child: Text(
                         _formatKcal(value),
-                        style: TextStyle(
+                        style: TextStyle(   
                           fontSize: r.scale(28, tablet: 30),
                           fontWeight: FontWeight.w800,
                           height: 1.05,

@@ -4,9 +4,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../routes/app_routes.dart';
 import '../core/app_snackbar.dart';
+import '../services/analytics_service.dart';
 import '../services/auth_api_service.dart';
 import 'main_controller.dart';
 import 'user_controller.dart';
@@ -20,7 +22,11 @@ class AuthController extends GetxController {
   final passwordController = TextEditingController();
   final nameController = TextEditingController();
 
-  final isSigningIn = false.obs;
+  final isSigningInWithGoogle = false.obs;
+  final isSigningInWithApple = false.obs;
+
+  bool get isSigningIn =>
+      isSigningInWithGoogle.value || isSigningInWithApple.value;
 
   void login() {
     final user = Get.find<UserController>();
@@ -40,9 +46,9 @@ class AuthController extends GetxController {
   }
 
   Future<void> loginWithGoogle() async {
-    if (isSigningIn.value) return;
+    if (isSigningIn) return;
 
-    isSigningIn.value = true;
+    isSigningInWithGoogle.value = true;
 
     try {
       debugPrint('AuthController: starting Google sign-in');
@@ -83,6 +89,10 @@ class AuthController extends GetxController {
         refreshToken: refreshToken.isEmpty ? null : refreshToken,
         backendResponse: backendResponse,
       );
+      await _logAuthAnalytics(
+        user: user,
+        method: 'google',
+      );
       debugPrint(
         'AuthController: access token saved length=${accessToken.length}',
       );
@@ -113,10 +123,123 @@ class AuthController extends GetxController {
       _showAuthError(e.description ?? 'Google sign-in failed.');
     } on AuthApiException catch (e) {
       _showAuthError(e.message);
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('GOOGLE SIGN IN ERROR: $e');
+      debugPrint('STACK TRACE: $stackTrace');
+
       _showAuthError('Unable to sign in with Google: $e');
     } finally {
-      isSigningIn.value = false;
+      isSigningInWithGoogle.value = false;
+    }
+  }
+
+  Future<void> loginWithApple() async {
+    if (isSigningIn) return;
+
+    isSigningInWithApple.value = true;
+
+    try {
+      debugPrint('AuthController: starting Apple sign-in');
+
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+
+      final identityToken = credential.identityToken;
+
+      if (identityToken == null || identityToken.isEmpty) {
+        throw const AuthApiException(
+          'Apple identity token was not returned.',
+        );
+      }
+
+      debugPrint('AuthController: Apple sign-in success');
+      debugPrint('Apple email: ${credential.email}');
+      debugPrint('Apple name: ${credential.givenName}');
+
+      debugPrint('AuthController: sending Apple token to backend');
+
+      final backendResponse =
+          await _authApi.loginWithAppleIdToken(identityToken);
+
+      debugPrint('APPLE BACKEND RESPONSE: $backendResponse');
+
+      final accessToken = _readBackendString(backendResponse, 'accessToken');
+      final refreshToken = _readBackendString(backendResponse, 'refreshToken');
+
+      if (accessToken.isEmpty) {
+        throw const AuthApiException(
+          'Backend Apple login did not return access token.',
+        );
+      }
+
+      final claims = _decodeJwtClaims(accessToken);
+      final user = Get.find<UserController>();
+
+      await user.saveGoogleLoginDetails(
+        userId: _claimString(claims, 'sub'),
+        provider: 'apple',
+        email: _claimString(claims, 'email') ?? credential.email ?? '',
+        name: credential.givenName ?? '',
+        accessToken: accessToken,
+        refreshToken: refreshToken.isEmpty ? null : refreshToken,
+        backendResponse: backendResponse,
+      );
+      await _logAuthAnalytics(
+        user: user,
+        method: 'apple',
+      );
+
+      debugPrint('AuthController: Apple user saved');
+
+      if (user.user.hasProfileBasics || user.isSetupComplete) {
+        await user.markOnboardingComplete();
+        MainController.resetHomeTabIfRegistered();
+        Get.offAllNamed(AppRoutes.main);
+      } else {
+        await user.restoreOnboardingProgress();
+        final route = await user.resolveSetupResumeRoute();
+        Get.offAllNamed(route);
+      }
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) {
+        return;
+      }
+
+      _showAuthError(e.message);
+    } on AuthApiException catch (e) {
+      _showAuthError(e.message);
+    } catch (e, stackTrace) {
+      debugPrint('APPLE SIGN IN ERROR: $e');
+      debugPrint(stackTrace.toString());
+
+      _showAuthError('Unable to sign in with Apple: $e');
+    } finally {
+      isSigningInWithApple.value = false;
+    }
+  }
+
+
+  Future<void> _logAuthAnalytics({
+    required UserController user,
+    required String method,
+  }) async {
+    await AnalyticsService.setUser(
+      userId: user.userId.isEmpty ? null : user.userId,
+      email: user.user.email,
+      name: user.user.name,
+      provider: method,
+    );
+
+    final isExisting =
+        user.isLikelyExistingBackendUser || user.user.hasProfileBasics;
+    if (isExisting) {
+      await AnalyticsService.logLogin(method: method);
+    } else {
+      await AnalyticsService.logSignup(method: method);
     }
   }
 

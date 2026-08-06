@@ -32,6 +32,9 @@ import 'dashboard_controller.dart';
 // import 'streak_controller.dart';
 import 'user_controller.dart';
 
+import '../services/analytics_service.dart';
+
+
 class FoodController extends GetxController {
   FoodController({
     FoodApiService? api,
@@ -1827,6 +1830,8 @@ class FoodController extends GetxController {
   }
 
   Future<void> searchFoods(String query) async {
+     
+
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
       searchResults.clear();
@@ -1837,7 +1842,15 @@ class FoodController extends GetxController {
     isSearching.value = true;
     searchErrorMessage.value = null;
     try {
+
+      await AnalyticsService.logFoodSearch(trimmed);
       searchResults.value = await searchFoodsEphemeral(trimmed);
+      
+    
+      
+      
+      
+
     } on FoodApiException catch (error) {
       searchResults.clear();
       searchErrorMessage.value = error.message;
@@ -1985,15 +1998,20 @@ class FoodController extends GetxController {
 
   double get totalFat => todayMeals.fold(0.0, (sum, e) => sum + e.fat);
 
-  void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
-    _insertEntry(
-      MealEntry(
-        food: food,
-        grams: grams ?? selectedGrams.value,
-        meal: meal ?? selectedMeal.value,
-        date: MealEntry.normalizeDate(date ?? selectedLogDate.value),
-      ),
-    );
+void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
+
+  final selectedMealType = meal ?? selectedMeal.value;
+
+  _insertEntry(
+    MealEntry(
+      food: food,
+      grams: grams ?? selectedGrams.value,
+      meal: selectedMealType,
+      date: MealEntry.normalizeDate(date ?? selectedLogDate.value),
+    ),
+  );
+
+
     selectedGrams.value = 100;
   }
 
@@ -2057,6 +2075,7 @@ class FoodController extends GetxController {
       } else {
         entries.add(created);
       }
+ await AnalyticsService.logMealAdded(created.meal);
 
       apiMeals.removeWhere(
         (e) => e.id == entry.id || e.id == created.id,
@@ -2065,6 +2084,7 @@ class FoodController extends GetxController {
 
       _dropDuplicateEntriesById(created.id);
       _markEntriesDirty(celebrationDay: created.date);
+      
     } on MealsApiException catch (error) {
       debugPrint('FoodController: create meal API failed: $error');
       mealsApiErrorMessage.value = error.message;

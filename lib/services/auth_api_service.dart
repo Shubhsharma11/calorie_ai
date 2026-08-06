@@ -52,6 +52,48 @@ class AuthApiService {
     return <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> loginWithAppleIdToken(
+  String identityToken,
+) async {
+  debugPrint(
+    'AuthApiService: posting Apple ID token to ${ApiEndpoints.appleAuthUrl}',
+  );
+
+  final response = await _apiClient.post(
+    ApiEndpoints.appleAuth,
+    body: {
+      'idToken': identityToken,
+    },
+  );
+
+  final body = response.body.trim();
+
+  debugPrint(
+    'AuthApiService: Apple login response ${response.statusCode}: '
+    '${_redactTokenFields(body)}',
+  );
+
+  final decoded = _tryDecodeJson(body);
+
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    final message = decoded is Map<String, dynamic>
+        ? decoded['message'] as String? ?? decoded['error'] as String?
+        : null;
+
+    throw AuthApiException(
+      message ??
+          'Apple backend login failed (${response.statusCode}). $body',
+    );
+  }
+
+  if (decoded is Map<String, dynamic>) {
+    return decoded;
+  }
+
+  return <String, dynamic>{};
+}
+  
+
   Future<void> deleteAccount({required String accessToken}) async {
     debugPrint(
       'AuthApiService: DELETE ${ApiEndpoints.deleteAccountUrl} '

@@ -34,17 +34,21 @@ class WaterIntakeBanner extends StatelessWidget {
         : null;
 
     return Obx(() {
-      if (Get.isRegistered<SettingsController>()) {
-        Get.find<SettingsController>().waterGoalMl.value;
-      }
+    
       food?.selectedLogDate.value;
       final viewingToday = food?.isViewingToday ?? true;
       final viewDate = food?.selectedLogDate.value;
       final waterMl = viewDate == null
           ? tracker.waterMl
           : tracker.waterForDate(viewDate);
-      final goalMl = TrackerController.waterGoalMl;
-      final glasses = (waterMl / TrackerController.mlPerGlass).round();
+    final settings = Get.isRegistered<SettingsController>()
+    ? Get.find<SettingsController>()
+    : null;
+
+final goalMl = settings?.waterGoalMl.value ??
+    TrackerController.waterGoalMl;
+      
+      final glasses = (waterMl / TrackerController.mlPerGlass).floor();
       final goalGlasses = goalMl > 0
           ? (goalMl / TrackerController.mlPerGlass).round().clamp(1, 100)
           : 8;
@@ -55,15 +59,13 @@ class WaterIntakeBanner extends StatelessWidget {
       final _ = tracker.waterRevision.value;
       final color = isComplete ? AppColors.primary : _waterBlue;
       final dayWord = viewingToday ? 'today' : 'this day';
-      final headerText = overGlasses > 0
-          ? 'Goal reached'
-          : isComplete
-              ? 'Goal reached'
-              : glasses == 0
-                  ? 'Stay hydrated'
-                  : glasses == 1
-                      ? '1 glass $dayWord'
-                      : '$glasses glasses $dayWord';
+     final headerText = isComplete
+    ? 'Goal reached'
+    : glasses == 0
+        ? 'Stay hydrated'
+        : glasses == 1
+            ? '1 glass $dayWord'
+            : '$glasses glasses $dayWord';
       final status = overGlasses > 0
           ? '+$overGlasses extra'
           : isComplete
@@ -210,7 +212,7 @@ class WaterIntakeBanner extends StatelessWidget {
               IconButton.filled(
                 onPressed: () {
                   HapticFeedback.lightImpact();
-                  tracker.addWater(date: viewDate);
+                tracker.addWater(date: DateTime.now());
                 },
                 tooltip: 'Add 1 glass',
                 style: IconButton.styleFrom(

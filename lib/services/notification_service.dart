@@ -11,6 +11,7 @@ import '../controllers/user_controller.dart';
 import '../models/notification_model.dart';
 import '../models/notification_type.dart';
 import '../repositories/notification_repository.dart';
+import 'analytics_service.dart';
 import 'notification_api_service.dart';
 
 /// Handles FCM, local notifications, token sync, and notification navigation.
@@ -374,6 +375,12 @@ class NotificationService {
   }
 
   Future<void> _navigateFromModel(NotificationModel model) async {
+    if (model.type == NotificationType.waterReminder) {
+      unawaited(
+        AnalyticsService.logWaterReminderCompleted(source: 'notification_open'),
+      );
+    }
+
     final route = model.route;
     if (route.isEmpty) return;
 

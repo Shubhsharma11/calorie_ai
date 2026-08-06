@@ -764,7 +764,7 @@ Future<bool> _askDeleteWeightEntry(BuildContext context, WeightEntry entry) {
     title: 'Delete weight entry?',
     message:
         'Remove $weightLabel logged on $dateLabel. '
-        'This can’t be undone.',
+      
   );
 }
 
