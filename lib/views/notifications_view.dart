@@ -40,50 +40,9 @@ class _NotificationsViewState extends State<NotificationsView> {
     return Scaffold(
       appBar: AppAppBar(
         title: 'Notifications',
-        actions: [
-          Obx(() {
-            final hasUnread = _controller.unreadCount.value > 0;
-            return Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: TextButton(
-                onPressed: hasUnread && !_controller.isMarkingAll.value
-                    ? _controller.markAllAsRead
-                    : null,
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  disabledForegroundColor: AppColors.textSecondary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  _controller.isMarkingAll.value ? 'Marking...' : 'Mark all read',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-            );
-          }),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Material(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                onTap: () => Get.toNamed(AppRoutes.settings),
-                borderRadius: BorderRadius.circular(12),
-                child: const SizedBox(
-                  width: 42,
-                  height: 42,
-                  child: Icon(Icons.settings_rounded),
-                ),
-              ),
-            ),
-          ),
-        ],
+        
+          
+        
       ),
       body: ResponsivePage(
         scrollable: false,
@@ -92,18 +51,23 @@ class _NotificationsViewState extends State<NotificationsView> {
           final isLoading = _controller.isLoading.value;
           final error = _controller.errorMessage.value;
           final unread = items.where((item) => !item.isRead).toList();
-          final earlier = items
-              .where(
-                (item) =>
-                    item.isRead && item.type != NotificationType.goalAchieved,
-              )
-              .toList();
-          final achievements = items
-              .where(
-                (item) =>
-                    item.isRead && item.type == NotificationType.goalAchieved,
-              )
-              .toList();
+
+final earlier = items
+    .where(
+      (item) =>
+          item.isRead &&
+          item.type != NotificationType.goalAchieved,
+    )
+    .toList();
+
+final achievements = items
+    .where(
+      (item) =>
+          item.isRead &&
+          item.type == NotificationType.goalAchieved,
+    )
+    .toList();
+          
 
           if (isLoading && items.isEmpty) {
             return const Center(child: CircularProgressIndicator());
@@ -120,48 +84,11 @@ class _NotificationsViewState extends State<NotificationsView> {
                     message: error,
                     onRetry: () => _controller.loadNotifications(force: true),
                   ),
-                ] else ...[
-                  if (unread.isNotEmpty) ...[
-                    _SectionHeader(
-                      title: 'Unread',
-                      count: unread.length,
-                    ),
-                    SizedBox(height: r.scale(4)),
-                    for (final item in unread) ...[
-                      _SwipeNotificationCard(
-                        item: item,
-                        onTap: () => _openNotification(item),
-                        onRemove: () => _removeNotification(item),
-                      ),
-                      SizedBox(height: r.scale(1)),
-                    ],
-                  ],
-                  if (earlier.isNotEmpty) ...[
-                    SizedBox(height: r.scale(4)),
-                    const _SectionHeader(title: 'Earlier'),
-                    SizedBox(height: r.scale(4)),
-                    for (final item in earlier) ...[
-                      _SwipeNotificationCard(
-                        item: item,
-                        onTap: () => _openNotification(item),
-                        onRemove: () => _removeNotification(item),
-                      ),
-                      SizedBox(height: r.scale(1)),
-                    ],
-                  ],
-                  if (achievements.isNotEmpty) ...[
-                    SizedBox(height: r.scale(12)),
-                    const _SectionHeader(title: 'Achievements'),
-                    SizedBox(height: r.scale(4)),
-                    for (final item in achievements) ...[
-                      _SwipeNotificationCard(
-                        item: item,
-                        onTap: () => _openNotification(item),
-                        onRemove: () => _removeNotification(item),
-                      ),
-                      SizedBox(height: r.scale(1)),
-                    ],
-                  ],
+                ]  else ...[
+  if (items.isNotEmpty) ...[
+    ..._buildDateGroupedNotifications(items, r),
+  ],
+                 
                   if (items.isEmpty) const _EmptyNotifications(),
                 ],
                 SizedBox(
@@ -175,6 +102,53 @@ class _NotificationsViewState extends State<NotificationsView> {
       ),
     );
   }
+  List<Widget> _buildDateGroupedNotifications(
+  List<NotificationModel> items,
+  Responsive r,
+) {
+  final grouped = <DateTime, List<NotificationModel>>{};
+
+  for (final item in items) {
+    if (item.createdAt == null) continue;
+
+    final createdAt = item.createdAt!;
+
+    final date = DateTime(
+      createdAt.year,
+      createdAt.month,
+      createdAt.day,
+    );
+
+    grouped.putIfAbsent(date, () => []).add(item);
+  }
+
+  final dates = grouped.keys.toList()
+    ..sort((a, b) => b.compareTo(a));
+
+  final widgets = <Widget>[];
+
+  for (final date in dates) {
+    widgets.add(
+      _DateHeader(date: date),
+    );
+
+    for (final item in grouped[date]!) {
+      widgets.add(
+        _SwipeNotificationCard(
+          item: item,
+          onTap: () => _openNotification(item),
+          onRemove: () => _removeNotification(item),
+        ),
+      );
+
+      widgets.add(
+        SizedBox(height: r.scale(6)),
+      );
+    }
+  }
+
+  return widgets;
+}
 
   Future<void> _openNotification(NotificationModel item) async {
     await _controller.openNotification(item);
@@ -305,6 +279,46 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
+class _DateHeader extends StatelessWidget {
+  const _DateHeader({
+    required this.date,
+  });
+
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    final dateText = DateFormat('MMM d, yyyy').format(date);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 7,
+          ),
+          decoration: BoxDecoration(
+  color: Colors.transparent,
+  borderRadius: BorderRadius.circular(10),
+  border: Border.all(
+    color: AppColors.primary.withValues(alpha: 0.65),
+    width: 1,
+  ),
+),
+          child: Text(
+            dateText,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _NotificationCard extends StatelessWidget {
   const _NotificationCard({
@@ -328,15 +342,19 @@ class _NotificationCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+         padding: const EdgeInsets.symmetric(
+  horizontal: 12,
+  vertical: 12,
+),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border(
-              bottom: BorderSide(
-                color: AppColors.border.withValues(alpha: 0.42),
-              ),
-            ),
-          ),
+  color: Colors.transparent,
+  borderRadius: BorderRadius.circular(14),
+  border: Border.all(
+    color: AppColors.border.withValues(alpha: 0.55),
+    width: 1.2,
+  ),
+),
+          
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -503,53 +521,84 @@ class _NotificationVisual {
   final IconData icon;
   final Color accent;
 }
-
 _NotificationVisual _visualFor(NotificationType type) {
   switch (type) {
+    // Meal notifications
     case NotificationType.mealReminder:
-    case NotificationType.breakfastReminder:
-    case NotificationType.lunchReminder:
-    case NotificationType.dinnerReminder:
-      return const _NotificationVisual(
-        Icons.restaurant_rounded,
-        AppColors.primary,
-      );
+  return const _NotificationVisual(
+    Icons.restaurant_menu_rounded,
+    AppColors.primary,
+  );
+
+case NotificationType.breakfastReminder:
+  return const _NotificationVisual(
+    Icons.wb_sunny_rounded,
+    AppColors.primary,
+  );
+
+case NotificationType.lunchReminder:
+  return const _NotificationVisual(
+    Icons.wb_sunny_outlined,
+    AppColors.primary,
+  );
+
+case NotificationType.dinnerReminder:
+  return const _NotificationVisual(
+    Icons.nightlight_round,
+    AppColors.primary,
+  );
+
+    // Water
     case NotificationType.waterReminder:
       return const _NotificationVisual(
         Icons.water_drop_rounded,
-        Color(0xFF18A0FB),
+        AppColors.primary,
       );
+
+    // Workout
     case NotificationType.workoutReminder:
       return const _NotificationVisual(
         Icons.fitness_center_rounded,
-        Color(0xFFFF6B35),
+        AppColors.primary,
       );
+
+    // Streak / Goal
     case NotificationType.dailyStreakReminder:
     case NotificationType.goalAchieved:
       return const _NotificationVisual(
         Icons.emoji_events_rounded,
-        Color(0xFFFFB800),
+        AppColors.primary,
       );
+
+    // Weekly report
     case NotificationType.weeklyReport:
       return const _NotificationVisual(
-        Icons.insights_rounded,
-        Color(0xFF8B5CF6),
+        Icons.bar_chart_rounded,
+        AppColors.primary,
       );
+
+    // Weight
     case NotificationType.weightReminder:
       return const _NotificationVisual(
         Icons.monitor_weight_rounded,
-        Color(0xFF6C63FF),
+        AppColors.primary,
       );
+
+    // AI tips
     case NotificationType.aiNutritionTips:
       return const _NotificationVisual(
         Icons.auto_awesome_rounded,
-        Color(0xFF8B5CF6),
+        AppColors.primary,
       );
+
+    // Motivation
     case NotificationType.motivational:
       return const _NotificationVisual(
         Icons.favorite_rounded,
-        Color(0xFFFF4F8B),
+        AppColors.primary,
       );
+
+    // Unknown
     case NotificationType.unknown:
       return const _NotificationVisual(
         Icons.notifications_rounded,
@@ -557,4 +606,3 @@ _NotificationVisual _visualFor(NotificationType type) {
       );
   }
 }
-

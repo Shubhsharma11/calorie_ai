@@ -55,6 +55,7 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Future<void> _pickWaterInterval(BuildContext context) async {
+
     final selected = await showModalBottomSheet<int>(
       context: context,
       backgroundColor: AppColors.card,
@@ -221,8 +222,8 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
                 // Clear the home indicator / system gesture bar.
                 SizedBox(
-                  height: MediaQuery.viewPaddingOf(context).bottom +
-                      r.scale(16),
+                  height:
+                      MediaQuery.viewPaddingOf(context).bottom + r.scale(16),
                 ),
               ],
             ),
@@ -247,7 +248,8 @@ class _NotificationsSettings extends StatelessWidget {
     BuildContext context,
     MealReminderSlot slot,
     TimeOfDay initialTime,
-  ) onPickMealTime;
+  )
+  onPickMealTime;
   final Future<void> Function(BuildContext context) onPickWaterInterval;
 
   @override
@@ -271,7 +273,10 @@ class _NotificationsSettings extends StatelessWidget {
           _SettingsSwitchTile(
             icon: Icons.restaurant_rounded,
             title: 'Meal Reminders',
-            subtitle: 'Breakfast 8 AM, lunch 1 PM, dinner 7:30 PM',
+        subtitle:
+    'Breakfast ${settings.formatTime(context, settings.breakfastReminder.value)}, '
+    'Lunch ${settings.formatTime(context, settings.lunchReminder.value)}, '
+    'Dinner ${settings.formatTime(context, settings.dinnerReminder.value)}',
             value: settings.mealReminders.value,
             enabled: pushEnabled,
             onChanged: settings.toggleMealReminders,
@@ -321,7 +326,7 @@ class _NotificationsSettings extends StatelessWidget {
           _SettingsSwitchTile(
             icon: Icons.water_drop_rounded,
             title: 'Water Reminders',
-            subtitle: 'Hydration alerts every 2 hours',
+       subtitle: settings.waterIntervalSummary,
             value: settings.waterReminders.value,
             enabled: pushEnabled,
             onChanged: settings.toggleWaterReminders,
@@ -333,8 +338,7 @@ class _NotificationsSettings extends StatelessWidget {
             enabled: pushEnabled && settings.waterReminders.value,
             onTap: () => onPickWaterInterval(context),
           ),
-         
-          
+
           _SettingsSwitchTile(
             icon: Icons.insights_rounded,
             title: 'Weekly Report',
@@ -553,10 +557,7 @@ class _SettingsInfoTile extends StatelessWidget {
           color: AppColors.textPrimary,
         ),
       ),
-      trailing: Text(
-        value,
-        style: TextStyle(color: AppColors.textSecondary),
-      ),
+      trailing: Text(value, style: TextStyle(color: AppColors.textSecondary)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }

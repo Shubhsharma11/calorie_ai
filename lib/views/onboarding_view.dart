@@ -91,7 +91,7 @@ class _OnboardingViewState extends State<OnboardingView> {
   
         ),
         _FeatureItem(
-           asset: 'assets/image/weight_progress.png',
+           asset: 'assets/image/Weight_progress.png',
           title: 'Weight Progress',
        
         ),

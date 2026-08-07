@@ -1,10 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../controllers/dashboard_controller.dart';
+import '../controllers/main_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_coach_marks.dart';
+import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
+import '../routes/app_routes.dart';
 import '../services/local_storage_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
@@ -18,6 +25,9 @@ class HelpSupportView extends StatefulWidget {
 }
 
 class _HelpSupportViewState extends State<HelpSupportView> {
+  static const _supportEmail = 'support@fitbuddyai.com';
+  static const _appVersion = '1.0.0';
+
   int? _expandedIndex;
 
   static const _faqs = [
@@ -125,7 +135,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
                         border: Border.all(
                           color: isExpanded
                               ? AppColors.primary.withValues(alpha: 0.4)
-                              : AppColors.border,
+                              : AppColors.borderOf(context),
                         ),
                       ),
                       padding: EdgeInsets.all(r.scale(16)),
@@ -207,13 +217,12 @@ class _HelpSupportViewState extends State<HelpSupportView> {
             _ContactCard(
               icon: Icons.email_outlined,
               title: 'Email Support',
-              subtitle: 'support@fitbuddyai.app',
+              subtitle: _supportEmail,
               detail: 'We typically reply within 24 hours',
-              actionLabel: 'Copy Email',
-              onAction: () => _copyToClipboard(
-                context,
-                'support@fitbuddyai.app',
-                'Email copied to clipboard',
+              actionLabel: 'Send Email',
+              onAction: () => _openSupportEmail(
+                subject: 'FitBuddy AI Support',
+                body: _supportEmailBody(),
               ),
             ),
             SizedBox(height: r.scale(10)),
@@ -223,15 +232,12 @@ class _HelpSupportViewState extends State<HelpSupportView> {
               subtitle: 'Found a bug or issue?',
               detail: 'Help us improve FitBuddy AI',
               actionLabel: 'Send Report',
-              onAction: () => _showMessage(
-                context,
-                'Thank you! Bug report form coming soon.',
-              ),
+              onAction: _reportProblem,
             ),
             SizedBox(height: r.scale(16)),
             Center(
               child: Text(
-                'FitBuddy AI v1.0.0',
+                'FitBuddy AI v$_appVersion',
                 style: TextStyle(
                   fontSize: r.scale(12),
                   color: AppColors.textSecondaryOf(context),
@@ -247,31 +253,150 @@ class _HelpSupportViewState extends State<HelpSupportView> {
     );
   }
 
-  void _copyToClipboard(BuildContext context, String text, String message) {
-    Clipboard.setData(ClipboardData(text: text));
-    _showMessage(context, message);
-  }
-
   Future<void> _replayTour(BuildContext context) async {
     final userId = Get.isRegistered<UserController>()
         ? Get.find<UserController>().userId.trim()
         : '';
+
     final storage = LocalStorageService(
       null,
       userId.isEmpty ? null : userId,
     );
-    Get.back<void>();
+
+    // Tour highlights Home/nav targets under MainView — leave Help without
+    // wiping the whole stack (offAllNamed felt like the app closed).
+    if (Get.currentRoute == AppRoutes.helpSupport) {
+      Get.back();
+    } else {
+      Get.until(
+        (route) =>
+            route.settings.name == AppRoutes.main || route.isFirst,
+      );
+    }
+
+    if (Get.isRegistered<MainController>()) {
+      Get.find<MainController>().resetToHomeTab();
+    }
+    if (Get.isRegistered<DashboardController>()) {
+      Get.find<DashboardController>().scrollHomeToTop();
+    }
+
+    // Let the Help route finish popping so Home targets are layout-ready.
+    await Future<void>.delayed(const Duration(milliseconds: 280));
+    await WidgetsBinding.instance.endOfFrame;
+
+    if (AppCoachMarks.replayHandler == null) {
+      AppSnackbar.info(
+        'Open Home first, then try the tour again.',
+        title: 'Tour unavailable',
+      );
+      return;
+    }
+
     await AppCoachMarks.replay(storage);
   }
 
-  void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+  Future<void> _reportProblem() async {
+    await _openSupportEmail(
+      subject: 'FitBuddy AI Bug Report',
+      body: _bugReportBody(),
     );
+  }
+
+  String _supportEmailBody() {
+    final user = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : null;
+    final name = user?.user.name.trim() ?? '';
+    final email = user?.user.email.trim() ?? '';
+
+    return [
+      'Hi FitBuddy team,',
+      '',
+      'I need help with:',
+      '',
+      '',
+      '—',
+      if (name.isNotEmpty) 'Name: $name',
+      if (email.isNotEmpty) 'Account: $email',
+      'App: FitBuddy AI v$_appVersion',
+      'Platform: ${Platform.operatingSystem}',
+    ].join('\n');
+  }
+
+  String _bugReportBody() {
+    final user = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : null;
+    final name = user?.user.name.trim() ?? '';
+    final email = user?.user.email.trim() ?? '';
+    final userId = user?.userId.trim() ?? '';
+
+    return [
+      'Hi FitBuddy team,',
+      '',
+      'What happened:',
+      '',
+      '',
+      'Steps to reproduce:',
+      '1. ',
+      '2. ',
+      '3. ',
+      '',
+      'Expected result:',
+      '',
+      '',
+      '— Device info (please leave) —',
+      if (name.isNotEmpty) 'Name: $name',
+      if (email.isNotEmpty) 'Account: $email',
+      if (userId.isNotEmpty) 'User ID: $userId',
+      'App: FitBuddy AI v$_appVersion',
+      'Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
+    ].join('\n');
+  }
+
+  Future<void> _openSupportEmail({
+    required String subject,
+    required String body,
+  }) async {
+    try {
+      final uri = Uri(
+        scheme: 'mailto',
+        path: _supportEmail,
+        query: _encodeQuery({
+          'subject': subject,
+          'body': body,
+        }),
+      );
+
+      final opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!opened) {
+        await Clipboard.setData(ClipboardData(text: _supportEmail));
+        AppSnackbar.info(
+          'Could not open email. Address copied: $_supportEmail',
+          title: 'Email app unavailable',
+        );
+      }
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: _supportEmail));
+      AppSnackbar.info(
+        'Could not open email. Address copied: $_supportEmail',
+        title: 'Email app unavailable',
+      );
+    }
+  }
+
+  String _encodeQuery(Map<String, String> params) {
+    return params.entries
+        .map(
+          (e) =>
+              '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+        )
+        .join('&');
   }
 }
 
@@ -300,7 +425,7 @@ class _ContactCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(r.scale(16)),
       decoration: BoxDecoration(
-        color: AppColors.surfaceOf(context),
+        color: AppColors.cardOf(context),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.borderOf(context)),
       ),
@@ -343,7 +468,7 @@ class _ContactCard extends StatelessWidget {
                 Text(
                   detail,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: r.scale(12),
                     color: AppColors.textSecondaryOf(context),
                   ),
                 ),
@@ -354,6 +479,7 @@ class _ContactCard extends StatelessWidget {
                     padding: EdgeInsets.zero,
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: AppColors.primary,
                   ),
                   child: Text(
                     actionLabel,

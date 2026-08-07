@@ -107,7 +107,7 @@ class _CalorieGoalSuccessDialogState extends State<CalorieGoalSuccessDialog>
                             CalorieGoalSuccessDialog._lottieAsset,
                             width: 120,
                             height: 120,
-                            fit: BoxFit.contain,
+                            fit: BoxFit.contain,    
                             repeat: true,
                           ),
                         ),
