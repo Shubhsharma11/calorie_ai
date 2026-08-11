@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
+import '../controllers/settings_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_snackbar.dart';
+import '../core/body_measurement_units.dart';
 import '../core/responsive.dart';
 import '../models/activity_level.dart';
 import '../models/onboarding_request_model.dart';
@@ -25,8 +27,11 @@ class PersonalInformationView extends StatefulWidget {
 
 class _PersonalInformationViewState extends State<PersonalInformationView> {
   late final UserController _userController = Get.find<UserController>();
+  late final SettingsController _settings = Get.find<SettingsController>();
   late ProfileSyncSnapshot _baseline;
   bool _isSaving = false;
+
+  bool get _useMetric => _settings.useMetricUnits.value;
 
   static Color _valueBackground(BuildContext context) =>
       AppColors.surfaceOf(context);
@@ -163,43 +168,101 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
   }
 
   Future<void> _editHeight(UserModel user) async {
-    final result = await _showNumberDialog(
-      title: 'Height',
-      initialValue: user.heightCm != null ? '${user.heightCm}' : '',
-      unit: 'cm',
-      maxLength: 3,
-    );
+    if (_useMetric) {
+      final result = await _showNumberDialog(
+        title: 'Height',
+        initialValue: user.heightCm != null ? '${user.heightCm}' : '',
+        unit: 'cm',
+        maxLength: 3,
+      );
+      if (result == null) return;
+      final height = int.tryParse(result);
+      if (height == null || !BodyMeasurementUnits.isValidCm(height)) {
+        AppSnackbar.error(
+          'Please enter a valid height between 100 and 250 cm.',
+          title: 'Invalid height',
+        );
+        return;
+      }
+      setState(() => user.heightCm = height);
+      _userController.update();
+      return;
+    }
+
+    final result = await _showHeightImperialDialog(heightCm: user.heightCm);
     if (result == null) return;
-    final height = int.tryParse(result);
-    if (height == null || height < 100 || height > 250) {
+    if (!BodyMeasurementUnits.isValidFeetInches(result.feet, result.inches)) {
       AppSnackbar.error(
-        'Please enter a valid height between 100 and 250 cm.',
+        'Please enter a valid height between 3 ft 4 in and 8 ft 2 in.',
         title: 'Invalid height',
       );
       return;
     }
-    setState(() => user.heightCm = height);
+    setState(() {
+      user.heightCm = BodyMeasurementUnits.cmFromFeetInches(
+        result.feet,
+        result.inches,
+      );
+    });
     _userController.update();
   }
 
   Future<void> _editWeight(UserModel user) async {
+    if (_useMetric) {
+      final result = await _showNumberDialog(
+        title: 'Weight',
+        initialValue: user.weightKg != null ? '${user.weightKg}' : '',
+        unit: 'kg',
+        maxLength: 3,
+      );
+      if (result == null) return;
+      final weight = int.tryParse(result);
+      if (weight == null || !BodyMeasurementUnits.isValidKg(weight)) {
+        AppSnackbar.error(
+          'Please enter a valid weight between 30 and 300 kg.',
+          title: 'Invalid weight',
+        );
+        return;
+      }
+      setState(() => user.weightKg = weight);
+      _userController.update();
+      return;
+    }
+
     final result = await _showNumberDialog(
       title: 'Weight',
-      initialValue: user.weightKg != null ? '${user.weightKg}' : '',
-      unit: 'kg',
+      initialValue: user.weightKg != null
+          ? '${BodyMeasurementUnits.lbsFromKg(user.weightKg!)}'
+          : '',
+      unit: 'lb',
       maxLength: 3,
     );
     if (result == null) return;
-    final weight = int.tryParse(result);
-    if (weight == null || weight < 30 || weight > 300) {
+    final lbs = int.tryParse(result);
+    if (lbs == null || !BodyMeasurementUnits.isValidLbs(lbs)) {
       AppSnackbar.error(
-        'Please enter a valid weight between 30 and 300 kg.',
+        'Please enter a valid weight between 66 and 661 lb.',
         title: 'Invalid weight',
       );
       return;
     }
-    setState(() => user.weightKg = weight);
+    setState(() => user.weightKg = BodyMeasurementUnits.kgFromLbs(lbs.toDouble()));
     _userController.update();
+  }
+
+  String _heightDisplay(UserModel user) {
+    final cm = user.heightCm;
+    if (cm == null) return '—';
+    if (_useMetric) return '$cm';
+    final converted = BodyMeasurementUnits.feetInchesFromCm(cm);
+    return "${converted.feet}' ${converted.inches}\"";
+  }
+
+  String _weightDisplay(UserModel user) {
+    final kg = user.weightKg;
+    if (kg == null) return '—';
+    if (_useMetric) return '$kg';
+    return '${BodyMeasurementUnits.lbsFromKg(kg)}';
   }
 
   Future<void> _editActivityLevel(UserModel user) async {
@@ -303,6 +366,71 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
     );
   }
 
+  Future<({int feet, int inches})?> _showHeightImperialDialog({
+    required int? heightCm,
+  }) {
+    final initial = heightCm != null
+        ? BodyMeasurementUnits.feetInchesFromCm(heightCm)
+        : (feet: 5, inches: 7);
+    final feetCtrl = TextEditingController(text: '${initial.feet}');
+    final inchesCtrl = TextEditingController(text: '${initial.inches}');
+
+    return showDialog<({int feet, int inches})>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Height'),
+        content: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: feetCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: 1,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  suffixText: 'ft',
+                  counterText: '',
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: inchesCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: 2,
+                decoration: const InputDecoration(
+                  suffixText: 'in',
+                  counterText: '',
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final feet = int.tryParse(feetCtrl.text.trim());
+              final inches = int.tryParse(inchesCtrl.text.trim());
+              if (feet == null || inches == null) {
+                Navigator.of(ctx).pop();
+                return;
+              }
+              Navigator.of(ctx).pop((feet: feet, inches: inches));
+            },
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
@@ -311,9 +439,12 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
     return Scaffold(
       backgroundColor: AppColors.backgroundOf(context),
       appBar: const AppAppBar(title: 'Personal Information'),
-      body: GetBuilder<UserController>(
+      body: Obx(() {
+        _settings.useMetricUnits.value;
+        return GetBuilder<UserController>(
         builder: (_) {
           final user = _userController.user;
+          final useMetric = _settings.useMetricUnits.value;
 
           return Column(
             children: [
@@ -361,17 +492,30 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
                       SizedBox(height: r.scale(10)),
                       _InfoRow(
                         label: 'Height',
-                        subtitle: 'Your height',
-                        value: user.heightCm != null ? '${user.heightCm}' : '—',
-                        unit: 'cm',
+                        subtitle: useMetric
+                            ? 'Your height in cm'
+                            : 'Your height in feet and inches',
+                        value: _heightDisplay(user),
+                        unit: user.heightCm == null
+                            ? null
+                            : useMetric
+                                ? 'cm'
+                                : null,
+                        wideValue: !useMetric,
                         onTap: () => _editHeight(user),
                       ),
                       SizedBox(height: r.scale(10)),
                       _InfoRow(
                         label: 'Weight',
-                        subtitle: 'Your current weight',
-                        value: user.weightKg != null ? '${user.weightKg}' : '—',
-                        unit: 'kg',
+                        subtitle: useMetric
+                            ? 'Your current weight in kg'
+                            : 'Your current weight in lb',
+                        value: _weightDisplay(user),
+                        unit: user.weightKg == null
+                            ? null
+                            : useMetric
+                                ? 'kg'
+                                : 'lb',
                         onTap: () => _editWeight(user),
                       ),
                       SizedBox(height: r.scale(22)),
@@ -415,7 +559,8 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
             ],
           );
         },
-      ),
+      );
+      }),
     );
   }
 }

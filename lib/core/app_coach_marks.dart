@@ -233,7 +233,7 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
     await Future<void>.delayed(const Duration(milliseconds: 320));
     if (!mounted) return;
     _startAt(0);
-  }
+  }                                                                                                        
 
   Future<void> _maybeStart() async {
     if (!mounted || _starting || _active) return;

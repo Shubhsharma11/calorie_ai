@@ -77,12 +77,12 @@ class RepeatYesterdayCard extends StatelessWidget {
                       Text(
                         dayLabel.isEmpty
                             ? 'Copy a previous day’s meals in one tap.'
-                            : 'Last logged on $dayLabel. Copy in one tap.',
+                            : 'Last logged on $dayLabel. Copy in one tap.',                      
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 13,
-                          height: 1.35,
-                          fontWeight: FontWeight.w500,
+                          height: 1.35,  
+                          fontWeight: FontWeight.w500,                                        
                         ),
                       ),
                     ],

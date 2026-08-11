@@ -43,13 +43,14 @@ class _HelpSupportViewState extends State<HelpSupportView> {
       answer:
           'Your goal is estimated from your age, height, weight, gender, '
           'activity level, and fitness goal (lose, maintain, or gain weight). '
-          'Update these in your Health Profile on the Profile tab.',
+          'Update body details in Profile → Personal Information and your '
+          'goal in Profile → My Goals.',
     ),
     (
       question: 'Can I track water intake?',
       answer:
-          'Yes. Use the Water Intake banner on Home or open Water Tracker '
-          'from Profile or Stats. Log water in ml with quick-add buttons '
+          'Yes. Use the Water Intake banner on Home, or open Water Tracker '
+          'from Stats. Log water with quick-add buttons '
           '(+250 ml, +500 ml, or a custom amount) and track progress toward '
           'your daily goal, which you can change in Settings.',
     ),
@@ -69,9 +70,10 @@ class _HelpSupportViewState extends State<HelpSupportView> {
     (
       question: 'How do I change my weight or goals?',
       answer:
-          'Go to Profile → Health Profile and update My Goals, Personal '
-          'Details, or Activity Level. Your calorie and macro targets will '
-          'recalculate automatically.',
+          'Go to Profile → Personal Information to update age, height, '
+          'weight, and activity level. Use Profile → My Goals to change '
+          'your fitness goal, target weight, and calorie target. Your '
+          'calorie and macro targets will recalculate automatically.',
     ),
   ];
 

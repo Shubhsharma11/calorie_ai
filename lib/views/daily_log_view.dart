@@ -290,12 +290,12 @@ class _CalorieSummaryCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const Spacer(),
+              const Spacer(),                                     
               if (statusLabel != null)
                 Container(
                   padding: EdgeInsets.symmetric(
                     horizontal: r.scale(10),
-                    vertical: r.scale(5),
+                    vertical: r.scale(5),      
                   ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.12),
@@ -320,6 +320,11 @@ class _CalorieSummaryCard extends StatelessWidget {
               minHeight: 6,
               backgroundColor: AppColors.primary.withValues(alpha: 0.12),
               color: statusColor,
+          
+      
+    
+  
+
             ),
           ),
           if (proteinGoalG > 0 || carbsGoalG > 0 || fatGoalG > 0) ...[
@@ -355,7 +360,7 @@ class _CalorieSummaryCard extends StatelessWidget {
 
 class _MacroStat extends StatelessWidget {
   const _MacroStat({
-    required this.label,
+    required this.label,                       
     required this.current,
     required this.goal,
     required this.color,
@@ -373,7 +378,7 @@ class _MacroStat extends StatelessWidget {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children: [       
           Text(
             label,
             style: TextStyle(
@@ -429,10 +434,10 @@ class _QuickActions extends StatelessWidget {
     if (!showRepeat) return const SizedBox.shrink();
 
     return SizedBox(
-      width: double.infinity,
+      width: double.infinity,                     
       child: OutlinedButton.icon(
         onPressed: onRepeat,
-        icon: Icon(Icons.replay_rounded, size: 18),
+        icon: Icon(Icons.replay_rounded, size: 18),                    
         label: Text('Repeat yesterday · $yesterdayCount meals'),
         style: OutlinedButton.styleFrom(
           padding: EdgeInsets.symmetric(vertical: r.scale(12)),

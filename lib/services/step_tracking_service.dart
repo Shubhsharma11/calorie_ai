@@ -184,16 +184,16 @@ class StepTrackingService {
       _isListening = true;
       _backend = StepTrackingBackend.pedometer;
       onBackendChanged?.call(_backend);
-    } catch (error) {
-      onError?.call('Could not start step tracking: $error');
-      _isListening = false;
+    } catch (error) {                                                      
+      onError?.call('Could not start step tracking: $error');                                     
+      _isListening = false;                                                             
       _backend = StepTrackingBackend.none;
     }
   }
-
+                                                       
   Future<void> stop() async {
     await _pedometerSubscription?.cancel();
-    _pedometerSubscription = null;
+    _pedometerSubscription = null;                                                     
     _healthPollTimer?.cancel();
     _healthPollTimer = null;
     _isListening = false;

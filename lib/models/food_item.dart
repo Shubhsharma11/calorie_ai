@@ -8,10 +8,11 @@ class FoodItem {
     this.emoji = '🍽️',
     this.imageUrl,
   });
-
+                                      
   final String name;
   final int caloriesPer100g;
-  final double protein;
+  final double protein;   
+  
   final double carbs;
   final double fat;
   final String emoji;

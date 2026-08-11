@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
@@ -63,27 +64,25 @@ class _HealthProblemViewState extends State<HealthProblemView> {
   final Set<String> _selectedCategories = {};
   final Map<String, _ConcernFormData> _forms = {};
   final Set<String> _expandedCategories = {};
-  bool _noneSelected = false;
+  /// null = not chosen yet, true = has concerns, false = none
+  bool? _hasConcerns;
   late ProfileSyncSnapshot _baseline;
 
   static const _categories = [
     _ProblemCategory(label: 'Diabetes', asset: 'assets/image/glucosemeter.svg'),
     _ProblemCategory(
       label: 'Blood Pressure',
-      shortLabel: 'Blood\nPressure',
       asset: 'assets/image/blood_pressure.svg',
     ),
     _ProblemCategory(label: 'Respiratory', asset: 'assets/image/lungs.svg'),
     _ProblemCategory(label: 'Digestive', asset: 'assets/image/stomach.svg'),
     _ProblemCategory(
       label: 'Stress / Anxiety',
-      shortLabel: 'Stress',
       asset: 'assets/image/anxiety.svg',
     ),
     _ProblemCategory(label: 'Immunity', asset: 'assets/image/immunity.svg'),
     _ProblemCategory(
       label: 'High Cholesterol',
-      shortLabel: 'High\nCholesterol',
       asset: 'assets/image/Cholesterol.svg',
     ),
     _ProblemCategory(label: 'Other', asset: 'assets/image/menu (1).svg'),
@@ -97,9 +96,9 @@ class _HealthProblemViewState extends State<HealthProblemView> {
   ];
   static const _severityOptions = ['Mild', 'Moderate', 'Severe'];
   static const _medicationOptions = ['No', 'Yes', 'Prefer not to say'];
-  static const _heroAsset = 'assets/image/notebook.png';
 
   bool get _fromProfile => RouteArgs.isEditingFromProfile;
+  bool get _noneSelected => _hasConcerns == false;
 
   @override
   void initState() {
@@ -107,9 +106,10 @@ class _HealthProblemViewState extends State<HealthProblemView> {
     _baseline = _user.captureProfileSyncSnapshot();
     for (final concern in _user.user.healthConcerns) {
       if (concern.isNone) {
-        _noneSelected = true;
+        _hasConcerns = false;
         continue;
       }
+      _hasConcerns = true;
       _selectedCategories.add(concern.category);
       _forms[concern.category] = _ConcernFormData(
         concern: concern,
@@ -159,16 +159,24 @@ class _HealthProblemViewState extends State<HealthProblemView> {
   }
 
   Future<void> _continue() async {
-    if (!_noneSelected && _selectedCategories.isEmpty) {
+    if (_hasConcerns == null) {
       _showValidationMessage(
-        'Select a category',
-        'Please choose one or more health concerns, or tap "I don\'t have any of these" below.',
+        'Make a choice',
+        'Please tell us whether you have any health concerns.',
       );
       return;
     }
 
     if (_noneSelected) {
       await _saveAndFinish([HealthConcern.none()]);
+      return;
+    }
+
+    if (_selectedCategories.isEmpty) {
+      _showValidationMessage(
+        'Select a concern',
+        'Please choose one or more health concerns before continuing.',
+      );
       return;
     }
 
@@ -258,11 +266,12 @@ class _HealthProblemViewState extends State<HealthProblemView> {
     );
   }
 
-  void _toggleNone() {
+  void _selectHasConcerns(bool hasConcerns) {
     FocusScope.of(context).unfocus();
+    HapticFeedback.selectionClick();
     setState(() {
-      _noneSelected = !_noneSelected;
-      if (_noneSelected) {
+      _hasConcerns = hasConcerns;
+      if (!hasConcerns) {
         for (final form in _forms.values) {
           form.dispose();
         }
@@ -276,8 +285,9 @@ class _HealthProblemViewState extends State<HealthProblemView> {
 
   void _toggleCategory(String category) {
     FocusScope.of(context).unfocus();
+    HapticFeedback.selectionClick();
     setState(() {
-      _noneSelected = false;
+      _hasConcerns = true;
       if (_selectedCategories.contains(category)) {
         _selectedCategories.remove(category);
         _expandedCategories.remove(category);
@@ -296,8 +306,11 @@ class _HealthProblemViewState extends State<HealthProblemView> {
     AppColors.syncFromContext(context);
     final r = context.responsive;
     final compact = r.height < 760;
-    final hasHealthConcerns = _selectedCategories.isNotEmpty && !_noneSelected;
+    final showingConcerns = _hasConcerns == true;
+    final hasHealthConcerns =
+        showingConcerns && _selectedCategories.isNotEmpty;
     final sortedCategories = _selectedCategories.toList()..sort();
+    final actionLabel = _fromProfile ? 'Save' : 'Continue';
 
     return PopScope(
       canPop: _fromProfile,
@@ -316,47 +329,101 @@ class _HealthProblemViewState extends State<HealthProblemView> {
             content: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(height: r.scale(compact ? 8 : 14)),
+                SizedBox(height: r.scale(compact ? 4 : 8)),
                 _HeroSection(r: r, compact: compact),
-                SizedBox(height: r.scale(compact ? 18 : 24)),
-                _SectionTitle(text: 'Select Your Problem Categories', r: r),
-                SizedBox(height: r.scale(6)),
+                SizedBox(height: r.scale(compact ? 14 : 18)),
                 Text(
-                  'Tap to select multiple concerns. Tap again to deselect.',
+                  'Do you have any health concerns?',
+                  style: TextStyle(
+                    fontSize: r.scale(17, tablet: 18),
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: r.scale(4)),
+
+
+                Text(
+                  'Start with Yes or No — easy to change anytime.',
                   style: TextStyle(
                     fontSize: r.scale(13, tablet: 14),
                     color: AppColors.textSecondary,
                     height: 1.35,
                   ),
                 ),
-                if (hasHealthConcerns) ...[
-                  SizedBox(height: r.scale(6)),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _CountBadge(count: _selectedCategories.length),
-                  ),
-                ],
-                SizedBox(height: r.scale(8)),
-                _CategoryGrid(
-                  categories: _categories,
-                  selectedCategories: _selectedCategories,
-                  onChanged: _toggleCategory,
-                ),
-                if (!_noneSelected && _selectedCategories.isEmpty) ...[
-                  SizedBox(height: r.scale(compact ? 14 : 18)),
-                  const _GuidanceCard(
-                    iconAsset: 'assets/image/point.svg',
-                    title: 'Choose what applies to you',
-                    message:
-                        'Select one or more health concerns and fill in details for each, or choose the option below if none apply.',
-                  ),
-                ],
                 SizedBox(height: r.scale(12)),
-                _OrDivider(),
-                SizedBox(height: r.scale(10)),
-                _NoneOption(selected: _noneSelected, onTap: _toggleNone),
-                SizedBox(height: r.scale(compact ? 18 : 22)),
+                _PathChoiceRow(
+                  hasConcerns: _hasConcerns,
+                  onSelect: _selectHasConcerns,
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: _noneSelected
+                      ? Padding(
+                          padding: EdgeInsets.only(top: r.scale(14)),
+                          child: _NoneConfirmedCard(actionLabel: actionLabel),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: showingConcerns
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(height: r.scale(compact ? 18 : 22)),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Which ones apply?',
+                                    style: TextStyle(
+                                      fontSize: r.scale(17, tablet: 18),
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                if (hasHealthConcerns)
+                                  _CountBadge(
+                                    count: _selectedCategories.length,
+                                  ),
+                              ],
+                            ),
+                            SizedBox(height: r.scale(4)),
+                            Text(
+                              'Select all that apply. Tap again to remove.',
+                              style: TextStyle(
+                                fontSize: r.scale(13, tablet: 14),
+                                color: AppColors.textSecondary,
+                                height: 1.35,
+                              ),
+                            ),
+                            SizedBox(height: r.scale(12)),
+                            _CategoryGrid(
+                              categories: _categories,
+                              selectedCategories: _selectedCategories,
+                              onChanged: _toggleCategory,
+                            ),
+                            if (_selectedCategories.isEmpty) ...[
+                              SizedBox(height: r.scale(14)),
+                              const _GuidanceCard(
+                                iconAsset: 'assets/image/point.svg',
+                                title: 'Select your concerns',
+                                message:
+                                    'Choose one or more categories, then add details for each.',
+                              ),
+                            ],
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
                 if (hasHealthConcerns) ...[
+                  SizedBox(height: r.scale(compact ? 18 : 22)),
                   _SectionTitle(text: 'Details for Each Concern', r: r),
                   SizedBox(height: r.scale(6)),
                   Text(
@@ -406,11 +473,11 @@ class _HealthProblemViewState extends State<HealthProblemView> {
                   height: 52,
                   child: ElevatedButton(
                     onPressed: _continue,
-                    child: Text(_fromProfile ? 'Save' : 'Continue'),
+                    child: Text(actionLabel),
                   ),
                 ),
                 SizedBox(height: r.scale(12)),
-                const _SettingsNote(),
+              
               ],
             ),
           ),
@@ -424,14 +491,10 @@ class _ProblemCategory {
   const _ProblemCategory({
     required this.label,
     required this.asset,
-    this.shortLabel,
   });
 
   final String label;
-  final String? shortLabel;
   final String asset;
-
-  String get gridLabel => shortLabel ?? label;
 }
 
 class _ConcernDetailCard extends StatelessWidget {
@@ -702,26 +765,6 @@ class _SelectionIndicator extends StatelessWidget {
   }
 }
 
-abstract final class _CategoryTile {
-  static BoxDecoration decoration({required bool selected}) {
-    return BoxDecoration(
-      color: selected ? AppColors.selectionFill : AppColors.card,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: selected ? AppColors.primary : AppColors.border,
-        width: selected ? 1.5 : 1,
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: AppColors.shadowColor,
-          blurRadius: selected ? 8 : 5,
-          offset: Offset(0, selected ? 2 : 1),
-        ),
-      ],
-    );
-  }
-}
-
 abstract final class _SetupCard {
   static BoxDecoration decoration({
     bool selected = false,
@@ -747,8 +790,14 @@ abstract final class _SetupCard {
   }
 }
 
-class _OrDivider extends StatelessWidget {
-  const _OrDivider();
+class _PathChoiceRow extends StatelessWidget {
+  const _PathChoiceRow({
+    required this.hasConcerns,
+    required this.onSelect,
+  });
+
+  final bool? hasConcerns;
+  final ValueChanged<bool> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -756,100 +805,187 @@ class _OrDivider extends StatelessWidget {
 
     return Row(
       children: [
-        Expanded(child: Divider(height: 1, color: AppColors.border)),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: r.scale(12)),
-          child: Text(
-            'Or',
-            style: TextStyle(
-              fontSize: r.scale(12, tablet: 13),
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-              letterSpacing: 0.4,
-            ),
+        Expanded(
+          child: _PathChoiceCard(
+            title: 'Yes',
+            subtitle: 'I have concerns',
+            imageAsset: 'assets/image/heartbeat.svg',
+            selected: hasConcerns == true,
+            onTap: () => onSelect(true),
           ),
         ),
-        Expanded(child: Divider(height: 1, color: AppColors.border)),
+        SizedBox(width: r.scale(10)),
+        Expanded(
+          child: _PathChoiceCard(
+            title: 'No',
+            subtitle: "I don't have any",
+            imageAsset: 'assets/image/smile.svg',
+            selected: hasConcerns == false,
+            onTap: () => onSelect(false),
+          ),
+        ),
       ],
     );
   }
 }
 
-class _NoneOption extends StatelessWidget {
-  const _NoneOption({required this.selected, required this.onTap});
+class _PathChoiceCard extends StatelessWidget {
+  const _PathChoiceCard({
+    required this.title,
+    required this.subtitle,
+    required this.imageAsset,
+    required this.selected,
+    required this.onTap,
+  });
 
+  final String title;
+  final String subtitle;
+  final String imageAsset;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final iconSize = r.scale(42, tablet: 46);
 
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
-          width: double.infinity,
-          constraints: BoxConstraints(minHeight: r.scale(64, tablet: 68)),
-          padding: EdgeInsets.symmetric(
-            horizontal: r.scale(16),
-            vertical: r.scale(14, tablet: 16),
+          padding: EdgeInsets.fromLTRB(
+            r.scale(14),
+            r.scale(14),
+            r.scale(12),
+            r.scale(14),
           ),
-          decoration: _CategoryTile.decoration(selected: selected),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          decoration: BoxDecoration(
+            color: selected ? AppColors.selectionFill : AppColors.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? AppColors.primary : AppColors.border,
+              width: selected ? 1.8 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: selected
+                    ? AppColors.primary.withValues(alpha: 0.12)
+                    : AppColors.shadowColor,
+                blurRadius: selected ? 14 : 8,
+                offset: Offset(0, selected ? 4 : 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: iconSize,
-                height: iconSize,
-                child: Transform.scale(
-                  scale: 0.8,
-                  child: Image.asset(
-                    'assets/image/no-entry.png',
-                    fit: BoxFit.contain,
+              Row(
+                children: [
+                  SizedBox(
+                    width: r.scale(40),
+                    height: r.scale(40),
+                    child: SvgPicture.asset(
+                      imageAsset,
+                      fit: BoxFit.contain,
+                    ),
                   ),
+                  const Spacer(),
+                  _SelectionIndicator(selected: selected),
+                ],
+              ),
+              SizedBox(height: r.scale(12)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: r.scale(20, tablet: 21),
+                  fontWeight: FontWeight.w800,
+                  color: selected ? AppColors.primary : AppColors.textPrimary,
+                  height: 1.1,
                 ),
               ),
-              SizedBox(width: r.scale(14)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'I don\'t have any of these',
-                      style: TextStyle(
-                        fontSize: r.scale(15, tablet: 16),
-                        fontWeight: FontWeight.w700,
-                        color: selected
-                            ? AppColors.primary
-                            : AppColors.textPrimary,
-                        height: 1.25,
-                      ),
-                    ),
-                    SizedBox(height: r.scale(2)),
-                    Text(
-                      'Skip health concern details',
-                      style: TextStyle(
-                        fontSize: r.scale(12, tablet: 13),
-                        color: AppColors.textSecondary,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
+              SizedBox(height: r.scale(4)),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: r.scale(12, tablet: 13),
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                  height: 1.25,
                 ),
               ),
-              SizedBox(width: r.scale(8)),
-              _SelectionIndicator(selected: selected),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _NoneConfirmedCard extends StatelessWidget {
+  const _NoneConfirmedCard({required this.actionLabel});
+
+  final String actionLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: r.scale(14),
+        vertical: r.scale(14),
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: r.scale(36),
+            height: r.scale(36),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.check_rounded,
+              color: AppColors.primary,
+              size: r.scale(20),
+            ),
+          ),
+          SizedBox(width: r.scale(12)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No health concerns',
+                  style: TextStyle(
+                    fontSize: r.scale(14, tablet: 15),
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: r.scale(2)),
+                Text(
+                  'Tap $actionLabel below when you\'re ready.',
+                  style: TextStyle(
+                    fontSize: r.scale(12, tablet: 13),
+                    color: AppColors.textSecondary,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -860,6 +996,8 @@ class _HeroSection extends StatelessWidget {
 
   final Responsive r;
   final bool compact;
+
+  static const _heroAsset = 'assets/image/medical_report.svg';
 
   @override
   Widget build(BuildContext context) {
@@ -875,57 +1013,59 @@ class _HeroSection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                RichText(
-                  text: TextSpan(
+                Text.rich(
+                  TextSpan(
                     style: TextStyle(
-                      fontSize: r.scale(compact ? 25 : 28, tablet: 31),
+                      fontSize: r.scale(compact ? 22 : 24, tablet: 26),
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
-                      height: 1.16,
-                      letterSpacing: -0.5,
+                      height: 1.18,
+                      letterSpacing: -0.4,
                     ),
-                    children: const [
-                      TextSpan(text: 'Enter your\n'),
-                      TextSpan(
-                        text: 'health concern',
+                    children: [
+                      const TextSpan(text: "We're here for\n"),
+                      const TextSpan(
+                        text: 'your health',
                         style: TextStyle(color: AppColors.primary),
+                      ),
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.middle,
+                        child: Padding(
+                          padding: EdgeInsets.only(left: r.scale(5)),
+                          child: Icon(
+                            Icons.favorite_border_rounded,
+                            size: r.scale(compact ? 18 : 20, tablet: 22),
+                            color: AppColors.primary,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                SizedBox(height: r.scale(compact ? 6 : 8)),
+                SizedBox(height: r.scale(compact ? 5 : 6)),
                 Text(
-                  'Select all concerns that apply. You\'ll add separate details for each one.',
+                  'Tell us a little about your health so we can personalize your journey.',
                   style: TextStyle(
-                    fontSize: r.scale(compact ? 13 : 14, tablet: 15),
+                    fontSize: r.scale(compact ? 12 : 13, tablet: 14),
                     color: AppColors.textSecondary,
-                    height: 1.4,
+                    height: 1.35,
                   ),
                 ),
               ],
             ),
           ),
-          SizedBox(width: r.scale(12)),
+          SizedBox(width: r.scale(10)),
           SizedBox(
-            width: r.scale(compact ? 142 : 164, tablet: 190),
-            height: r.scale(compact ? 142 : 164, tablet: 190),
-            child: const _MedicalHeroIllustration(),
+            width: r.scale(compact ? 96 : 110, tablet: 124),
+            height: r.scale(compact ? 96 : 110, tablet: 124),
+            child: SvgPicture.asset(
+              _heroAsset,
+              fit: BoxFit.contain,
+              alignment: Alignment.center,
+            ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _MedicalHeroIllustration extends StatelessWidget {
-  const _MedicalHeroIllustration();
-
-  @override
-  Widget build(BuildContext context) {
-    return Image.asset(
-      _HealthProblemViewState._heroAsset,
-      fit: BoxFit.contain,
-      alignment: Alignment.center,
     );
   }
 }
@@ -1027,7 +1167,7 @@ class _CategoryGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final crossAxisCount = r.width < 600 ? 4 : 5;
+    final crossAxisCount = r.width < 600 ? 2 : 3;
 
     return GridView.builder(
       shrinkWrap: true,
@@ -1035,9 +1175,9 @@ class _CategoryGrid extends StatelessWidget {
       itemCount: categories.length,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
-        mainAxisSpacing: r.scale(7),
-        crossAxisSpacing: r.scale(7),
-        childAspectRatio: r.isTablet ? 0.76 : 0.74,
+        mainAxisSpacing: r.scale(10),
+        crossAxisSpacing: r.scale(10),
+        childAspectRatio: r.isTablet ? 2.4 : 2.2,
       ),
       itemBuilder: (context, index) {
         final category = categories[index];
@@ -1068,78 +1208,81 @@ class _CategoryCard extends StatelessWidget {
 
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
           width: double.infinity,
           height: double.infinity,
           padding: EdgeInsets.symmetric(
-            horizontal: r.scale(6),
-            vertical: r.scale(8),
+            horizontal: r.scale(10),
+            vertical: r.scale(10),
           ),
-          decoration: _CategoryTile.decoration(selected: selected),
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: r.scale(38, tablet: 40),
-                    height: r.scale(38, tablet: 40),
-                    child: Center(
-                      child: SvgPicture.asset(
-                        category.asset,
-                        fit: BoxFit.contain,
-                        alignment: Alignment.center,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: r.scale(6)),
-                  SizedBox(
-                    width: double.infinity,
-                    child: Text(
-                      category.gridLabel,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: r.scale(10, tablet: 11),
-                        fontWeight: FontWeight.w700,
-                        color: selected
-                            ? AppColors.primary
-                            : AppColors.textPrimary,
-                        height: 1.12,
-                      ),
-                    ),
-                  ),
-                ],
+          decoration: BoxDecoration(
+            color: selected ? AppColors.selectionFill : AppColors.card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? AppColors.primary : AppColors.border,
+              width: selected ? 1.5 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.shadowColor,
+                blurRadius: selected ? 8 : 5,
+                offset: Offset(0, selected ? 2 : 1),
               ),
-              if (selected)
-                Positioned(
-                  top: r.scale(4),
-                  right: r.scale(4),
-                  child: Container(
-                    width: r.scale(16),
-                    height: r.scale(16),
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.check_rounded,
-                      size: r.scale(11),
-                      color: AppColors.onPrimary,
-                    ),
+            ],
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: r.scale(34, tablet: 36),
+                height: r.scale(34, tablet: 36),
+                child: SvgPicture.asset(
+                  category.asset,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              SizedBox(width: r.scale(8)),
+              Expanded(
+                child: Text(
+                  category.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: r.scale(12, tablet: 13),
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? AppColors.primary
+                        : AppColors.textPrimary,
+                    height: 1.15,
                   ),
                 ),
+              ),
+              SizedBox(width: r.scale(4)),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: r.scale(18),
+                height: r.scale(18),
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.primary : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected ? AppColors.primary : AppColors.border,
+                    width: 1.5,
+                  ),
+                ),
+                child: selected
+                    ? Icon(
+                        Icons.check_rounded,
+                        size: r.scale(12),
+                        color: AppColors.onPrimary,
+                      )
+                    : null,
+              ),
             ],
           ),
         ),
@@ -1244,7 +1387,7 @@ class _DetailDropdown extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (context) {
-        final r = context.responsive;
+        final r = context.responsive;       
 
         return SafeArea(
           child: ConstrainedBox(
@@ -1495,33 +1638,8 @@ class _OptionTile extends StatelessWidget {
   }
 }
 
-class _SettingsNote extends StatelessWidget {
-  const _SettingsNote();
 
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(
-          Icons.verified_user_outlined,
-          size: r.scale(14),
-          color: AppColors.primary,
-        ),
-        SizedBox(width: r.scale(6)),
-        Flexible(
-          child: Text(
-            'You can change this anytime in settings',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: r.scale(12, tablet: 13),
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
+    
+    
+    
+  

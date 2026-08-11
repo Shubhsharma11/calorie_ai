@@ -1974,7 +1974,7 @@ class UserController extends GetxController {
       MainController.resetHomeTabIfRegistered();
       Get.offAllNamed(AppRoutes.login);
       AppSnackbar.success(
-        'Your account data has been deleted on the server.',
+        'Your account has been permanently deleted.',
         title: 'Account deleted',
       );
       return true;

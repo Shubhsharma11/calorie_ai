@@ -9,7 +9,7 @@ import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/goal_type.dart';
-import '../models/onboarding_request_model.dart';
+import '../models/onboarding_request_model.dart';                
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
@@ -28,19 +28,23 @@ class GoalSetupView extends StatefulWidget {
 }
 
 class _GoalSetupViewState extends State<GoalSetupView> {
-  final UserController controller = Get.find<UserController>();
+  final UserController controller = Get.find<UserController>();          
 
-  @override
+  @override  
+
+
   void initState() {
-    super.initState();
-    if (RouteArgs.isEditingFromProfile) {
+
+
+    super.initState();       
+    if (RouteArgs.isEditingFromProfile) {                         
       controller.beginGoalEditFromProfile();
     }
   }
 
   Future<void> _onBack({required bool fromProfile}) async {
     if (fromProfile) {
-      controller.cancelGoalEditFromProfile();
+      controller.cancelGoalEditFromProfile();                                  
       Get.back<void>();
       return;
     }
@@ -48,13 +52,10 @@ class _GoalSetupViewState extends State<GoalSetupView> {
   }
 
   void _onSelectGoal(GoalType goal) {
-    controller.selectGoal(
-      goal,
-      persistDraft: !RouteArgs.isEditingFromProfile,
-    );
+    controller.selectGoal(goal, persistDraft: !RouteArgs.isEditingFromProfile);
   }
 
-  Future<void> _onContinue({required bool fromProfile}) async {
+  Future<void> _onContinue({required bool fromProfile}) async {    
     final goal = controller.user.goal;
     if (goal == null) {
       AppSnackbar.error('Select your goal first.');
@@ -85,10 +86,7 @@ class _GoalSetupViewState extends State<GoalSetupView> {
         return;
       }
 
-      Get.toNamed(
-        AppRoutes.goalAmount,
-        arguments: RouteArgs.fromProfileMap,
-      );
+      Get.toNamed(AppRoutes.goalAmount, arguments: RouteArgs.fromProfileMap);
       return;
     }
 
@@ -100,6 +98,7 @@ class _GoalSetupViewState extends State<GoalSetupView> {
     }
 
     await controller.persistOnboardingStep(AppRoutes.goalAmount);
+
     Get.toNamed(AppRoutes.goalAmount);
   }
 

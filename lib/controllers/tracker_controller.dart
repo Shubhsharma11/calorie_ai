@@ -1024,12 +1024,12 @@
           unawaited(
             refreshWeightForChartPeriod(
               keepExistingOnEmpty: true,
-              authoritativeEntries: [savedEntry],
+              authoritativeEntries: [savedEntry],        
             ),
           );
 
           return WeightLogOutcome(
-            WeightLogStatus.savedAndSynced,
+            WeightLogStatus.savedAndSynced,                                   
             profileUpdated: response.profileUpdated,
           );
         } on WeightApiException catch (error) {
@@ -1041,7 +1041,7 @@
           return const WeightLogOutcome(WeightLogStatus.failed);
         }
       }
-
+                                                                                           
       weightApiErrorMessage.value =
           'Sign in to save weight to your account.';
       return const WeightLogOutcome(WeightLogStatus.failed);
@@ -1057,7 +1057,7 @@
       updateWeight(kg);
     }
 
-    void _upsertWeightEntry(WeightEntry entry) {
+    void _upsertWeightEntry(WeightEntry entry) {                         
       final entries = [...weightEntries];
       final logDate = MealEntry.normalizeDate(entry.date);
       final index = entries.indexWhere(
@@ -1073,14 +1073,14 @@
 
     Future<WeightDeleteOutcome> deleteWeightEntry(
       WeightEntry entry, {
-      bool applyLocally = true,
+      bool applyLocally = true,                                                
     }) async {
       final entryId = entry.id?.trim();
       if (entryId == null || entryId.isEmpty) {
         return const WeightDeleteOutcome(
           WeightDeleteStatus.missingId,
           message: 'This entry cannot be deleted without a server id.',
-        );
+        );   
       }
 
       final accessToken = await _weightAccessToken();
@@ -1098,7 +1098,7 @@
       try {
         debugPrint(
           'TrackerController: DELETE /api/v1/weight/$entryId starting',
-        );
+        );    
         await _weightRepository.deleteWeight(
           accessToken: accessToken,
           weightId: entryId,

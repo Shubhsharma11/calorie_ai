@@ -48,6 +48,17 @@ class FoodDetailsView extends GetView<FoodController> {
                   food: food,
                   grams: controller.selectedGrams.value,
                   meal: controller.selectedMeal.value,
+
+
+
+
+
+
+
+
+
+
+                  
                 );
                 AppSnackbar.success(
                   isFavorite

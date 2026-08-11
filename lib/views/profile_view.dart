@@ -64,6 +64,10 @@ class ProfileView extends GetView<UserController> {
                           arguments: RouteArgs.fromProfileMap,
                         ),
                       ),
+
+
+                    
+
                       _ProfileMenuRow(
                         icon: Icons.headset_mic_outlined,
                         title: 'Help & Support',
@@ -288,8 +292,8 @@ GestureDetector(
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Account'),
         content: const Text(
-          'This removes your app data only. Your login account stays, '
-          'so you can sign in again later.',
+          'This permanently deletes your FitBuddy AI account and all app data. '
+          'You will need to create a new account to use the app again.',
         ),
         actions: [
           TextButton(

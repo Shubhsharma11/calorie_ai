@@ -124,7 +124,7 @@ class LocalStorageService {
 
   String get _coachMarksKeyForUser {
     final id = userId?.trim();
-    if (id != null && id.isNotEmpty) {
+    if (id != null && id.isNotEmpty) {       
       return '${_coachMarksSeenKey}_$id';
     }
     return _coachMarksSeenKey;
