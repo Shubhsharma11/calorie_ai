@@ -19,6 +19,7 @@ import '../widgets/app_app_bar.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
+
 class GoalAmountView extends StatefulWidget {
   const GoalAmountView({super.key});
 
@@ -569,7 +570,7 @@ class _AmountStepperCard extends StatelessWidget {
   const _AmountStepperCard({
     required this.value,
     required this.unitLabel,
-    required this.onDecrease,
+    required this.onDecrease,                                                                         
     required this.onIncrease,
   });
 

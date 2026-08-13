@@ -151,6 +151,42 @@ class NotificationApiService {
     );
   }
 
+  Future<void> deleteNotification({
+    required String accessToken,
+    required String notificationId,
+  }) async {
+    final endpoint = ApiEndpoints.notificationById(notificationId);
+    if (kDebugMode) {
+      debugPrint(
+        'NotificationApiService: DELETE ${ApiEndpoints.url(endpoint)}',
+      );
+    }
+
+    final response = await _apiClient.delete(
+      endpoint,
+      headers: apiAuthHeaders(accessToken),
+    );
+
+    // 204/empty body is normal for DELETE. 404 = already gone.
+    // 405/501 = backend has not added delete yet; local hide still applies.
+    if (response.statusCode == 404 ||
+        response.statusCode == 405 ||
+        response.statusCode == 501) {
+      return;
+    }
+    if (response.statusCode >= 200 && response.statusCode < 300) return;
+
+    final decoded = _tryDecodeJson(response.body.trim());
+    final message = decoded is Map<String, dynamic>
+        ? decoded['message'] as String? ?? decoded['error'] as String?
+        : null;
+    throw NotificationApiException(
+      message ??
+          'Failed to delete notification (${response.statusCode}).',
+      statusCode: response.statusCode,
+    );
+  }
+
   NotificationListResult _parseListResponse(http.Response response) {
     final decoded = _decodeOrThrow(
       response,

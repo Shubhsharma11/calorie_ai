@@ -200,7 +200,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
             _ContactCard(
               icon: Icons.tour_outlined,
               title: 'Replay app tour',
-              subtitle: 'Highlight Home and navigation features',
+              subtitle: 'Highlight Home, Search tabs, and navigation',
               detail: 'Takes about a minute',
               actionLabel: 'Start tour',
               onAction: () => _replayTour(context),
@@ -226,15 +226,6 @@ class _HelpSupportViewState extends State<HelpSupportView> {
                 subject: 'FitBuddy AI Support',
                 body: _supportEmailBody(),
               ),
-            ),
-            SizedBox(height: r.scale(10)),
-            _ContactCard(
-              icon: Icons.bug_report_outlined,
-              title: 'Report a Problem',
-              subtitle: 'Found a bug or issue?',
-              detail: 'Help us improve FitBuddy AI',
-              actionLabel: 'Send Report',
-              onAction: _reportProblem,
             ),
             SizedBox(height: r.scale(16)),
             Center(
@@ -298,13 +289,6 @@ class _HelpSupportViewState extends State<HelpSupportView> {
     await AppCoachMarks.replay(storage);
   }
 
-  Future<void> _reportProblem() async {
-    await _openSupportEmail(
-      subject: 'FitBuddy AI Bug Report',
-      body: _bugReportBody(),
-    );
-  }
-
   String _supportEmailBody() {
     final user = Get.isRegistered<UserController>()
         ? Get.find<UserController>()
@@ -323,37 +307,6 @@ class _HelpSupportViewState extends State<HelpSupportView> {
       if (email.isNotEmpty) 'Account: $email',
       'App: FitBuddy AI v$_appVersion',
       'Platform: ${Platform.operatingSystem}',
-    ].join('\n');
-  }
-
-  String _bugReportBody() {
-    final user = Get.isRegistered<UserController>()
-        ? Get.find<UserController>()
-        : null;
-    final name = user?.user.name.trim() ?? '';
-    final email = user?.user.email.trim() ?? '';
-    final userId = user?.userId.trim() ?? '';
-
-    return [
-      'Hi FitBuddy team,',
-      '',
-      'What happened:',
-      '',
-      '',
-      'Steps to reproduce:',
-      '1. ',
-      '2. ',
-      '3. ',
-      '',
-      'Expected result:',
-      '',
-      '',
-      '— Device info (please leave) —',
-      if (name.isNotEmpty) 'Name: $name',
-      if (email.isNotEmpty) 'Account: $email',
-      if (userId.isNotEmpty) 'User ID: $userId',
-      'App: FitBuddy AI v$_appVersion',
-      'Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
     ].join('\n');
   }
 

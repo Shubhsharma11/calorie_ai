@@ -96,11 +96,8 @@ abstract final class ApiCustomMealMapper {
     }
 
     if (data is Map) {
-      final nested = data['meals'] ??
-          data['customMeals'] ??
-          data['templates'] ??
-          data['items'];
-      if (nested is List) {
+      final nested = _nestedMealList(Map<String, dynamic>.from(data));
+      if (nested != null) {
         return _presetsFromMaps(nested);
       }
 
@@ -108,8 +105,8 @@ abstract final class ApiCustomMealMapper {
       return single == null ? [] : [single];
     }
 
-    final topLevel = map['meals'] ?? map['customMeals'] ?? map['items'];
-    if (topLevel is List) {
+    final topLevel = _nestedMealList(map);
+    if (topLevel != null) {
       return _presetsFromMaps(topLevel);
     }
 
@@ -118,8 +115,8 @@ abstract final class ApiCustomMealMapper {
   }
 
   static CustomMealPreset? presetFromApiJson(Map<String, dynamic> json) {
-    final name = json['name'] as String?;
-    if (name == null || name.trim().isEmpty) return null;
+    final name = _readString(json, const ['name', 'title', 'mealName']);
+    if (name == null || name.isEmpty) return null;
 
     final id = _readId(json);
     if (id == null || id.isEmpty) return null;
@@ -128,7 +125,10 @@ abstract final class ApiCustomMealMapper {
           json['mealTime'] ?? json['mealtime'] ?? json['meal'],
         ) ??
         MealType.breakfast;
-    final items = _itemsFromApi(json['items'], fallbackMeal: meal);
+    final items = _itemsFromApi(
+      json['items'] ?? json['foods'] ?? json['mealItems'],
+      fallbackMeal: meal,
+    );
 
     return CustomMealPreset(
       id: id,
@@ -137,16 +137,40 @@ abstract final class ApiCustomMealMapper {
           _readDate(json['createdAt'] ?? json['created_at']) ?? DateTime.now(),
       meal: meal,
       items: items,
-      visibility: _visibilityFromApi(json['visibility'] as String?),
+      visibility: _visibilityFromApi(
+        _readString(json, const ['visibility']),
+      ),
     );
   }
 
+  static List<dynamic>? _nestedMealList(Map<String, dynamic> map) {
+    for (final key in [
+      'myMeals',
+      'meals',
+      'customMeals',
+      'templates',
+      'items',
+      'results',
+      'docs',
+    ]) {
+      final value = map[key];
+      if (value is List) return value;
+    }
+    return null;
+  }
+
   static List<CustomMealPreset> _presetsFromMaps(Iterable<dynamic> raw) {
-    return raw
-        .whereType<Map>()
-        .map((item) => presetFromApiJson(Map<String, dynamic>.from(item)))
-        .whereType<CustomMealPreset>()
-        .toList();
+    final presets = <CustomMealPreset>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      try {
+        final parsed = presetFromApiJson(Map<String, dynamic>.from(item));
+        if (parsed != null) presets.add(parsed);
+      } catch (_) {
+        // Skip a malformed template instead of dropping the whole list.
+      }
+    }
+    return presets;
   }
 
   static Map<String, dynamic> _itemToApiJson(SavedMealItem item) {
@@ -184,10 +208,16 @@ abstract final class ApiCustomMealMapper {
     Map<String, dynamic> json, {
     required String fallbackMeal,
   }) {
-    final name = json['name'] as String?;
-    if (name == null || name.trim().isEmpty) return null;
+    final nestedFood = json['food'];
+    final foodMap = nestedFood is Map
+        ? Map<String, dynamic>.from(nestedFood)
+        : const <String, dynamic>{};
+    final name = _readString(json, const ['name', 'foodName', 'title']) ??
+        _readString(foodMap, const ['name', 'foodName', 'title']);
+    if (name == null || name.isEmpty) return null;
 
-    final quantity = _readInt(json, const ['quantity', 'grams', 'servingGrams']);
+    final quantity = _readInt(json, const ['quantity', 'grams', 'servingGrams']) ??
+        _readInt(foodMap, const ['quantity', 'grams', 'servingGrams']);
     if (quantity == null || quantity <= 0) return null;
 
     final calories = _readInt(json, const ['calories']) ?? 0;
@@ -294,11 +324,23 @@ abstract final class ApiCustomMealMapper {
     return DateTime.tryParse(raw.trim());
   }
 
+  static String? _readString(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+
   static int? _readInt(Map<String, dynamic> map, List<String> keys) {
     for (final key in keys) {
       final value = map[key];
       if (value is int) return value;
       if (value is num) return value.round();
+      if (value is String) {
+        final parsed = num.tryParse(value.trim());
+        if (parsed != null) return parsed.round();
+      }
     }
     return null;
   }
@@ -307,6 +349,10 @@ abstract final class ApiCustomMealMapper {
     for (final key in keys) {
       final value = map[key];
       if (value is num) return value.toDouble();
+      if (value is String) {
+        final parsed = num.tryParse(value.trim());
+        if (parsed != null) return parsed.toDouble();
+      }
     }
     return null;
   }

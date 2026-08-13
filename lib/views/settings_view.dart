@@ -36,52 +36,51 @@ class _SettingsViewState extends State<SettingsView> {
     super.dispose();
   }
 
-  Future<void> _pickMealReminderTime(
-    BuildContext context,
-    MealReminderSlot slot,
-    TimeOfDay initialTime,
-  ) async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: initialTime,
-      helpText: switch (slot) {
-        MealReminderSlot.breakfast => 'Breakfast reminder',
-        MealReminderSlot.lunch => 'Lunch reminder',
-        MealReminderSlot.dinner => 'Dinner reminder',
-      },
-    );
-    if (picked == null) return;
-    await _settings.setMealReminderTime(slot, picked);
-  }
+  // Future<void> _pickMealReminderTime(
+  //   BuildContext context,
+  //   MealReminderSlot slot,
+  //   TimeOfDay initialTime,
+  // ) async {
+  //   final picked = await showTimePicker(
+  //     context: context,
+  //     initialTime: initialTime,
+  //     helpText: switch (slot) {
+  //       MealReminderSlot.breakfast => 'Breakfast reminder',
+  //       MealReminderSlot.lunch => 'Lunch reminder',
+  //       MealReminderSlot.dinner => 'Dinner reminder',
+  //     },
+  //   );
+  //   if (picked == null) return;
+  //   await _settings.setMealReminderTime(slot, picked);
+  // }
 
-  Future<void> _pickWaterInterval(BuildContext context) async {
-
-    final selected = await showModalBottomSheet<int>(
-      context: context,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            for (final hours in [1, 2, 3, 4])
-              ListTile(
-                onTap: () => Navigator.of(context).pop(hours),
-                title: Text(hours == 1 ? 'Every hour' : 'Every $hours hours'),
-                trailing: _settings.waterReminderIntervalHours.value == hours
-                    ? const Icon(Icons.check_rounded, color: AppColors.primary)
-                    : null,
-              ),
-          ],
-        ),
-      ),
-    );
-    if (selected == null) return;
-    await _settings.setWaterReminderInterval(selected);
-  }
+  // Future<void> _pickWaterInterval(BuildContext context) async {
+  //   final selected = await showModalBottomSheet<int>(
+  //     context: context,
+  //     backgroundColor: AppColors.card,
+  //     shape: const RoundedRectangleBorder(
+  //       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  //     ),
+  //     builder: (_) => SafeArea(
+  //       child: Column(
+  //         mainAxisSize: MainAxisSize.min,
+  //         children: [
+  //           const SizedBox(height: 8),
+  //           for (final hours in [1, 2, 3, 4])
+  //             ListTile(
+  //               onTap: () => Navigator.of(context).pop(hours),
+  //               title: Text(hours == 1 ? 'Every hour' : 'Every $hours hours'),
+  //               trailing: _settings.waterReminderIntervalHours.value == hours
+  //                   ? const Icon(Icons.check_rounded, color: AppColors.primary)
+  //                   : null,
+  //             ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  //   if (selected == null) return;
+  //   await _settings.setWaterReminderInterval(selected);
+  // }
 
   Future<void> _pickWaterGoal(BuildContext context) async {
     final selected = await showModalBottomSheet<int>(
@@ -188,17 +187,17 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
                 SizedBox(height: r.scale(20)),
                 // Built inside Obx (not captured outside) so cards refresh with theme.
-                _NotificationsSettings(
-                  settings: _settings,
-                  themeRevision: Object.hash(
-                    _theme.themeMode.value,
-                    _theme.platformBrightness.value,
-                    brightness,
-                  ),
-                  onPickMealTime: _pickMealReminderTime,
-                  onPickWaterInterval: _pickWaterInterval,
-                ),
-                SizedBox(height: r.scale(20)),
+                // _NotificationsSettings(
+                //   settings: _settings,
+                //   themeRevision: Object.hash(
+                //     _theme.themeMode.value,
+                //     _theme.platformBrightness.value,
+                //     brightness,
+                //   ),
+                //   onPickMealTime: _pickMealReminderTime,
+                //   onPickWaterInterval: _pickWaterInterval,
+                // ),
+                // SizedBox(height: r.scale(20)),
                 _GeneralSettings(
                   settings: _settings,
                   themeRevision: Object.hash(
@@ -234,7 +233,7 @@ class _SettingsViewState extends State<SettingsView> {
   }
 }
 
-class _NotificationsSettings extends StatelessWidget {
+/* class _NotificationsSettings extends StatelessWidget {
   const _NotificationsSettings({
     required this.settings,
     required this.themeRevision,
@@ -359,7 +358,7 @@ class _NotificationsSettings extends StatelessWidget {
       );
     });
   }
-}
+} */
 
 class _GeneralSettings extends StatelessWidget {
   const _GeneralSettings({

@@ -55,6 +55,15 @@ abstract final class AppCoachMarks {
   static final scanNavKey = GlobalKey(debugLabel: 'coach_scan');
   static final statsNavKey = GlobalKey(debugLabel: 'coach_stats');
   static final profileNavKey = GlobalKey(debugLabel: 'coach_profile');
+  static final addFoodAllKey = GlobalKey(debugLabel: 'coach_add_food_all');
+  static final addFoodMyMealsKey =
+      GlobalKey(debugLabel: 'coach_add_food_my_meals');
+  static final addFoodMyFoodKey =
+      GlobalKey(debugLabel: 'coach_add_food_my_food');
+  static final addFoodFavouriteKey =
+      GlobalKey(debugLabel: 'coach_add_food_favourite');
+  static final addFoodSearchKey =
+      GlobalKey(debugLabel: 'coach_add_food_search');
 
   static final steps = <CoachMarkStep>[
     CoachMarkStep(
@@ -138,6 +147,55 @@ abstract final class AppCoachMarks {
     ),
   ];
 
+  /// First visit to Add Food / Search — All, My Meals, My Food, Favourite.
+  static final addFoodSteps = <CoachMarkStep>[
+    CoachMarkStep(
+      key: addFoodAllKey,
+      title: 'All your recents',
+      description:
+          'Foods you logged lately — tap one to add it again.',
+      preferTooltipAbove: false,
+      holePadding: 4,
+      holeRadius: 20,
+    ),
+    CoachMarkStep(
+      key: addFoodMyMealsKey,
+      title: 'My Meals',
+      description:
+          'Meals you built yourself, ready to log in one tap.',
+      preferTooltipAbove: false,
+      holePadding: 4,
+      holeRadius: 20,
+    ),
+    CoachMarkStep(
+      key: addFoodMyFoodKey,
+      title: 'My Food',
+      description:
+          'Custom foods you created, with nutrition you set.',
+      preferTooltipAbove: false,
+      holePadding: 4,
+      holeRadius: 20,
+    ),
+    CoachMarkStep(
+      key: addFoodFavouriteKey,
+      title: 'Favourites',
+      description:
+          'Star a food or meal to keep it here for next time.',
+      preferTooltipAbove: false,
+      holePadding: 4,
+      holeRadius: 20,
+    ),
+    CoachMarkStep(
+      key: addFoodSearchKey,
+      title: 'Tap to search',
+      description:
+          'Type any dish here and log it in seconds.',
+      preferTooltipAbove: false,
+      holePadding: 6,
+      holeRadius: 16,
+    ),
+  ];
+
   static List<GlobalKey?> get navKeys => [
         null,
         diaryNavKey,
@@ -153,7 +211,7 @@ abstract final class AppCoachMarks {
     required Widget child,
   }) {
     CoachMarkStep? step;
-    for (final s in steps) {
+    for (final s in [...steps, ...addFoodSteps]) {
       if (s.key == key) {
         step = s;
         break;
@@ -174,8 +232,19 @@ abstract final class AppCoachMarks {
 
   static Future<void> replay(LocalStorageService storage) async {
     await storage.saveCoachMarksSeen(seen: false);
+    await storage.saveAddFoodCoachMarksSeen(seen: false);
     final handler = replayHandler;
     if (handler != null) await handler();
+  }
+
+  static Future<void> markAddFoodSeen(LocalStorageService storage) async {
+    await storage.saveAddFoodCoachMarksSeen(seen: true);
+  }
+
+  static Future<bool> shouldShowAddFood(LocalStorageService storage) async {
+    // Wait until the Home tour is done so the two overlays never overlap.
+    if (!(await storage.isCoachMarksSeen())) return false;
+    return !(await storage.isAddFoodCoachMarksSeen());
   }
 }
 
@@ -185,11 +254,23 @@ class CoachMarkHost extends StatefulWidget {
     required this.child,
     required this.storage,
     required this.onFinished,
+    this.steps,
+    this.shouldShow,
+    this.markSeen,
+    this.onPresentingStep,
+    this.onCompleted,
+    this.bindReplayHandler = true,
   });
 
   final Widget child;
   final LocalStorageService storage;
   final VoidCallback onFinished;
+  final List<CoachMarkStep>? steps;
+  final Future<bool> Function(LocalStorageService storage)? shouldShow;
+  final Future<void> Function(LocalStorageService storage)? markSeen;
+  final ValueChanged<int>? onPresentingStep;
+  final VoidCallback? onCompleted;
+  final bool bindReplayHandler;
 
   @override
   State<CoachMarkHost> createState() => _CoachMarkHostState();
@@ -204,16 +285,20 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
   bool _busy = false;
   bool _ready = false;
 
+  List<CoachMarkStep> get _steps => widget.steps ?? AppCoachMarks.steps;
+
   @override
   void initState() {
     super.initState();
-    AppCoachMarks.replayHandler = _replay;
+    if (widget.bindReplayHandler) {
+      AppCoachMarks.replayHandler = _replay;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStart());
   }
 
   @override
   void dispose() {
-    if (AppCoachMarks.replayHandler == _replay) {
+    if (widget.bindReplayHandler && AppCoachMarks.replayHandler == _replay) {
       AppCoachMarks.replayHandler = null;
     }
     _removeOverlay();
@@ -233,12 +318,13 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
     await Future<void>.delayed(const Duration(milliseconds: 320));
     if (!mounted) return;
     _startAt(0);
-  }                                                                                                        
+  }
 
   Future<void> _maybeStart() async {
     if (!mounted || _starting || _active) return;
     _starting = true;
-    final show = await AppCoachMarks.shouldShow(widget.storage);
+    final shouldShow = widget.shouldShow ?? AppCoachMarks.shouldShow;
+    final show = await shouldShow(widget.storage);
     if (!mounted) return;
     if (!show) {
       _starting = false;
@@ -257,10 +343,23 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
     unawaited(_presentStep(isFirst: true));
   }
 
+  Future<void> _prepareStep(int index) async {
+    widget.onPresentingStep?.call(index);
+    if (widget.onPresentingStep == null) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || !_active) return;
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    if (!mounted || !_active) return;
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
   Future<void> _presentStep({bool isFirst = false}) async {
     if (!mounted || !_active || _busy) return;
     _busy = true;
     try {
+      await _prepareStep(_step);
+      if (!mounted || !_active) return;
+
       if (isFirst) {
         await _ensureStepVisible(_step);
         if (!mounted || !_active) return;
@@ -309,35 +408,37 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
   }
 
   bool _targetOk(int index) {
-    final step = AppCoachMarks.steps[index];
+    if (index < 0 || index >= _steps.length) return false;
+    final step = _steps[index];
     final rect = _readRect(step.key);
     return rect != null && rect.height >= 4 && rect.width >= 4;
   }
 
   Future<void> _skipMissingTargets() async {
-    if (_step + 1 < AppCoachMarks.steps.length) {
+    if (_step + 1 < _steps.length) {
       _step += 1;
       _busy = false;
       await _presentStep();
       return;
     }
-    await _finish();
+    await _finish(skipped: true);
   }
 
   void _insertOrRebuildOverlay() {
+    if (_steps.isEmpty) return;
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
 
     if (_entry == null) {
       _entry = OverlayEntry(builder: (context) {
-        final i = _displayStep.clamp(0, AppCoachMarks.steps.length - 1);
+        final i = _displayStep.clamp(0, math.max(0, _steps.length - 1)).toInt();
         return _CoachMarkLayer(
           key: const ValueKey('coach_mark_layer'),
           stepIndex: i,
-          stepCount: AppCoachMarks.steps.length,
-          step: AppCoachMarks.steps[i],
+          stepCount: _steps.length,
+          step: _steps[i],
           ready: _ready,
-          onSkip: _finish,
+          onSkip: _skipTour,
           onNext: _next,
         );
       });
@@ -356,8 +457,8 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
   }
 
   Future<void> _ensureStepVisible(int index) async {
-    if (index < 0 || index >= AppCoachMarks.steps.length) return;
-    final step = AppCoachMarks.steps[index];
+    if (index < 0 || index >= _steps.length) return;
+    final step = _steps[index];
     final ctx = step.key.currentContext;
     if (ctx == null) return;
     try {
@@ -398,8 +499,8 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
   void _next() {
     if (!_active || _busy) return;
     final next = _step + 1;
-    if (next >= AppCoachMarks.steps.length) {
-      _finish();
+    if (next >= _steps.length) {
+      unawaited(_finish(skipped: false));
       return;
     }
     HapticFeedback.selectionClick();
@@ -407,15 +508,21 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
     unawaited(_presentStep());
   }
 
-  Future<void> _finish() async {
+  void _skipTour() {
+    unawaited(_finish(skipped: true));
+  }
+
+  Future<void> _finish({bool skipped = false}) async {
     if (!_active) return;
     _active = false;
     _ready = false;
     _insertOrRebuildOverlay();
     await Future<void>.delayed(const Duration(milliseconds: 180));
     _removeOverlay();
-    await AppCoachMarks.markSeen(widget.storage);
+    final markSeen = widget.markSeen ?? AppCoachMarks.markSeen;
+    await markSeen(widget.storage);
     widget.onFinished();
+    if (!skipped) widget.onCompleted?.call();
   }
 
   @override
@@ -998,7 +1105,11 @@ class _CoachMarkLayerState extends State<_CoachMarkLayer>
                 Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () {},
+                    onTap: !canAdvance
+                        ? null
+                        : widget.step.key == AppCoachMarks.addFoodSearchKey
+                            ? widget.onSkip
+                            : () {},
                     child: CustomPaint(
                       painter: _HoleDimPainter(
                         hole: hole,

@@ -33,6 +33,7 @@ import '../views/main_view.dart';
 import '../views/nutrition_plan_loading_view.dart';
 import '../views/notifications_view.dart';
 import '../views/onboarding_view.dart';
+
 import '../views/splash_view.dart';
 import '../views/personal_details_view.dart';
 import '../views/personal_information_view.dart';
@@ -62,6 +63,7 @@ abstract final class AppPages {
       page: () => const LoginView(),
       binding: BindingsBuilder(() => Get.lazyPut(AuthController.new)),
     ),
+   
     AppPageTransitions.getPage(
       name: AppRoutes.register,
       page: () => const RegisterView(),
@@ -243,8 +245,5 @@ abstract final class AppPages {
       name: AppRoutes.helpSupport,
       page: () => const HelpSupportView(),
     ),
-
-  
-  
   ];
 }

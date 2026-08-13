@@ -9,8 +9,8 @@ import '../../models/custom_meal_preset.dart';
 import '../../models/meal_type.dart';
 import '../../routes/app_routes.dart';
 import '../../theme/app_colors.dart';
-import '../filter_chip_pill.dart';
 import '../food_emoji_avatar.dart';
+import '../meal_type_chip_row.dart';
 
 void showCreateMealSheet(
   BuildContext context, {
@@ -147,21 +147,10 @@ Future<void> showCustomMealLogSheet(
                       ),
                     ),
                     SizedBox(height: r.scale(8)),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: MealType.all.map((meal) {
-                          return Padding(
-                            padding: EdgeInsets.only(right: r.scale(8)),
-                            child: FilterChipPill(
-                              label: meal,
-                              selected: selectedMeal == meal,
-                              onTap: () => setState(() => selectedMeal = meal),
-                              fontSize: r.scale(12),
-                            ),
-                          );
-                        }).toList(),
-                      ),
+                    MealTypeChipRow(
+                      selectedMeal: selectedMeal,
+                      onSelected: (meal) =>
+                          setState(() => selectedMeal = meal),
                     ),
                     SizedBox(height: r.scale(20)),
                     SizedBox(

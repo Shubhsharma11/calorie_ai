@@ -92,6 +92,32 @@ class ApiClient {
     );
   }
 
+  Future<http.Response> postMultipart(
+    String endpoint, {
+    required Map<String, String> fields,
+    List<http.MultipartFile> files = const [],
+    Map<String, String>? headers,
+    String? baseUrl,
+  }) {
+    return _tracedRequest(
+      method: HttpMethod.Post,
+      endpoint: endpoint,
+      baseUrl: baseUrl,
+      mergeDefaultJsonHeaders: false,
+      headers: headers,
+      send: (uri, requestHeaders) {
+        return Future(() async {
+          final request = http.MultipartRequest('POST', uri);
+          request.headers.addAll(requestHeaders);
+          request.fields.addAll(fields);
+          request.files.addAll(files);
+          final streamed = await _client.send(request);
+          return http.Response.fromStream(streamed);
+        }).timeout(const Duration(seconds: 45));
+      },
+    );
+  }
+
   Future<http.Response> delete(
     String endpoint, {
     Object? body,
@@ -135,30 +161,40 @@ class ApiClient {
         ? _headers(headers)
         : <String, String>{...?headers};
 
-    final metric = AnalyticsService.newHttpMetric(uri.toString(), method);
-    await metric.start();
-    if (requestPayloadSize != null) {
-      metric.requestPayloadSize = requestPayloadSize;
+    HttpMetric? metric;
+    try {
+      metric = AnalyticsService.newHttpMetric(uri.toString(), method);
+      await metric.start();
+      if (requestPayloadSize != null) {
+        metric.requestPayloadSize = requestPayloadSize;
+      }
+    } catch (_) {
+      metric = null;
     }
 
     try {
       final response = await send(uri, requestHeaders);
-      metric.httpResponseCode = response.statusCode;
-      metric.responsePayloadSize = response.bodyBytes.length;
-      final contentType = response.headers['content-type'];
-      if (contentType != null && contentType.isNotEmpty) {
-        metric.responseContentType = contentType;
+      final activeMetric = metric;
+      if (activeMetric != null) {
+        activeMetric.httpResponseCode = response.statusCode;
+        activeMetric.responsePayloadSize = response.bodyBytes.length;
+        final contentType = response.headers['content-type'];
+        if (contentType != null && contentType.isNotEmpty) {
+          activeMetric.responseContentType = contentType;
+        }
       }
       return response;
     } catch (error, stackTrace) {
-      await AnalyticsService.recordError(
-        error,
-        stackTrace,
-        reason: 'api_${method.name.toLowerCase()}_${uri.path}',
-      );
+      try {
+        await AnalyticsService.recordError(
+          error,
+          stackTrace,
+          reason: 'api_${method.name.toLowerCase()}_${uri.path}',
+        );
+      } catch (_) {}
       rethrow;
     } finally {
-      await metric.stop();
+      await metric?.stop();
     }
   }
 

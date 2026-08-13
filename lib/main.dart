@@ -6,6 +6,8 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_performance/firebase_performance.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -26,10 +28,13 @@ import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  // Keep the native splash up until startup finishes (no second Flutter splash).
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
 
-  // One splash only: native launch screen stays up while startup finishes,
-  // then we open the real first screen (no second Flutter splash).
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   await AnalyticsService.initialize();
@@ -60,6 +65,7 @@ Future<void> main() async {
     final initialRoute = await _resolveInitialRoute();
     runApp(FitBuddyAiApp(initialRoute: initialRoute));
   } finally {
+    FlutterNativeSplash.remove();
     await startupTrace.stop();
   }
 }

@@ -19,10 +19,13 @@ class LocalStorageService {
 
   static const _authSessionKey = 'auth_session_v1';
   static const _coachMarksSeenKey = 'coach_marks_seen_v1';
+  static const _addFoodCoachMarksSeenKey = 'add_food_coach_marks_seen_v1';
   static const _welcomeIntroSeenKey = 'welcome_intro_seen_v1';
   static const _activityLogKey = 'activity_log_v1';
   static const _stepTrackingEnabledKey = 'step_tracking_enabled_v1';
   static const _legacyKeysWipedKey = 'legacy_api_cache_wiped_v3';
+  static const _dismissedNotificationsKey = 'dismissed_notifications_v1';
+  static const _maxDismissedNotificationIds = 500;
 
   Future<SharedPreferences> get _storage async =>
       _prefs ??= await SharedPreferences.getInstance();
@@ -124,10 +127,28 @@ class LocalStorageService {
 
   String get _coachMarksKeyForUser {
     final id = userId?.trim();
-    if (id != null && id.isNotEmpty) {       
+    if (id != null && id.isNotEmpty) {
       return '${_coachMarksSeenKey}_$id';
     }
     return _coachMarksSeenKey;
+  }
+
+  Future<bool> isAddFoodCoachMarksSeen() async {
+    final prefs = await _storage;
+    return prefs.getBool(_addFoodCoachMarksKeyForUser) ?? false;
+  }
+
+  Future<void> saveAddFoodCoachMarksSeen({required bool seen}) async {
+    final prefs = await _storage;
+    await prefs.setBool(_addFoodCoachMarksKeyForUser, seen);
+  }
+
+  String get _addFoodCoachMarksKeyForUser {
+    final id = userId?.trim();
+    if (id != null && id.isNotEmpty) {
+      return '${_addFoodCoachMarksSeenKey}_$id';
+    }
+    return _addFoodCoachMarksSeenKey;
   }
 
   /// Clears session-adjacent leftovers on logout. Auth is cleared separately.
@@ -192,6 +213,28 @@ class LocalStorageService {
       'exercises': exercises.map((entry) => entry.toJson()).toList(),
     });
     await prefs.setString(_activityLogKey, encoded);
+  }
+
+  String get _dismissedNotificationsKeyForUser {
+    final id = userId?.trim();
+    if (id != null && id.isNotEmpty) {
+      return '${_dismissedNotificationsKey}_$id';
+    }
+    return _dismissedNotificationsKey;
+  }
+
+  Future<List<String>> loadDismissedNotificationIds() async {
+    final prefs = await _storage;
+    return prefs.getStringList(_dismissedNotificationsKeyForUser) ?? const [];
+  }
+
+  Future<void> saveDismissedNotificationIds(Iterable<String> ids) async {
+    final prefs = await _storage;
+    final unique = ids.where((id) => id.trim().isNotEmpty).toSet().toList();
+    if (unique.length > _maxDismissedNotificationIds) {
+      unique.removeRange(0, unique.length - _maxDismissedNotificationIds);
+    }
+    await prefs.setStringList(_dismissedNotificationsKeyForUser, unique);
   }
 
   Future<bool> loadStepTrackingEnabled() async {

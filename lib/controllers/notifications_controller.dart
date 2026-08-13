@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
 import '../models/notification_model.dart';
 import '../repositories/notification_repository.dart';
+import '../services/local_storage_service.dart';
 import '../services/notification_api_service.dart';
 import 'user_controller.dart';
 
@@ -11,6 +14,11 @@ class NotificationsController extends GetxController {
     : _repository = repository ?? NotificationRepository();
 
   final NotificationRepository _repository;
+  final Set<String> _dismissedIds = <String>{};
+  final Set<String> _dismissedUnreadIds = <String>{};
+  final Map<String, Timer> _pendingDeletes = <String, Timer>{};
+  Future<void>? _dismissedIdsLoad;
+  String? _dismissedIdsUserId;
 
   final notifications = <NotificationModel>[].obs;
   final unreadCount = 0.obs;
@@ -32,7 +40,16 @@ class NotificationsController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    refreshUnreadCount();
+    unawaited(_loadDismissedIds().then((_) => refreshUnreadCount()));
+  }
+
+  @override
+  void onClose() {
+    for (final timer in _pendingDeletes.values) {
+      timer.cancel();
+    }
+    _pendingDeletes.clear();
+    super.onClose();
   }
 
   Future<void> loadNotifications({bool force = false}) async {
@@ -47,15 +64,22 @@ class NotificationsController extends GetxController {
     isLoading.value = true;
     errorMessage.value = null;
     try {
+      await _loadDismissedIds();
       final result = await _repository.fetchNotifications(
         accessToken: _accessToken,
         page: 1,
         limit: 50,
       );
-      notifications.assignAll(result.notifications);
-      unreadCount.value = result.meta.unreadCount > 0
-          ? result.meta.unreadCount
-          : result.count.unread;
+      final visible = result.notifications
+          .where((item) => !_isDismissed(item))
+          .toList();
+      notifications.assignAll(visible);
+      unreadCount.value = _unreadAfterDismissals(
+        result.notifications,
+        result.meta.unreadCount > 0
+            ? result.meta.unreadCount
+            : result.count.unread,
+      );
     } on NotificationApiException catch (error) {
       errorMessage.value = error.message;
       if (kDebugMode) {
@@ -78,9 +102,12 @@ class NotificationsController extends GetxController {
     }
 
     try {
-      unreadCount.value = await _repository.fetchUnreadCount(
+      await _loadDismissedIds();
+      final serverCount = await _repository.fetchUnreadCount(
         accessToken: _accessToken,
       );
+      final adjusted = serverCount - _dismissedUnreadIds.length;
+      unreadCount.value = adjusted < 0 ? 0 : adjusted;
     } catch (error) {
       if (kDebugMode) {
         debugPrint('NotificationsController.refreshUnreadCount: $error');
@@ -89,6 +116,14 @@ class NotificationsController extends GetxController {
   }
 
   void clearSessionData() {
+    for (final timer in _pendingDeletes.values) {
+      timer.cancel();
+    }
+    _pendingDeletes.clear();
+    _dismissedIds.clear();
+    _dismissedUnreadIds.clear();
+    _dismissedIdsLoad = null;
+    _dismissedIdsUserId = null;
     notifications.clear();
     unreadCount.value = 0;
     errorMessage.value = null;
@@ -162,10 +197,25 @@ class NotificationsController extends GetxController {
     if (!removed.isRead && unreadCount.value > 0) {
       unreadCount.value -= 1;
     }
+
+    final id = _stableId(removed);
+    if (id != null) {
+      _dismissedIds.add(id);
+      if (!removed.isRead) _dismissedUnreadIds.add(id);
+      unawaited(_persistDismissedIds());
+      _scheduleServerDelete(removed);
+    }
     return RemovedNotification(index: index, notification: removed);
   }
 
   void restoreDismissedNotification(RemovedNotification removed) {
+    final id = _stableId(removed.notification);
+    if (id != null) {
+      _dismissedIds.remove(id);
+      _dismissedUnreadIds.remove(id);
+      _pendingDeletes.remove(id)?.cancel();
+      unawaited(_persistDismissedIds());
+    }
     final insertAt = removed.index.clamp(0, notifications.length);
     notifications.insert(insertAt, removed.notification);
     if (!removed.notification.isRead) {
@@ -189,6 +239,102 @@ class NotificationsController extends GetxController {
           item.title == notification.title &&
           item.body == notification.body,
     );
+  }
+
+  String? _stableId(NotificationModel notification) {
+    final id = notification.id?.trim();
+    if (id != null && id.isNotEmpty) return id;
+    final messageId = notification.messageId?.trim();
+    if (messageId != null && messageId.isNotEmpty) return messageId;
+    final createdAt = notification.createdAt?.toIso8601String() ?? '';
+    final title = notification.title?.trim() ?? '';
+    final body = notification.body?.trim() ?? '';
+    if (createdAt.isEmpty && title.isEmpty && body.isEmpty) return null;
+    return 'fp:$createdAt|$title|$body';
+  }
+
+  bool _isDismissed(NotificationModel notification) {
+    final id = _stableId(notification);
+    return id != null && _dismissedIds.contains(id);
+  }
+
+  int _unreadAfterDismissals(List<NotificationModel> items, int apiUnread) {
+    final hiddenUnread = items
+        .where((item) => _isDismissed(item) && !item.isRead)
+        .length;
+    final adjusted = apiUnread - hiddenUnread;
+    return adjusted < 0 ? 0 : adjusted;
+  }
+
+  String get _currentUserId {
+    if (!Get.isRegistered<UserController>()) return '';
+    return Get.find<UserController>().userId;
+  }
+
+  Future<void> _loadDismissedIds() async {
+    final userId = _currentUserId;
+    final existing = _dismissedIdsLoad;
+    if (existing != null && _dismissedIdsUserId == userId) {
+      await existing;
+      return;
+    }
+    if (_dismissedIdsUserId != userId) {
+      _dismissedIds.clear();
+      _dismissedUnreadIds.clear();
+    }
+    _dismissedIdsUserId = userId;
+    _dismissedIdsLoad = _readDismissedIds(userId);
+    await _dismissedIdsLoad;
+  }
+
+  Future<void> _readDismissedIds(String userId) async {
+    try {
+      final stored =
+          await LocalStorageService(null, userId).loadDismissedNotificationIds();
+      if (_dismissedIdsUserId != userId) return;
+      _dismissedIds.addAll(stored);
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('NotificationsController._loadDismissedIds: $error');
+      }
+    }
+  }
+
+  Future<void> _persistDismissedIds() async {
+    try {
+      await LocalStorageService(
+        null,
+        _currentUserId,
+      ).saveDismissedNotificationIds(_dismissedIds);
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('NotificationsController._persistDismissedIds: $error');
+      }
+    }
+  }
+
+  void _scheduleServerDelete(NotificationModel notification) {
+    final id = notification.id?.trim();
+    if (id == null || id.isEmpty || !isLoggedIn) return;
+    _pendingDeletes.remove(id)?.cancel();
+    _pendingDeletes[id] = Timer(const Duration(seconds: 3), () {
+      _pendingDeletes.remove(id);
+      unawaited(_deleteOnServer(id));
+    });
+  }
+
+  Future<void> _deleteOnServer(String notificationId) async {
+    if (!isLoggedIn) return;
+    try {
+      await _repository.deleteNotification(
+        accessToken: _accessToken,
+        notificationId: notificationId,
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('NotificationsController._deleteOnServer: $error');
+      }
+    }
   }
 }
 

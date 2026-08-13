@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../controllers/food_controller.dart';
 import '../core/app_snackbar.dart';
+import '../core/pick_cropped_image.dart';
 import '../core/responsive.dart';
 import '../models/custom_food_preset.dart';
 import '../models/food_item.dart';
-import '../models/meal_type.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
-import '../widgets/filter_chip_pill.dart';
+import '../widgets/meal_type_chip_row.dart';
 import '../widgets/responsive_page.dart';
 
 class CreateCustomFoodView extends StatefulWidget {
@@ -83,7 +82,6 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
   Future<void> _showFoodImageOptions() async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
-      useRootNavigator: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -114,49 +112,12 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
     if (!mounted) return;
 
     try {
-      final image = await _imagePicker.pickImage(
+      final bytes = await pickAndCropPhoto(
+        picker: _imagePicker,
         source: source,
-        imageQuality: 95,
+        cropTitle: 'Crop food photo',
       );
-      if (image == null || !mounted) return;
-
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted) return;
-
-      final cropped = await ImageCropper().cropImage(
-        sourcePath: image.path,
-        compressFormat: ImageCompressFormat.jpg,
-        compressQuality: 85,
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: 'Crop food photo',
-            toolbarColor: AppColors.primary,
-            toolbarWidgetColor: Colors.white,
-            statusBarLight: false,
-            activeControlsWidgetColor: AppColors.primary,
-            backgroundColor: Colors.black,
-            initAspectRatio: CropAspectRatioPreset.original,
-            lockAspectRatio: false,
-            aspectRatioPresets: [
-              CropAspectRatioPreset.original,
-              CropAspectRatioPreset.square,
-              CropAspectRatioPreset.ratio4x3,
-            ],
-          ),
-          IOSUiSettings(
-            title: 'Crop food photo',
-            aspectRatioPresets: [
-              CropAspectRatioPreset.original,
-              CropAspectRatioPreset.square,
-              CropAspectRatioPreset.ratio4x3,
-            ],
-          ),
-        ],
-      );
-      if (cropped == null || !mounted) return;
-
-      final bytes = await cropped.readAsBytes();
-      if (!mounted) return;
+      if (bytes == null || !mounted) return;
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -524,22 +485,10 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
                   SizedBox(height: r.scale(12)),
                   _SectionCard(
                     title: 'Log to',
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: MealType.all.map((meal) {
-                          return Padding(
-                            padding: EdgeInsets.only(right: r.scale(8)),
-                            child: FilterChipPill(
-                              label: meal,
-                              selected: _selectedMeal == meal,
-                              onTap: () =>
-                                  setState(() => _selectedMeal = meal),
-                              fontSize: r.scale(12),
-                            ),
-                          );
-                        }).toList(),
-                      ),
+                    child: MealTypeChipRow(
+                      selectedMeal: _selectedMeal,
+                      onSelected: (meal) =>
+                          setState(() => _selectedMeal = meal),
                     ),
                   ),
                   SizedBox(height: r.scale(8)),
@@ -691,11 +640,7 @@ class _FoodImagePicker extends StatelessWidget {
                 : Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.memory(
-                        image,
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                      ),
+                      CappedMemoryImage(bytes: image),
                       Positioned(
                         right: r.scale(8),
                         bottom: r.scale(8),

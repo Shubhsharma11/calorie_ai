@@ -18,7 +18,7 @@ class NutritionPlanApiException implements Exception {
   String toString() => message;
 }
 
-class NutritionPlanApiService {
+class NutritionPlanApiService {  
   NutritionPlanApiService({ApiClient? apiClient})
     : _apiClient = apiClient ?? ApiClient();
 

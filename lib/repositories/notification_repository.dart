@@ -88,4 +88,22 @@ class NotificationRepository {
       );
     }
   }
+
+  Future<void> deleteNotification({
+    required String accessToken,
+    required String notificationId,
+  }) async {
+    try {
+      await _apiService.deleteNotification(
+        accessToken: accessToken,
+        notificationId: notificationId,
+      );
+    } on NotificationApiException {
+      rethrow;
+    } catch (error) {
+      throw NotificationApiException(
+        'Network error while deleting notification: $error',
+      );
+    }
+  }
 }

@@ -91,8 +91,38 @@ class AuthApiService {
   }
 
   return <String, dynamic>{};
-}
-  
+  }
+
+  Future<Map<String, dynamic>> loginWithPhoneIdToken(String idToken) async {
+    debugPrint(
+      'AuthApiService: posting phone ID token to ${ApiEndpoints.phoneAuthUrl}',
+    );
+
+    final response = await _apiClient.post(
+      ApiEndpoints.phoneAuth,
+      body: {'idToken': idToken},
+    );
+
+    final body = response.body.trim();
+    debugPrint(
+      'AuthApiService: phone login response ${response.statusCode}: '
+      '${_redactTokenFields(body)}',
+    );
+    final decoded = _tryDecodeJson(body);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = decoded is Map<String, dynamic>
+          ? decoded['message'] as String? ?? decoded['error'] as String?
+          : null;
+      throw AuthApiException(
+        message ??
+            'Phone backend login failed (${response.statusCode}). $body',
+      );
+    }
+
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
 
   Future<void> deleteAccount({required String accessToken}) async {
     debugPrint(

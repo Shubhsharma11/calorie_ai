@@ -8,6 +8,7 @@ import '../models/access_token_resolution.dart';
 import '../models/activity_level.dart';
 import '../models/goal_type.dart';
 import '../models/health_concern.dart';
+import '../models/health_problem_api_mapper.dart';
 import '../models/nutrition_plan_model.dart';
 import '../models/onboarding_request_model.dart';
 import '../models/onboarding_response_model.dart';
@@ -1523,6 +1524,8 @@ class UserController extends GetxController {
         user.activityLevel = parsedActivity;
       }
 
+      _applyHealthProblemsFromMap(map);
+
       if (!applyGoalFields) {
         // Still allow calorie fields from a full payload if present.
         final calories = _readResponseInt(map, const [
@@ -1698,6 +1701,18 @@ class UserController extends GetxController {
     if (weight != null) user.weightKg = weight.round();
   }
 
+  void _applyHealthProblemsFromMap(Map<String, dynamic> map) {
+    final raw = map['healthProblems'] ?? map['healthProblem'];
+    if (raw == null &&
+        !map.containsKey('healthProblems') &&
+        !map.containsKey('healthProblem')) {
+      return;
+    }
+    final parsed = HealthProblemApiMapper.parseConcerns(raw);
+    if (parsed == null) return;
+    user.healthConcerns = parsed;
+  }
+
   static Iterable<Map<String, dynamic>> _onboardingResponseMaps(
     Map<String, dynamic> response,
   ) sync* {
@@ -1712,7 +1727,12 @@ class UserController extends GetxController {
       if (goal is Map<String, dynamic>) yield goal;
       final personal = data['personalDetails'];
       if (personal is Map<String, dynamic>) yield personal;
+      final onboarding = data['onboarding'];
+      if (onboarding is Map<String, dynamic>) yield onboarding;
     }
+
+    final nestedOnboarding = response['onboarding'];
+    if (nestedOnboarding is Map<String, dynamic>) yield nestedOnboarding;
 
     final personal = response['personalDetails'];
     if (personal is Map<String, dynamic>) yield personal;

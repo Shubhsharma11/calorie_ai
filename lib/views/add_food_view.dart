@@ -8,8 +8,11 @@ import 'package:lottie/lottie.dart';
 
 import '../controllers/food_controller.dart';
 import '../controllers/main_controller.dart';
+import '../controllers/user_controller.dart';
+import '../core/app_coach_marks.dart';
 import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
+import '../services/local_storage_service.dart';
 import '../models/custom_food_preset.dart';
 import '../models/custom_meal_preset.dart';
 import '../models/food_item.dart';
@@ -40,6 +43,14 @@ class _AddFoodViewState extends State<AddFoodView> {
   late final FocusNode _searchFocusNode;
   _FoodCatalogTab _catalogTab = _FoodCatalogTab.all;
 
+  LocalStorageService get _coachStorage {
+    final id = Get.isRegistered<UserController>()
+        ? Get.find<UserController>().userId.trim()
+        : '';
+    if (id.isEmpty) return LocalStorageService();
+    return LocalStorageService(null, id);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -59,73 +70,125 @@ class _AddFoodViewState extends State<AddFoodView> {
     super.dispose();
   }
 
+  void _setCatalogTab(_FoodCatalogTab tab) {
+    if (!mounted) return;
+    if (_catalogTab != tab) {
+      setState(() => _catalogTab = tab);
+    }
+    switch (tab) {
+      case _FoodCatalogTab.myMeals:
+        unawaited(_food.refreshCustomMealsFromApi());
+      case _FoodCatalogTab.customFood:
+        unawaited(_food.refreshMyFoodsFromApi());
+      case _FoodCatalogTab.favourites:
+        unawaited(_food.refreshFavouritesFromApi());
+      case _FoodCatalogTab.all:
+        break;
+    }
+  }
+
+  void _onCoachStep(int index) {
+    _searchFocusNode.unfocus();
+    if (index < 0 || index >= AppCoachMarks.addFoodSteps.length) return;
+    final key = AppCoachMarks.addFoodSteps[index].key;
+    if (key == AppCoachMarks.addFoodAllKey) {
+      _setCatalogTab(_FoodCatalogTab.all);
+    } else if (key == AppCoachMarks.addFoodMyMealsKey) {
+      _setCatalogTab(_FoodCatalogTab.myMeals);
+    } else if (key == AppCoachMarks.addFoodMyFoodKey) {
+      _setCatalogTab(_FoodCatalogTab.customFood);
+    } else if (key == AppCoachMarks.addFoodFavouriteKey) {
+      _setCatalogTab(_FoodCatalogTab.favourites);
+    } else if (key == AppCoachMarks.addFoodSearchKey) {
+      _setCatalogTab(_FoodCatalogTab.all);
+    }
+  }
+
+  void _onCoachFinished() {
+    if (!mounted) return;
+    _setCatalogTab(_FoodCatalogTab.all);
+  }
+
+  void _onCoachCompleted() {
+    if (!mounted) return;
+    Future<void>.delayed(const Duration(milliseconds: 120), () {
+      if (!mounted) return;
+      _searchFocusNode.requestFocus();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
     final r = context.responsive;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const AppAppBar(title: 'Add Food'),
-      body: ResponsivePage(
-        scrollable: false,
-        maxWidth: r.isWide ? 900 : null,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Obx(
-              () => _MealSelector(
-                selectedMeal: _food.selectedMeal.value,
-                onSelected: _food.setSelectedMeal,
-              ),
-            ),
-            SizedBox(height: r.scale(10)),
-            _SearchBar(focusNode: _searchFocusNode),
-            SizedBox(height: r.scale(12)),
-            Expanded(
-              child: Obx(() {
-                final query = _food.searchQuery.value.trim();
-                final isSearching = _food.isSearching.value;
-
-                if (query.isNotEmpty) {
-                  return _SearchResultsList(
-                    isSearching: isSearching,
-                    foods: _food.filteredFoods,
-                    errorMessage: _food.searchErrorMessage.value,
-                    onCreateFood: () => Get.to<void>(
-                      () => const CreateCustomFoodView(),
-                    ),
-                  );
-                }
-
-                return _FoodBrowseList(
+    return CoachMarkHost(
+      storage: _coachStorage,
+      bindReplayHandler: false,
+      steps: AppCoachMarks.addFoodSteps,
+      shouldShow: AppCoachMarks.shouldShowAddFood,
+      markSeen: AppCoachMarks.markAddFoodSeen,
+      onPresentingStep: _onCoachStep,
+      onFinished: _onCoachFinished,
+      onCompleted: _onCoachCompleted,
+      child: GestureDetector(
+        onTap: () => _searchFocusNode.unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: const AppAppBar(title: 'Add Food'),
+        body: ResponsivePage(
+          scrollable: false,
+          maxWidth: r.isWide ? 900 : null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Obx(
+                () => _MealSelector(
                   selectedMeal: _food.selectedMeal.value,
-                  catalogTab: _catalogTab,
-                  onCatalogTabChanged: (tab) {
-                    setState(() => _catalogTab = tab);
-                    switch (tab) {
-                      case _FoodCatalogTab.myMeals:
-                        unawaited(_food.refreshCustomMealsFromApi());
-                      case _FoodCatalogTab.customFood:
-                        unawaited(_food.refreshMyFoodsFromApi());
-                      case _FoodCatalogTab.favourites:
-                        unawaited(_food.refreshFavouritesFromApi());
-                      case _FoodCatalogTab.all:
-                        break;
-                    }
-                  },
-                  onCreateMeal: () => showCreateMealSheet(
-                    context,
-                    initialMeal: _food.selectedMeal.value,
-                  ),
-                  onFindFavourite: () {
-                    setState(() => _catalogTab = _FoodCatalogTab.all);
-                    _searchFocusNode.requestFocus();
-                  },
-                );
-              }),
-            ),
-          ],
+                  onSelected: _food.setSelectedMeal,
+                ),
+              ),
+              SizedBox(height: r.scale(10)),
+              AppCoachMarks.target(
+                key: AppCoachMarks.addFoodSearchKey,
+                child: _SearchBar(focusNode: _searchFocusNode),
+              ),
+              SizedBox(height: r.scale(12)),
+              Expanded(
+                child: Obx(() {
+                  final query = _food.searchQuery.value.trim();
+                  final isSearching = _food.isSearching.value;
+
+                  if (query.isNotEmpty) {
+                    return _SearchResultsList(
+                      isSearching: isSearching,
+                      foods: _food.filteredFoods,
+                      errorMessage: _food.searchErrorMessage.value,
+                      onCreateFood: () => Get.to<void>(
+                        () => const CreateCustomFoodView(),
+                      ),
+                    );
+                  }
+
+                  return _FoodBrowseList(
+                    selectedMeal: _food.selectedMeal.value,
+                    catalogTab: _catalogTab,
+                    onCatalogTabChanged: _setCatalogTab,
+                    onCreateMeal: () => showCreateMealSheet(
+                      context,
+                      initialMeal: _food.selectedMeal.value,
+                    ),
+                    onFindFavourite: () {
+                      _setCatalogTab(_FoodCatalogTab.all);
+                      _searchFocusNode.requestFocus();
+                    },
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
         ),
       ),
     );
@@ -289,61 +352,79 @@ class _FoodBrowseList extends GetView<FoodController> {
       final customMeals = controller.customMealPresets.toList();
       final favorites = controller.favoriteMeals.toList();
 
-      return ListView(
-        key: ValueKey('$revision-${catalogTab.name}'),
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewPaddingOf(context).bottom + r.scale(16),
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                FilterChipPill(
-                  label: 'All',
-                  selected: catalogTab == _FoodCatalogTab.all,
-                  onTap: () => onCatalogTabChanged(_FoodCatalogTab.all),
-                  fontSize: r.scale(13),
+                AppCoachMarks.target(
+                  key: AppCoachMarks.addFoodAllKey,
+                  child: FilterChipPill(
+                    label: 'All',
+                    selected: catalogTab == _FoodCatalogTab.all,
+                    onTap: () => onCatalogTabChanged(_FoodCatalogTab.all),
+                    fontSize: r.scale(13),
+                  ),
                 ),
                 SizedBox(width: r.scale(10)),
-                FilterChipPill(
-                  label: 'My Meals',
-                  selected: catalogTab == _FoodCatalogTab.myMeals,
-                  onTap: () => onCatalogTabChanged(_FoodCatalogTab.myMeals),
-                  fontSize: r.scale(13),
+                AppCoachMarks.target(
+                  key: AppCoachMarks.addFoodMyMealsKey,
+                  child: FilterChipPill(
+                    label: 'My Meals',
+                    selected: catalogTab == _FoodCatalogTab.myMeals,
+                    onTap: () => onCatalogTabChanged(_FoodCatalogTab.myMeals),
+                    fontSize: r.scale(13),
+                  ),
                 ),
                 SizedBox(width: r.scale(10)),
-                FilterChipPill(
-                  label: 'My Food',
-                  selected: catalogTab == _FoodCatalogTab.customFood,
-                  onTap: () => onCatalogTabChanged(_FoodCatalogTab.customFood),
-                  fontSize: r.scale(13),
+                AppCoachMarks.target(
+                  key: AppCoachMarks.addFoodMyFoodKey,
+                  child: FilterChipPill(
+                    label: 'My Food',
+                    selected: catalogTab == _FoodCatalogTab.customFood,
+                    onTap: () => onCatalogTabChanged(_FoodCatalogTab.customFood),
+                    fontSize: r.scale(13),
+                  ),
                 ),
                 SizedBox(width: r.scale(10)),
-                FilterChipPill(
-                  label: 'Favourite',
-                  selected: catalogTab == _FoodCatalogTab.favourites,
-                  onTap: () => onCatalogTabChanged(_FoodCatalogTab.favourites),
-                  fontSize: r.scale(13),
+                AppCoachMarks.target(
+                  key: AppCoachMarks.addFoodFavouriteKey,
+                  child: FilterChipPill(
+                    label: 'Favourite',
+                    selected: catalogTab == _FoodCatalogTab.favourites,
+                    onTap: () => onCatalogTabChanged(_FoodCatalogTab.favourites),
+                    fontSize: r.scale(13),
+                  ),
                 ),
               ],
             ),
           ),
           SizedBox(height: r.scale(16)),
-          ...switch (catalogTab) {
-            _FoodCatalogTab.all => _buildQuickItemsSection(
-                context,
-                quickItems: quickItems,
-                isLoading: isLoading,
-                apiError: apiError,
+          Expanded(
+            child: ListView(
+              key: ValueKey('$revision-${catalogTab.name}'),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewPaddingOf(context).bottom + r.scale(16),
               ),
-            _FoodCatalogTab.myMeals =>
-              _buildMyMealsSection(context, customMeals: customMeals),
-            _FoodCatalogTab.customFood => [const _CustomFoodCreator()],
-            _FoodCatalogTab.favourites =>
-              _buildFavoritesSection(context, favorites: favorites),
-          },
+              children: switch (catalogTab) {
+                _FoodCatalogTab.all => _buildQuickItemsSection(
+                    context,
+                    quickItems: quickItems,
+                    isLoading: isLoading,
+                    apiError: apiError,
+                  ),
+                _FoodCatalogTab.myMeals =>
+                  _buildMyMealsSection(context, customMeals: customMeals),
+                _FoodCatalogTab.customFood => [const _CustomFoodCreator()],
+                _FoodCatalogTab.favourites =>
+                  _buildFavoritesSection(context, favorites: favorites),
+              },
+            ),
+          ),
         ],
       );
     });
@@ -1257,6 +1338,8 @@ class _SearchResultsList extends StatelessWidget {
                   },
                 )
               : ListView.separated(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   itemCount: foods.length,
                   separatorBuilder: (_, index) => const Divider(height: 1),
                   itemBuilder: (_, i) {
@@ -1323,6 +1406,7 @@ class _SearchBarState extends State<_SearchBar> {
       return TextField(
         controller: _textController,
         focusNode: widget.focusNode,
+        onTapOutside: (_) => widget.focusNode.unfocus(),
         decoration: InputDecoration(
           hintText: 'Search for a new food...',
           prefixIcon: const Icon(Icons.search),

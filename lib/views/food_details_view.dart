@@ -4,12 +4,11 @@ import 'package:get/get.dart';
 import '../controllers/food_controller.dart';
 import '../core/app_snackbar.dart';
 import '../models/food_item.dart';
-import '../models/meal_type.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/food_emoji_avatar.dart';
-import '../widgets/filter_chip_pill.dart';
+import '../widgets/meal_type_chip_row.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
@@ -133,16 +132,9 @@ class FoodDetailsView extends GetView<FoodController> {
             ),
             const SizedBox(height: 8),
             Obx(
-              () => Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: MealType.all.map((meal) {
-                  return FilterChipPill(
-                    label: meal,
-                    selected: controller.selectedMeal.value == meal,
-                    onTap: () => controller.setSelectedMeal(meal),
-                  );
-                }).toList(),
+              () => MealTypeChipRow(
+                selectedMeal: controller.selectedMeal.value,
+                onSelected: controller.setSelectedMeal,
               ),
             ),
             const SizedBox(height: 24),

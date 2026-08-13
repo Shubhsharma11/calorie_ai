@@ -8,8 +8,8 @@ import '../models/custom_food_preset.dart';
 import '../models/meal_type.dart';
 import '../models/saved_meal_item.dart';
 import '../theme/app_colors.dart';
-import '../widgets/filter_chip_pill.dart';
 import '../widgets/food_emoji_avatar.dart';
+import '../widgets/meal_type_chip_row.dart';
 
 /// Shows food details and lets the user pick Breakfast / Lunch / Dinner / Snacks.
 Future<void> showLogHistorySheet(
@@ -115,16 +115,10 @@ Future<void> showLogHistorySheet(
                     ),
                   ),
                   SizedBox(height: r.scale(10)),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: MealType.all.map((meal) {
-                      return FilterChipPill(
-                        label: meal,
-                        selected: selectedMeal == meal,
-                        onTap: () => setState(() => selectedMeal = meal),
-                      );
-                    }).toList(),
+                  MealTypeChipRow(
+                    selectedMeal: selectedMeal,
+                    onSelected: (meal) =>
+                        setState(() => selectedMeal = meal),
                   ),
                   SizedBox(height: r.scale(20)),
                   FilledButton(

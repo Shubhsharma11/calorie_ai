@@ -10,7 +10,8 @@ abstract final class ApiEndpoints {
 
   static const String apiVersion = '/api/v1';
   static const String googleAuth = '$apiVersion/auth/google';
- static const String appleAuth = '$apiVersion/auth/apple';
+  static const String appleAuth = '$apiVersion/auth/apple';
+  static const String phoneAuth = '$apiVersion/auth/phone';
   static const String logout = '$apiVersion/auth/logout';
   static const String deleteAccount = '$apiVersion/auth/account';
   static const String fcmToken = '$apiVersion/auth/fcm-token';
@@ -30,7 +31,8 @@ abstract final class ApiEndpoints {
   static const String myFoods = '$apiVersion/my-foods';
   static const String favouriteMeals = '$apiVersion/favourite-meals';
   static const String searchFoods = '$apiVersion/search/foods';
- 
+  static const String supportReports = '$apiVersion/support/reports';
+
 
 
 
@@ -163,6 +165,7 @@ abstract final class ApiEndpoints {
 
   static String get googleAuthUrl => url(googleAuth);
   static String get appleAuthUrl => url(appleAuth);
+  static String get phoneAuthUrl => url(phoneAuth);
   static String get logoutUrl => url(logout);
   static String get deleteAccountUrl => url(deleteAccount);
   static String get fcmTokenUrl => url(fcmToken);
@@ -188,11 +191,17 @@ abstract final class ApiEndpoints {
     return '$notifications?$query';
   }
 
+  static String notificationById(String notificationId) =>
+      '$notifications/${Uri.encodeComponent(notificationId)}';
+
   static String notificationRead(String notificationId) =>
-      '$notifications/${Uri.encodeComponent(notificationId)}/read';
+      '${notificationById(notificationId)}/read';
 
   static String notificationReadUrl(String notificationId) =>
       url(notificationRead(notificationId));
+
+  static String notificationByIdUrl(String notificationId) =>
+      url(notificationById(notificationId));
 
   static String get onboardingUrl => url(onboarding);
   static String get nutritionPlanUrl => url(nutritionPlan);
@@ -215,6 +224,7 @@ abstract final class ApiEndpoints {
       url(favouriteMealLog(favouriteMealId));
   static String myMealByIdUrl(String myMealId) => url(myMealById(myMealId));
   static String get searchFoodsUrl => url(searchFoods);
+  static String get supportReportsUrl => url(supportReports);
 
   static const String openFoodFactsBaseUrl = 'https://world.openfoodfacts.org';
 

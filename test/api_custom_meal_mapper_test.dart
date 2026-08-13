@@ -255,6 +255,38 @@ void main() {
     expect(presets.last.visibility, MealShareVisibility.onlyMe);
   });
 
+  test('ApiCustomMealMapper maps data.myMeals list response', () {
+    final presets = ApiCustomMealMapper.presetsFromResponse({
+      'success': true,
+      'data': {
+        'myMeals': [
+          {
+            'id': 'custom-1',
+            'name': 'Oat Meal',
+            'mealTime': 'breakfast',
+            'visibility': 'public',
+            'items': [
+              {
+                'name': 'oats',
+                'quantity': '100',
+                'unit': 'g',
+                'calories': 389,
+                'protein': 13,
+                'fat': 7,
+                'carbs': 66,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(presets.length, 1);
+    expect(presets.first.id, 'custom-1');
+    expect(presets.first.name, 'Oat Meal');
+    expect(presets.first.items.single.grams, 100);
+  });
+
   test('ApiCustomMealMapper reads myMealId from response', () {
     final source = CustomMealPreset(
       id: 'local-1',

@@ -15,6 +15,7 @@ import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
 class HealthProblemView extends StatefulWidget {
@@ -67,6 +68,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
   /// null = not chosen yet, true = has concerns, false = none
   bool? _hasConcerns;
   late ProfileSyncSnapshot _baseline;
+  bool _isSaving = false;
 
   static const _categories = [
     _ProblemCategory(label: 'Diabetes', asset: 'assets/image/glucosemeter.svg'),
@@ -150,6 +152,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
   }
 
   Future<void> _onBack() async {
+    if (_isSaving) return;
     if (_fromProfile) {
       Get.back<void>();
       return;
@@ -159,6 +162,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
   }
 
   Future<void> _continue() async {
+    if (_isSaving) return;
     if (_hasConcerns == null) {
       _showValidationMessage(
         'Make a choice',
@@ -229,7 +233,18 @@ class _HealthProblemViewState extends State<HealthProblemView> {
         concerns,
         _baseline,
       );
-      if (!patch.isEmpty) {
+      if (patch.isEmpty) {
+        AppSnackbar.info('No changes to save.', title: 'Nothing changed');
+        Get.back();
+        return;
+      }
+
+      FocusScope.of(context).unfocus();
+      setState(() => _isSaving = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+
+      try {
         final error = await _user.patchOnboarding(patch);
         if (!mounted) return;
         if (error != null) {
@@ -237,12 +252,11 @@ class _HealthProblemViewState extends State<HealthProblemView> {
           return;
         }
         _baseline = _user.captureProfileSyncSnapshot();
+        Get.back();
+        AppSnackbar.success('Health concerns updated.');
+      } finally {
+        if (mounted) setState(() => _isSaving = false);
       }
-
-      Get.back();
-      AppSnackbar.success(
-        patch.isEmpty ? 'Health concerns saved.' : 'Health concerns updated.',
-      );
       return;
     }
 
@@ -313,7 +327,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
     final actionLabel = _fromProfile ? 'Save' : 'Continue';
 
     return PopScope(
-      canPop: _fromProfile,
+      canPop: _fromProfile && !_isSaving,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         unawaited(_onBack());
@@ -326,9 +340,11 @@ class _HealthProblemViewState extends State<HealthProblemView> {
           onTap: () => FocusScope.of(context).unfocus(),
           child: SetupScreenLayout(
             scrollable: true,
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+            content: AbsorbPointer(
+              absorbing: _isSaving,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 SizedBox(height: r.scale(compact ? 4 : 8)),
                 _HeroSection(r: r, compact: compact),
                 SizedBox(height: r.scale(compact ? 14 : 18)),
@@ -466,19 +482,11 @@ class _HealthProblemViewState extends State<HealthProblemView> {
                 ],
               ],
             ),
-            action: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _continue,
-                    child: Text(actionLabel),
-                  ),
-                ),
-                SizedBox(height: r.scale(12)),
-              
-              ],
+            ),
+            action: PrimaryButton(
+              label: actionLabel,
+              isLoading: _isSaving,
+              onPressed: _isSaving ? null : () => unawaited(_continue()),
             ),
           ),
         ),

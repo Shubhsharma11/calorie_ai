@@ -12,7 +12,7 @@ import '../theme/app_colors.dart';
 class LoginView extends GetView<AuthController> {
   const LoginView({super.key});
 
-  static const _logoAsset = 'assets/image/login.png';
+  static const _logoAsset = 'assets/image/logo1.21.svg';
   static const _googleAsset = 'assets/image/google.svg';
   static const _appleAsset = 'assets/image/apple.svg';
 
@@ -362,12 +362,12 @@ class _AppLogo extends StatelessWidget {
         ],
       ),
       child: Center(
-        child: Image.asset(
-          LoginView._logoAsset,
-          width: iconSize,
-          height: iconSize,
-          fit: BoxFit.contain,
-        ),
+      child: SvgPicture.asset(
+  LoginView._logoAsset,
+  width: iconSize,
+  height: iconSize,
+  fit: BoxFit.contain,
+),
       ),
     );
   }
