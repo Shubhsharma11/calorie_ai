@@ -7,12 +7,14 @@ import 'package:image_picker/image_picker.dart';
 
 import '../controllers/user_controller.dart';
 import '../core/api_errors.dart';
+import '../core/photo_permission.dart';
 import '../core/responsive.dart';
 import '../models/problem_report.dart';
 import '../services/device_info_service.dart';
 import '../services/support_api_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/app_bottom_sheet.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
@@ -80,7 +82,9 @@ class _ReportProblemViewState extends State<ReportProblemView> {
 
     return Scaffold(
       appBar: const AppAppBar(title: 'Report a Problem'),
-      body: _submitted ? _SuccessBody(onDone: () => Get.back<void>()) : _form(r),
+      body: _submitted
+          ? _SuccessBody(onDone: () => Get.back<void>())
+          : _form(r),
     );
   }
 
@@ -121,10 +125,7 @@ class _ReportProblemViewState extends State<ReportProblemView> {
               padding: EdgeInsets.only(top: r.scale(6)),
               child: Text(
                 'Please select a problem type.',
-                style: TextStyle(
-                  fontSize: r.scale(12),
-                  color: AppColors.error,
-                ),
+                style: TextStyle(fontSize: r.scale(12), color: AppColors.error),
               ),
             ),
           SizedBox(height: r.scale(22)),
@@ -184,10 +185,7 @@ class _ReportProblemViewState extends State<ReportProblemView> {
               padding: EdgeInsets.only(top: r.scale(6)),
               child: Text(
                 'Please describe what happened.',
-                style: TextStyle(
-                  fontSize: r.scale(12),
-                  color: AppColors.error,
-                ),
+                style: TextStyle(fontSize: r.scale(12), color: AppColors.error),
               ),
             ),
           SizedBox(height: r.scale(22)),
@@ -262,45 +260,14 @@ class _ReportProblemViewState extends State<ReportProblemView> {
   }
 
   Future<void> _pickCategory() async {
-    final selected = await showModalBottomSheet<ProblemCategory>(
+    final selected = await showAppOptionsSheet<ProblemCategory>(
       context: context,
-      backgroundColor: AppColors.cardOf(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Text(
-                    'Select a problem',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimaryOf(context),
-                    ),
-                  ),
-                ),
-                for (final option in ProblemCategory.values)
-                  ListTile(
-                    title: Text(option.label),
-                    trailing: _category == option
-                        ? const Icon(
-                            Icons.check_rounded,
-                            color: AppColors.primary,
-                          )
-                        : null,
-                    onTap: () => Navigator.of(ctx).pop(option),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
+      title: 'Select a problem',
+      selected: _category,
+      options: [
+        for (final option in ProblemCategory.values)
+          AppSheetOption(value: option, label: option.label),
+      ],
     );
     if (selected == null || !mounted) return;
     setState(() => _category = selected);
@@ -309,6 +276,17 @@ class _ReportProblemViewState extends State<ReportProblemView> {
   Future<void> _addScreenshot() async {
     FocusScope.of(context).unfocus();
     try {
+      final allowed = await ensureImageSourcePermission(ImageSource.gallery);
+      if (!allowed) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(photoPermissionDeniedMessage(ImageSource.gallery)),
+          ),
+        );
+        return;
+      }
+
       final image = await _imagePicker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 80,
@@ -415,8 +393,7 @@ class _ReportProblemViewState extends State<ReportProblemView> {
       return _SubmitErrorKind.auth;
     }
     if (error is TimeoutException ||
-        (error is SupportApiException &&
-            error.message.contains('timed out')) ||
+        (error is SupportApiException && error.message.contains('timed out')) ||
         isApiNetworkError(error)) {
       return _SubmitErrorKind.network;
     }
@@ -530,10 +507,7 @@ class _AddScreenshotButton extends StatelessWidget {
 }
 
 class _ScreenshotPreview extends StatelessWidget {
-  const _ScreenshotPreview({
-    required this.path,
-    required this.onRemove,
-  });
+  const _ScreenshotPreview({required this.path, required this.onRemove});
 
   final String path;
   final VoidCallback onRemove;

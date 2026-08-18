@@ -9,6 +9,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 
 import '../widgets/app_app_bar.dart';
+import '../widgets/app_bottom_sheet.dart';
 import '../widgets/responsive_page.dart';
 
 class SettingsView extends StatefulWidget {
@@ -83,32 +84,18 @@ class _SettingsViewState extends State<SettingsView> {
   // }
 
   Future<void> _pickWaterGoal(BuildContext context) async {
-    final selected = await showModalBottomSheet<int>(
+    final selected = await showAppOptionsSheet<int>(
       context: context,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            for (final ml in SettingsController.waterGoalMlOptions)
-              ListTile(
-                onTap: () => Navigator.of(context).pop(ml),
-                title: Text('$ml ml per day'),
-                subtitle: Text(
-                  '~${ml ~/ SettingsController.mlPerGlass} glasses',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                trailing: _settings.waterGoalMl.value == ml
-                    ? const Icon(Icons.check_rounded, color: AppColors.primary)
-                    : null,
-              ),
-          ],
-        ),
-      ),
+      title: 'Daily water goal',
+      selected: _settings.waterGoalMl.value,
+      options: [
+        for (final ml in SettingsController.waterGoalMlOptions)
+          AppSheetOption(
+            value: ml,
+            label: '$ml ml per day',
+            subtitle: '~${ml ~/ SettingsController.mlPerGlass} glasses',
+          ),
+      ],
     );
     if (selected == null) return;
     await _settings.setWaterGoalMl(selected);

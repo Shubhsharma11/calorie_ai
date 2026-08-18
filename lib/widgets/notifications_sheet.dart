@@ -5,6 +5,7 @@ import '../controllers/settings_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import 'app_bottom_sheet.dart';
 
 abstract final class NotificationsSheet {
   static void show(BuildContext context) {
@@ -12,11 +13,8 @@ abstract final class NotificationsSheet {
       Get.put(SettingsController());
     }
 
-    showModalBottomSheet<void>(
+    showAppBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) => const _NotificationsSheetBody(),
     );
   }
@@ -32,132 +30,115 @@ class _NotificationsSheetBody extends StatelessWidget {
         ? Get.find<TrackerController>()
         : null;
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+    return AppSheetScaffold(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Notifications',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          Obx(() {
+            final pushOn = settings.pushNotifications.value;
+            return Column(
+              children: [
+                _NotificationRow(
+                  icon: Icons.restaurant_rounded,
+                  title: 'Meal Reminders',
+                  subtitle: pushOn && settings.mealReminders.value
+                      ? settings.mealReminderSummary
+                      : 'Off',
+                  active: pushOn && settings.mealReminders.value,
+                  enabled: pushOn,
+                  onTap: () => settings.toggleMealReminders(
+                    !settings.mealReminders.value,
+                  ),
+                  trailing: Switch(
+                    value: pushOn && settings.mealReminders.value,
+                    onChanged: pushOn ? settings.toggleMealReminders : null,
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Notifications',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Obx(() {
-              final pushOn = settings.pushNotifications.value;
-              return Column(
-                children: [
-                  _NotificationRow(
-                    icon: Icons.restaurant_rounded,
-                    title: 'Meal Reminders',
-                    subtitle: pushOn && settings.mealReminders.value
-                        ? settings.mealReminderSummary
-                        : 'Off',
-                    active: pushOn && settings.mealReminders.value,
-                    enabled: pushOn,
-                    onTap: () => settings.toggleMealReminders(
-                      !settings.mealReminders.value,
-                    ),
-                    trailing: Switch(
-                      value: pushOn && settings.mealReminders.value,
-                      onChanged: pushOn ? settings.toggleMealReminders : null,
-                    ),
+                const SizedBox(height: 10),
+                _NotificationRow(
+                  icon: Icons.water_drop_rounded,
+                  title: 'Water Reminders',
+                  subtitle: pushOn && settings.waterReminders.value
+                      ? settings.waterIntervalSummary
+                      : 'Off',
+                  active: pushOn && settings.waterReminders.value,
+                  enabled: pushOn,
+                  onTap: () => settings.toggleWaterReminders(
+                    !settings.waterReminders.value,
                   ),
+                  trailing: Switch(
+                    value: pushOn && settings.waterReminders.value,
+                    onChanged: pushOn ? settings.toggleWaterReminders : null,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _NotificationRow(
+                  icon: Icons.insights_rounded,
+                  title: 'Weekly Report',
+                  subtitle: pushOn && settings.weeklyReport.value
+                      ? 'Sunday nutrition summary'
+                      : 'Off',
+                  active: pushOn && settings.weeklyReport.value,
+                  enabled: pushOn,
+                  onTap: () =>
+                      settings.toggleWeeklyReport(!settings.weeklyReport.value),
+                  trailing: Switch(
+                    value: pushOn && settings.weeklyReport.value,
+                    onChanged: pushOn ? settings.toggleWeeklyReport : null,
+                  ),
+                ),
+                if (tracker != null) ...[
                   const SizedBox(height: 10),
-                  _NotificationRow(
-                    icon: Icons.water_drop_rounded,
-                    title: 'Water Reminders',
-                    subtitle: pushOn && settings.waterReminders.value
-                        ? settings.waterIntervalSummary
-                        : 'Off',
-                    active: pushOn && settings.waterReminders.value,
-                    enabled: pushOn,
-                    onTap: () => settings.toggleWaterReminders(
-                      !settings.waterReminders.value,
-                    ),
-                    trailing: Switch(
-                      value: pushOn && settings.waterReminders.value,
-                      onChanged: pushOn ? settings.toggleWaterReminders : null,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _NotificationRow(
-                    icon: Icons.insights_rounded,
-                    title: 'Weekly Report',
-                    subtitle: pushOn && settings.weeklyReport.value
-                        ? 'Sunday nutrition summary'
-                        : 'Off',
-                    active: pushOn && settings.weeklyReport.value,
-                    enabled: pushOn,
-                    onTap: () => settings.toggleWeeklyReport(
-                      !settings.weeklyReport.value,
-                    ),
-                    trailing: Switch(
-                      value: pushOn && settings.weeklyReport.value,
-                      onChanged: pushOn ? settings.toggleWeeklyReport : null,
-                    ),
-                  ),
-                  if (tracker != null) ...[
-                    const SizedBox(height: 10),
-                    Obx(() {
-                      final waterDone = tracker.isWaterGoalComplete;
-                      return _NotificationRow(
-                        icon: Icons.water_drop_outlined,
-                        title: 'Water Goal Today',
-                        subtitle: waterDone
-                            ? 'You reached your daily goal!'
-                            : '${tracker.waterMl} / ${TrackerController.waterGoalMl} ml logged',
-                        active: !waterDone,
-                        accentColor: const Color(0xFF007AFF),
-                        onTap: () {
-                          Navigator.pop(context);
-                          Get.toNamed(AppRoutes.waterTracker);
-                        },
-                        trailing: Icon(
-                          Icons.chevron_right_rounded,
-                          color: AppColors.textSecondary,
-                        ),
-                      );
-                    }),
-                  ],
+                  Obx(() {
+                    final waterDone = tracker.isWaterGoalComplete;
+                    return _NotificationRow(
+                      icon: Icons.water_drop_outlined,
+                      title: 'Water Goal Today',
+                      subtitle: waterDone
+                          ? 'You reached your daily goal!'
+                          : '${tracker.waterMl} / ${TrackerController.waterGoalMl} ml logged',
+                      active: !waterDone,
+                      accentColor: const Color(0xFF007AFF),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Get.toNamed(AppRoutes.waterTracker);
+                      },
+                      trailing: Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppColors.textSecondary,
+                      ),
+                    );
+                  }),
                 ],
-              );
-            }),
-            const SizedBox(height: 20),
-            OutlinedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Get.toNamed(AppRoutes.settings);
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: BorderSide(
-                  color: AppColors.primary.withValues(alpha: 0.4),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Manage in Settings',
-                style: TextStyle(fontWeight: FontWeight.w600),
+              ],
+            );
+          }),
+          const SizedBox(height: 20),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Get.toNamed(AppRoutes.settings);
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
-          ],
-        ),
+            child: const Text(
+              'Manage in Settings',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }

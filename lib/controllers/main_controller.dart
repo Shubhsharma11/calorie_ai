@@ -2,6 +2,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 
 import '../controllers/scan_controller.dart';
+import '../controllers/user_controller.dart';
 
 class MainController extends GetxController {
   final RxInt tabIndex = 0.obs;
@@ -19,6 +20,7 @@ class MainController extends GetxController {
   }
 
   void changeTab(int index) {
+    if (_sessionBusy) return;
     if (tabIndex.value == index) return;
     tabIndex.value = index;
     // Defer camera Obx updates until after IndexedStack finishes rebuilding,
@@ -57,5 +59,13 @@ class MainController extends GetxController {
     if (Get.isRegistered<MainController>()) {
       Get.find<MainController>().resetToHomeTab();
     }
+  }
+
+  bool get _sessionBusy {
+    if (!Get.isRegistered<UserController>()) return false;
+    final user = Get.find<UserController>();
+    return user.isSessionBusy.value ||
+        user.isLoggingOut ||
+        user.isDeletingAccount;
   }
 }

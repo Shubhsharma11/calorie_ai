@@ -5,12 +5,16 @@ import 'package:image_picker/image_picker.dart';
 
 import '../controllers/food_controller.dart';
 import '../core/app_snackbar.dart';
+import '../core/food_serving.dart';
+import '../core/media_url.dart';
 import '../core/pick_cropped_image.dart';
 import '../core/responsive.dart';
 import '../models/custom_food_preset.dart';
 import '../models/food_item.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/app_bottom_sheet.dart';
+import '../widgets/app_network_image.dart';
 import '../widgets/meal_type_chip_row.dart';
 import '../widgets/responsive_page.dart';
 
@@ -44,6 +48,7 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
   late final FoodController _food = Get.find<FoodController>();
   CustomFoodPreset? _editingPreset;
   Uint8List? _foodImageBytes;
+  String? _foodImageUrl;
   String? _errorText;
   bool _isSaving = false;
   String _servingUnit = 'g';
@@ -54,11 +59,11 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
       _servingUnit == 'g' || _servingUnit == 'ml' ? 100 : 1;
 
   String get _selectedUnitLabel => switch (_servingUnit) {
-        'tbsp' => 'tbsp',
-        'g' => 'g',
-        'ml' => 'ml',
-        _ => _servingUnits[_servingUnit] ?? _servingUnit,
-      };
+    'tbsp' => 'tbsp',
+    'g' => 'g',
+    'ml' => 'ml',
+    _ => _servingUnits[_servingUnit] ?? _servingUnit,
+  };
 
   @override
   void initState() {
@@ -67,8 +72,9 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
     final args = Get.arguments;
     if (args is CustomFoodPreset) {
       _editingPreset = args;
-      _servingUnit =
-          _servingUnits.containsKey(args.servingUnit) ? args.servingUnit : 'g';
+      _servingUnit = _servingUnits.containsKey(args.servingUnit)
+          ? args.servingUnit
+          : 'g';
       _nameController.text = args.food.name;
       _servingController.text = _format(args.displayedServingQuantity);
       _caloriesController.text = _format(args.food.caloriesPer100g.toDouble());
@@ -76,34 +82,12 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
       _proteinController.text = _format(args.food.protein);
       _fatController.text = _format(args.food.fat);
       _foodImageBytes = args.imageBytes;
+      _foodImageUrl = MediaUrl.resolve(args.food.imageUrl);
     }
   }
 
   Future<void> _showFoodImageOptions() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choose from gallery'),
-              onTap: () =>
-                  Navigator.pop(sheetContext, ImageSource.gallery),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Take a photo'),
-              onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
-            ),
-          ],
-        ),
-      ),
-    );
+    final source = await showImageSourceSheet(context);
     if (source == null || !mounted) return;
 
     // Wait for the sheet route to finish disposing before opening native UI.
@@ -121,7 +105,10 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        setState(() => _foodImageBytes = bytes);
+        setState(() {
+          _foodImageBytes = bytes;
+          _foodImageUrl = null;
+        });
       });
     } catch (_) {
       if (!mounted) return;
@@ -152,84 +139,17 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
   }
 
   Future<void> _selectServingUnit() async {
-    final selected = await showModalBottomSheet<String>(
+    final selected = await showServingUnitSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        final r = sheetContext.responsive;
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              r.scale(20),
-              r.scale(16),
-              r.scale(20),
-              r.scale(20),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Select serving unit',
-                  style: TextStyle(
-                    fontSize: r.scale(18),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                SizedBox(height: r.scale(14)),
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 3,
-                  mainAxisSpacing: r.scale(8),
-                  crossAxisSpacing: r.scale(8),
-                  childAspectRatio: 2.4,
-                  children: _servingUnits.entries.map((entry) {
-                    final isSelected = entry.key == _servingUnit;
-                    return InkWell(
-                      onTap: () => Navigator.pop(sheetContext, entry.key),
-                      borderRadius: BorderRadius.circular(r.scale(10)),
-                      child: Container(
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primary.withValues(alpha: 0.12)
-                              : AppColors.surface,
-                          borderRadius: BorderRadius.circular(r.scale(10)),
-                          border: Border.all(
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.border,
-                          ),
-                        ),
-                        child: Text(
-                          entry.value,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: r.scale(10.5),
-                            fontWeight: FontWeight.w700,
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      units: _servingUnits,
+      selected: _servingUnit,
     );
     if (selected == null || selected == _servingUnit || !mounted) return;
     setState(() {
       _servingUnit = selected;
-      _servingController.text =
-          selected == 'g' || selected == 'ml' ? '100' : '1';
+      _servingController.text = selected == 'g' || selected == 'ml'
+          ? '100'
+          : '1';
       _caloriesController.clear();
       _carbsController.clear();
       _proteinController.clear();
@@ -242,11 +162,12 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
     final name = _nameController.text.trim();
     final servingQuantity =
         double.tryParse(_servingController.text.trim()) ?? 0;
-    final canonicalGrams =
-        _servingUnit == 'g' ? servingQuantity.round() : 100;
-    final calories = int.tryParse(
-          _caloriesController.text.trim().split('.').first,
-        ) ??
+    final household = FoodServing.isHouseholdUnit(_servingUnit);
+    final canonicalGrams = household
+        ? 100
+        : servingQuantity.round().clamp(1, 5000);
+    final calories =
+        int.tryParse(_caloriesController.text.trim().split('.').first) ??
         double.tryParse(_caloriesController.text.trim())?.round() ??
         0;
     final carbs = double.tryParse(_carbsController.text.trim()) ?? 0;
@@ -281,10 +202,15 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
       protein: protein,
       carbs: carbs,
       fat: fat,
-      emoji: '🥣',
+      emoji: _editingPreset?.food.emoji ?? '🍽️',
+      imageUrl: _foodImageUrl,
+      servingQuantity: household ? 1 : servingQuantity,
+      servingUnit: _servingUnit,
+      gramsPerServing: 1,
     );
     final preset = CustomFoodPreset(
-      id: _editingPreset?.id ??
+      id:
+          _editingPreset?.id ??
           DateTime.now().millisecondsSinceEpoch.toString(),
       food: customFood,
       defaultGrams: canonicalGrams,
@@ -323,9 +249,7 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
     final r = context.responsive;
 
     return Scaffold(
-      appBar: AppAppBar(
-        title: _isEditing ? 'Edit My Food' : 'Create My Food',
-      ),
+      appBar: AppAppBar(title: _isEditing ? 'Edit My Food' : 'Create My Food'),
       body: Column(
         children: [
           Expanded(
@@ -341,9 +265,12 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
                       children: [
                         _FoodImagePicker(
                           imageBytes: _foodImageBytes,
+                          imageUrl: _foodImageUrl,
                           onPick: _isSaving ? () {} : _showFoodImageOptions,
-                          onRemove: () =>
-                              setState(() => _foodImageBytes = null),
+                          onRemove: () => setState(() {
+                            _foodImageBytes = null;
+                            _foodImageUrl = null;
+                          }),
                         ),
                         SizedBox(height: r.scale(14)),
                         TextField(
@@ -364,8 +291,8 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
                                 controller: _servingController,
                                 keyboardType:
                                     const TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
+                                      decimal: true,
+                                    ),
                                 inputFormatters: [
                                   FilteringTextInputFormatter.allow(
                                     RegExp(r'^\d{0,4}([.]\d?)?'),
@@ -539,10 +466,7 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.child,
-    this.title,
-  });
+  const _SectionCard({required this.child, this.title});
 
   final String? title;
   final Widget child;
@@ -581,11 +505,13 @@ class _SectionCard extends StatelessWidget {
 class _FoodImagePicker extends StatelessWidget {
   const _FoodImagePicker({
     required this.imageBytes,
+    this.imageUrl,
     required this.onPick,
     required this.onRemove,
   });
 
   final Uint8List? imageBytes;
+  final String? imageUrl;
   final VoidCallback onPick;
   final VoidCallback onRemove;
 
@@ -593,6 +519,8 @@ class _FoodImagePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = context.responsive;
     final image = imageBytes;
+    final url = imageUrl?.trim();
+    final hasNetwork = image == null && url != null && url.isNotEmpty;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(r.scale(16)),
@@ -602,7 +530,7 @@ class _FoodImagePicker extends StatelessWidget {
           onTap: onPick,
           child: SizedBox(
             height: r.scale(150),
-            child: image == null
+            child: image == null && !hasNetwork
                 ? Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -640,7 +568,16 @@ class _FoodImagePicker extends StatelessWidget {
                 : Stack(
                     fit: StackFit.expand,
                     children: [
-                      CappedMemoryImage(bytes: image),
+                      if (image != null)
+                        CappedMemoryImage(bytes: image)
+                      else
+                        AppNetworkImage(
+                          url!,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                          errorBuilder: (context, error, _) =>
+                              const SizedBox.shrink(),
+                        ),
                       Positioned(
                         right: r.scale(8),
                         bottom: r.scale(8),
@@ -732,8 +669,10 @@ class _NutrientInput extends StatelessWidget {
         labelStyle: TextStyle(color: color),
         floatingLabelStyle: TextStyle(color: color),
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 12,
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: color, width: 1.5),
@@ -742,9 +681,7 @@ class _NutrientInput extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: color.withValues(alpha: 0.45)),
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -831,9 +768,7 @@ class _BottomActions extends StatelessWidget {
               TextButton(
                 onPressed: isSaving ? null : onSaveOnly,
                 child: Text(
-                  isEditing
-                      ? 'Update in My Food only'
-                      : 'Save to My Food only',
+                  isEditing ? 'Update in My Food only' : 'Save to My Food only',
                   style: TextStyle(fontSize: r.scale(13)),
                 ),
               ),

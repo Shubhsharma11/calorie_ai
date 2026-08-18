@@ -6,9 +6,10 @@ import '../controllers/scan_controller.dart';
 import '../core/responsive.dart';
 import '../models/food_item.dart';
 import '../theme/app_colors.dart';
-import '../widgets/food_emoji_avatar.dart';
-import '../widgets/primary_button.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/food_emoji_avatar.dart';
+import '../widgets/log_preview_sheet.dart';
+import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
 class ScanView extends GetView<ScanController> {
@@ -43,7 +44,7 @@ class ScanView extends GetView<ScanController> {
               if (result == null) return const SizedBox.shrink();
               return _ScanResultCard(
                 food: result,
-                onAdd: () => controller.openFoodDetails(result),
+                onAdd: () => showFoodItemLogSheet(context, food: result),
                 onDismiss: controller.clearResult,
               );
             }),
@@ -59,115 +60,118 @@ class _BarcodeScanPanel extends GetView<ScanController> {
 
   @override
   Widget build(BuildContext context) {
-    final scanner = controller.barcodeScannerController;
-
     return Column(
       children: [
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: scanner == null
-                ? const Center(child: CircularProgressIndicator())
-                : Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Keep MobileScanner outside Obx so pause/lookup
-                      // overlays don't recreate the camera widget.
-                      MobileScanner(
-                        controller: scanner,
-                        onDetect: controller.onBarcodeDetected,
-                        errorBuilder: (context, error) {
-                          return _CameraMessage(
-                            icon: Icons.videocam_off_rounded,
-                            title: 'Camera unavailable',
-                            body: error.errorDetails?.message ??
-                                error.errorCode.name,
-                            actionLabel: 'Try again',
-                            onAction: controller.resumeBarcodeScan,
-                          );
-                        },
-                      ),
-                      IgnorePointer(
-                        child: Center(
-                          child: Container(
-                            width: 240,
-                            height: 140,
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: AppColors.primary,
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+            child: Obx(() {
+              final _ = controller.cameraSessionId.value;
+              final scanner = controller.barcodeScannerController;
+              if (scanner == null) {
+                return const ColoredBox(
+                  color: Colors.black,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  MobileScanner(
+                    controller: scanner,
+                    onDetect: controller.onBarcodeDetected,
+                    errorBuilder: (context, error) {
+                      return _CameraMessage(
+                        icon: Icons.videocam_off_rounded,
+                        title: 'Camera unavailable',
+                        body:
+                            error.errorDetails?.message ?? error.errorCode.name,
+                        actionLabel: 'Try again',
+                        onAction: controller.resumeBarcodeScan,
+                      );
+                    },
+                  ),
+                  IgnorePointer(
+                    child: Center(
+                      child: Container(
+                        width: 240,
+                        height: 140,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: AppColors.primary,
+                            width: 2,
                           ),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      Obx(() {
-                        if (controller.cameraPermissionDenied.value) {
-                          return _CameraMessage(
-                            icon: Icons.camera_alt_outlined,
-                            title: 'Camera permission needed',
-                            body:
-                                'Allow camera access to scan product barcodes.',
-                            actionLabel: 'Open Settings',
-                            onAction: controller.openAppSettingsForCamera,
-                          );
-                        }
-
-                        final cameraError = controller.cameraError.value;
-                        if (cameraError != null && cameraError.isNotEmpty) {
-                          return _CameraMessage(
-                            icon: Icons.error_outline_rounded,
-                            title: 'Camera error',
-                            body: cameraError,
-                            actionLabel: 'Try again',
-                            onAction: controller.resumeBarcodeScan,
-                          );
-                        }
-
-                        final scanning = controller.isScanning.value;
-                        final paused = controller.barcodeScanPaused.value;
-                        if (!paused && !scanning) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return ColoredBox(
-                          color: Colors.black54,
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (scanning)
-                                  const CircularProgressIndicator(
-                                    color: Colors.white,
-                                  )
-                                else
-                                  const Icon(
-                                    Icons.check_circle_outline,
-                                    color: Colors.white,
-                                    size: 48,
-                                  ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  scanning
-                                      ? 'Looking up product...'
-                                      : 'Scan paused',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                                if (paused && !scanning) ...[
-                                  const SizedBox(height: 12),
-                                  FilledButton(
-                                    onPressed: controller.resumeBarcodeScan,
-                                    child: const Text('Scan Again'),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                    ],
+                    ),
                   ),
+                  Obx(() {
+                    if (controller.cameraPermissionDenied.value) {
+                      return _CameraMessage(
+                        icon: Icons.camera_alt_outlined,
+                        title: 'Camera permission needed',
+                        body: 'Allow camera access to scan product barcodes.',
+                        actionLabel: 'Open Settings',
+                        onAction: controller.openAppSettingsForCamera,
+                      );
+                    }
+
+                    final cameraError = controller.cameraError.value;
+                    if (cameraError != null && cameraError.isNotEmpty) {
+                      return _CameraMessage(
+                        icon: Icons.error_outline_rounded,
+                        title: 'Camera error',
+                        body: cameraError,
+                        actionLabel: 'Try again',
+                        onAction: controller.resumeBarcodeScan,
+                      );
+                    }
+
+                    final scanning = controller.isScanning.value;
+                    final paused = controller.barcodeScanPaused.value;
+                    if (!paused && !scanning) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return ColoredBox(
+                      color: Colors.black54,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (scanning)
+                              const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                            else
+                              const Icon(
+                                Icons.check_circle_outline,
+                                color: Colors.white,
+                                size: 48,
+                              ),
+                            const SizedBox(height: 12),
+                            Text(
+                              scanning
+                                  ? 'Looking up product...'
+                                  : 'Scan paused',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            if (paused && !scanning) ...[
+                              const SizedBox(height: 12),
+                              FilledButton(
+                                onPressed: controller.resumeBarcodeScan,
+                                child: const Text('Scan Again'),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              );
+            }),
           ),
         ),
         const SizedBox(height: 16),
@@ -268,7 +272,7 @@ class _ScanResultCard extends StatelessWidget {
         child: Row(
           children: [
             FoodEmojiAvatar(
-              emoji: food.emoji,
+              emoji: food.displayEmoji,
               imageUrl: food.imageUrl,
               size: 48,
             ),

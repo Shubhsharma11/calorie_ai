@@ -324,7 +324,7 @@ class _RepeatYesterdayBottomSheetState
           (meal) => Obx(
             () => RepeatYesterdayMealCard(
               title: meal.food.name,
-              subtitle: '${meal.grams} g · ${meal.calories} kcal',
+              subtitle: '${meal.quantityLabel} · ${meal.calories} kcal',
               selected: controller.isYesterdayMealSelected(meal.id),
               onTap: () => controller.toggleYesterdayMeal(meal.id),
             ),

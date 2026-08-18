@@ -25,6 +25,8 @@ class MealEntry {
   double get carbs => food.macroForGrams(food.carbs, grams);
   double get fat => food.macroForGrams(food.fat, grams);
 
+  String get quantityLabel => food.servingLabelForGrams(grams);
+
   MealEntry copyWith({
     String? id,
     DateTime? date,

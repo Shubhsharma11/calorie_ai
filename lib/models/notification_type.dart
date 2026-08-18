@@ -22,18 +22,108 @@ enum NotificationType {
 
   static NotificationType fromValue(String? raw) {
     if (raw == null || raw.isEmpty) return NotificationType.unknown;
+    final normalized = raw.trim().toLowerCase().replaceAll(RegExp(r'[\s-]+'), '_');
     for (final type in NotificationType.values) {
-      if (type.value == raw) return type;
+      if (type.value == normalized) return type;
     }
-    return NotificationType.unknown;
+    switch (normalized) {
+      case 'lunch':
+      case 'lunchtime':
+      case 'lunch_time':
+        return NotificationType.lunchReminder;
+      case 'breakfast':
+      case 'breakfasttime':
+      case 'breakfast_time':
+        return NotificationType.breakfastReminder;
+      case 'dinner':
+      case 'dinnertime':
+      case 'dinner_time':
+        return NotificationType.dinnerReminder;
+      case 'meal':
+        return NotificationType.mealReminder;
+      default:
+        return NotificationType.unknown;
+    }
   }
 
   static NotificationType fromData(Map<String, dynamic> data) {
     return fromValue(
-      data['type'] as String? ??
-          data['notification_type'] as String? ??
-          data['category'] as String?,
+      _stringFrom(data, const [
+        'type',
+        'notification_type',
+        'notificationType',
+        'category',
+      ]),
     );
+  }
+
+  /// Resolves type from payload fields, meal slot, or title/body text.
+  static NotificationType resolve({
+    String? type,
+    String? title,
+    String? body,
+    Map<String, dynamic> data = const {},
+  }) {
+    var parsed = fromValue(type);
+    if (parsed == NotificationType.unknown) {
+      parsed = fromData(data);
+    }
+
+    if (parsed == NotificationType.lunchReminder ||
+        parsed == NotificationType.breakfastReminder ||
+        parsed == NotificationType.dinnerReminder) {
+      return parsed;
+    }
+
+    final canInferMeal = parsed == NotificationType.unknown ||
+        parsed == NotificationType.mealReminder;
+    if (canInferMeal) {
+      final inferred = inferMealReminder(
+        title: title,
+        body: body,
+        data: data,
+      );
+      if (inferred != null) return inferred;
+    }
+
+    return parsed;
+  }
+
+  static NotificationType? inferMealReminder({
+    String? title,
+    String? body,
+    Map<String, dynamic> data = const {},
+  }) {
+    final meal = _stringFrom(data, const [
+      'mealTime',
+      'meal_time',
+      'mealtime',
+      'meal',
+    ])?.toLowerCase();
+    switch (meal) {
+      case 'lunch':
+        return NotificationType.lunchReminder;
+      case 'breakfast':
+        return NotificationType.breakfastReminder;
+      case 'dinner':
+        return NotificationType.dinnerReminder;
+    }
+
+    final haystack = '${title ?? ''} ${body ?? ''}'.toLowerCase();
+    if (haystack.contains('lunch')) return NotificationType.lunchReminder;
+    if (haystack.contains('breakfast')) {
+      return NotificationType.breakfastReminder;
+    }
+    if (haystack.contains('dinner')) return NotificationType.dinnerReminder;
+    return null;
+  }
+
+  static String? _stringFrom(Map<String, dynamic> data, List<String> keys) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
   }
 
   static String routeForMealTime(String? mealTime) {

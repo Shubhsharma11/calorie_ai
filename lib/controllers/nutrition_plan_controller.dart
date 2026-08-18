@@ -14,6 +14,7 @@ class NutritionPlanController extends GetxController {
 
   final NutritionPlanRepository _repository;
   bool _isFetching = false;
+  int _fetchGeneration = 0;
 
   final isLoading = false.obs;
   final errorMessage = RxnString();
@@ -35,7 +36,7 @@ class NutritionPlanController extends GetxController {
   }
 
   Future<void> loadPlan({bool force = false}) async {
-    if (_isFetching) return;
+    if (_isFetching && !force) return;
     if (!force && plan.value != null) return;
 
     final userController = Get.find<UserController>();
@@ -52,6 +53,8 @@ class NutritionPlanController extends GetxController {
       return;
     }
 
+    final generation = ++_fetchGeneration;
+    final token = userController.accessToken;
     _isFetching = true;
     isLoading.value = true;
     errorMessage.value = null;
@@ -59,9 +62,17 @@ class NutritionPlanController extends GetxController {
 
     try {
       debugPrint('NutritionPlanController: calling GET nutrition plan API');
-      final fetchedPlan = await _repository.fetchPlan(
-        accessToken: userController.accessToken,
-      );
+      final fetchedPlan = await _repository.fetchPlan(accessToken: token);
+      if (generation != _fetchGeneration) {
+        debugPrint('NutritionPlanController: ignoring stale plan response');
+        return;
+      }
+      if (!userController.isLoggedIn || userController.accessToken != token) {
+        debugPrint(
+          'NutritionPlanController: ignoring plan — session changed',
+        );
+        return;
+      }
       plan.value = fetchedPlan;
       debugPrint(
         'NutritionPlanController: loaded plan with ${fetchedPlan.tips.length} tips',
@@ -71,15 +82,19 @@ class NutritionPlanController extends GetxController {
         applyTargetWeight: false,
       );
     } on NutritionPlanApiException catch (error) {
+      if (generation != _fetchGeneration) return;
       debugPrint('NutritionPlanController: load failed: $error');
       errorMessage.value = error.message;
     } catch (error) {
+      if (generation != _fetchGeneration) return;
       debugPrint('NutritionPlanController: load failed: $error');
       errorMessage.value =
           'Unable to load your nutrition plan. Please check your connection and try again.';
     } finally {
-      _isFetching = false;
-      isLoading.value = false;
+      if (generation == _fetchGeneration) {
+        _isFetching = false;
+        isLoading.value = false;
+      }
       revision.value++;
     }
   }
@@ -95,6 +110,7 @@ class NutritionPlanController extends GetxController {
   List<String> get tips => plan.value?.tips ?? [];
 
   void clearSessionData() {
+    _fetchGeneration++;
     plan.value = null;
     errorMessage.value = null;
     isLoading.value = false;

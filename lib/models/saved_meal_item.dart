@@ -1,3 +1,4 @@
+import '../core/food_serving.dart';
 import 'food_item.dart';
 import 'meal_entry.dart';
 
@@ -67,20 +68,12 @@ class SavedMealItem {
 
   String get servingDescription {
     final quantity = displayedServingQuantity;
-    final formatted = quantity == quantity.roundToDouble()
-        ? quantity.toStringAsFixed(0)
-        : quantity.toStringAsFixed(1);
-    final pluralizedUnit = switch (servingUnit) {
-      'piece' when quantity != 1 => 'pieces',
-      'serving' when quantity != 1 => 'servings',
-      'cup' when quantity != 1 => 'cups',
-      'bowl' when quantity != 1 => 'bowls',
-      'plate' when quantity != 1 => 'plates',
-      'glass' when quantity != 1 => 'glasses',
-      'slice' when quantity != 1 => 'slices',
-      _ => servingUnit,
-    };
-    return '$formatted $pluralizedUnit';
+    final household = FoodServing.isHouseholdUnit(servingUnit);
+    return FoodServing.formatVisible(
+      quantity: quantity,
+      unit: servingUnit,
+      grams: household ? grams : null,
+    );
   }
 
   String get storageKey => hasServerId
@@ -102,8 +95,58 @@ class SavedMealItem {
             grams == other.grams);
   }
 
+  String get resolvedServingUnit {
+    final itemUnit = servingUnit.trim();
+    if (itemUnit.isNotEmpty) return FoodServing.normalizeUnit(itemUnit);
+    return FoodServing.normalizeUnit(food.servingUnit);
+  }
+
+  /// Food with the logged unit attached so steppers and diary labels match.
+  FoodItem get foodWithServing {
+    final unit = resolvedServingUnit;
+    final quantity = displayedServingQuantity;
+    final household = FoodServing.isHouseholdUnit(unit);
+    return food.copyWith(
+      servingQuantity: household ? 1 : quantity,
+      servingUnit: unit,
+      gramsPerServing: food.usesHouseholdServing
+          ? food.gramsPerServing
+          : (household ? 100 : 1),
+    );
+  }
+
   MealEntry toMealEntry({DateTime? date}) {
     if (hasServingNutrition) {
+      final unit = resolvedServingUnit;
+      final quantity = displayedServingQuantity;
+      if (FoodServing.isMetricUnit(unit)) {
+        final logged = quantity.round().clamp(1, 5000);
+        final scale = logged > 0 ? 100 / logged : 1.0;
+        return MealEntry(
+          food: FoodItem(
+            name: food.name,
+            caloriesPer100g: _per100gForPortion(calories, logged),
+            protein: protein * scale,
+            carbs: carbs * scale,
+            fat: fat * scale,
+            emoji: food.displayEmoji,
+            imageUrl: food.imageUrl,
+            category: food.category,
+            servingQuantity: quantity,
+            servingUnit: unit,
+            gramsPerServing: 1,
+            catalogId: food.catalogId,
+          ),
+          grams: logged,
+          meal: meal,
+          date: date,
+        );
+      }
+
+      // Custom household foods store calories per serving, not per 100 g.
+      final gramsPerServing = quantity > 0
+          ? (100 / quantity).round().clamp(1, 5000)
+          : 100;
       return MealEntry(
         food: FoodItem(
           name: food.name,
@@ -111,17 +154,23 @@ class SavedMealItem {
           protein: protein,
           carbs: carbs,
           fat: fat,
-          emoji: food.emoji,
+          emoji: food.displayEmoji,
           imageUrl: food.imageUrl,
+          category: food.category,
+          servingQuantity: 1,
+          servingUnit: unit,
+          gramsPerServing: gramsPerServing,
+          catalogId: food.catalogId,
         ),
         grams: 100,
         meal: meal,
         date: date,
       );
     }
+
     return MealEntry(
-      food: food,
-      grams: grams,
+      food: foodWithServing,
+      grams: grams.clamp(1, 5000),
       meal: meal,
       date: date,
     );
@@ -132,6 +181,8 @@ class SavedMealItem {
       food: entry.food,
       grams: entry.grams,
       meal: entry.meal,
+      servingQuantity: entry.food.servingCountForGrams(entry.grams),
+      servingUnit: entry.food.servingUnit,
     );
   }
 
@@ -139,9 +190,15 @@ class SavedMealItem {
     Iterable<MealEntry> entries, {
     int limit = 15,
     String? meal,
+    Set<String>? excludeFoodNames,
   }) {
     final seen = <String>{};
     final history = <SavedMealItem>[];
+    final hidden = excludeFoodNames == null
+        ? const <String>{}
+        : {
+            for (final name in excludeFoodNames) name.trim().toLowerCase(),
+          };
     final sorted = entries.toList()
       ..sort((a, b) {
         final byDate = b.date.compareTo(a.date);
@@ -155,6 +212,7 @@ class SavedMealItem {
     for (final entry in sorted) {
       final item = SavedMealItem.fromMealEntry(entry);
       if (meal != null && item.meal != meal) continue;
+      if (hidden.contains(item.food.name.trim().toLowerCase())) continue;
       if (seen.add(item.storageKey)) {
         history.add(item);
         if (history.length >= limit) break;
@@ -221,4 +279,13 @@ class SavedMealItem {
       basisFat: (json['basisFat'] as num?)?.toDouble(),
     );
   }
+}
+
+int _per100gForPortion(int portionCalories, int grams) {
+  if (grams <= 0) return portionCalories < 0 ? 0 : portionCalories;
+  var per100 = (portionCalories * 100 / grams).round();
+  final got = (per100 * grams / 100).round();
+  if (got < portionCalories) per100++;
+  if (got > portionCalories) per100--;
+  return per100 < 0 ? 0 : per100;
 }

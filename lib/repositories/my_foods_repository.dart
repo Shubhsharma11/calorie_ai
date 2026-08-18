@@ -51,7 +51,7 @@ class MyFoodsRepository {
         accessToken: accessToken,
         preset: preset,
         mealtime: mealtime,
-        imageUrl: "https://www.vecteezy.com/photo/57068323-single-fresh-red-strawberry-on-table-green-background-food-fruit-sweet-macro-juicy-plant-image",
+        imageUrl: imageUrl,
       );
     } on MyFoodsApiException {
       rethrow;
@@ -67,6 +67,7 @@ class MyFoodsRepository {
     required String myFoodId,
     required CustomFoodPreset preset,
     required String mealtime,
+    String? imageUrl,
   }) async {
     try {
       return await _apiService.updateMyFood(
@@ -74,6 +75,7 @@ class MyFoodsRepository {
         myFoodId: myFoodId,
         preset: preset,
         mealtime: mealtime,
+        imageUrl: imageUrl,
       );
     } on MyFoodsApiException {
       rethrow;

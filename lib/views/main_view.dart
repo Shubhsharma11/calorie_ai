@@ -6,7 +6,6 @@ import '../controllers/dashboard_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_coach_marks.dart';
 import '../core/app_route_observer.dart';
-import '../core/responsive.dart';
 import '../services/local_storage_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/floating_bottom_nav_bar.dart';
@@ -68,55 +67,19 @@ class _MainViewState extends State<MainView> {
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
-    final r = context.responsive;
     final controller = Get.find<MainController>();
 
-    late final Widget shell;
-    if (r.isWide) {
-      shell = Scaffold(
-        body: SafeArea(
-          child: Row(
-            children: [
-              Obx(
-                () => NavigationRail(
-                  selectedIndex: controller.tabIndex.value,
-                  onDestinationSelected: controller.changeTab,
-                  labelType: r.isDesktop
-                      ? NavigationRailLabelType.all
-                      : NavigationRailLabelType.selected,
-                  backgroundColor: AppColors.background,
-                  indicatorColor: AppColors.primary.withValues(alpha: 0.2),
-                  selectedIconTheme: const IconThemeData(
-                    color: AppColors.primary,
-                  ),
-                  destinations: [
-                    for (final t in _tabs)
-                      NavigationRailDestination(
-                        icon: Icon(t.icon),
-                        label: Text(t.label),
-                      ),
-                  ],
-                ),
-              ),
-              const VerticalDivider(width: 1, thickness: 1),
-              const Expanded(child: _TabStack(pages: _pages)),
-            ],
-          ),
-        ),
-      );
-    } else {
-      shell = Scaffold(
-        body: const SafeArea(
-          bottom: false,
-          child: _TabStack(pages: _pages),
-        ),
-        bottomNavigationBar: FloatingBottomNavBar(
-          onTap: controller.changeTab,
-          items: _tabs,
-          coachKeys: AppCoachMarks.navKeys,
-        ),
-      );
-    }
+    final shell = Scaffold(
+      body: const SafeArea(
+        bottom: false,
+        child: _TabStack(pages: _pages),
+      ),
+      bottomNavigationBar: FloatingBottomNavBar(
+        onTap: controller.changeTab,
+        items: _tabs,
+        coachKeys: AppCoachMarks.navKeys,
+      ),
+    );
 
     return CoachMarkHost(
       storage: _coachStorage,

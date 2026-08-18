@@ -73,12 +73,16 @@ class StepTrackingService {
     await stop();
 
     if (Platform.isAndroid) {
-      final started = await _startHealthConnect(
-        onDailySteps: onDailySteps,
-        onError: onError,
-        onBackendChanged: onBackendChanged,
-      );
-      if (started) return;
+      try {
+        final started = await _startHealthConnect(
+          onDailySteps: onDailySteps,
+          onError: onError,
+          onBackendChanged: onBackendChanged,
+        );
+        if (started) return;
+      } catch (error) {
+        debugPrint('StepTrackingService: Health Connect skipped: $error');
+      }
     }
 
     await _startPedometer(
@@ -98,10 +102,14 @@ class StepTrackingService {
     void Function(StepTrackingBackend backend)? onBackendChanged,
   }) async {
     final status = await _healthConnect.sdkStatus();
-    if (status == HealthConnectSdkStatus.sdkUnavailable) {
-      onError?.call(
-        'Install Health Connect to sync steps from your fitness apps.',
-      );
+    // Android 12 and below: Health Connect does not exist. Fall through to
+    // the device pedometer without showing an install prompt.
+    if (status == null || status == HealthConnectSdkStatus.sdkUnavailable) {
+      if (await _healthConnect.isOsSupported()) {
+        onError?.call(
+          'Install Health Connect to sync steps from your fitness apps.',
+        );
+      }
       return false;
     }
     if (status == HealthConnectSdkStatus.sdkUnavailableProviderUpdateRequired) {

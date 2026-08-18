@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/food_serving.dart';
+import '../core/media_url.dart';
 import 'food_item.dart';
 import 'meal_entry.dart';
 import 'meal_type.dart';
@@ -39,6 +41,10 @@ abstract final class ApiMealMapper {
   }
 
   static Map<String, dynamic> toCreateRequestBody(MealEntry entry) {
+    final unit = FoodServing.normalizeUnit(entry.food.servingUnit);
+    final household = entry.food.usesHouseholdServing;
+    final image = entry.food.imageUrl?.trim() ?? '';
+    final emoji = entry.food.emoji.trim();
     return {
       'name': entry.food.name,
       'calories': entry.calories,
@@ -46,7 +52,15 @@ abstract final class ApiMealMapper {
       'carbs': _roundMacro(entry.carbs),
       'fat': _roundMacro(entry.fat),
       'mealTime': entry.meal.toLowerCase(),
+      // API quantity is grams — sending serving count breaks calorie math on GET.
       'quantity': entry.grams,
+      'unit': unit.isEmpty ? 'g' : unit,
+      'grams': entry.grams,
+      if (household) 'servingUnit': entry.food.servingUnit,
+      if (household) 'gramsPerServing': entry.food.gramsPerServing,
+      if (image.isNotEmpty) 'image': image,
+      if (image.isNotEmpty) 'imageUrl': image,
+      if (emoji.isNotEmpty) 'emoji': emoji,
       'date': MealEntry.dateToKey(entry.date),
     };
   }
@@ -72,9 +86,11 @@ abstract final class ApiMealMapper {
       final parsed = entryFromApiJson(map, fallbackDate: source.date);
       if (parsed == null) continue;
       final id = _readId(map);
+      final incomingFood =
+          parsed.food.name == 'Food' ? source.food : parsed.food;
       return parsed.copyWith(
         id: (id != null && id.isNotEmpty) ? id : parsed.id,
-        food: parsed.food.name == 'Food' ? source.food : parsed.food,
+        food: incomingFood.withServingFrom(source.food),
         grams: parsed.grams > 0 ? parsed.grams : source.grams,
         meal: parsed.meal,
         date: source.date,
@@ -110,15 +126,24 @@ abstract final class ApiMealMapper {
     );
     if (mealType == null) return null;
 
-    final grams =
-        _readInt(json, const ['grams', 'quantity', 'servingGrams']) ?? 0;
+    final grams = _loggedGrams(json);
     if (grams <= 0) return null;
 
     final foodMap = _firstMap(json, const ['food', 'foodItem', 'food_item']);
-    final food = foodMap != null
+    var food = foodMap != null
         ? _foodFromApiJson(foodMap)
         : _foodFromFlatMealJson(json, grams: grams);
     if (food == null) return null;
+    final image = food.imageUrl ??
+        MediaUrl.fromJson(foodMap) ??
+        MediaUrl.fromJson(json);
+    if (image != null && image != food.imageUrl) {
+      food = food.copyWith(imageUrl: image);
+    }
+    food = _applyLoggedMealServing(food, json);
+    if (foodMap != null) {
+      food = _applyLoggedMealServing(food, foodMap);
+    }
 
     final date = _readDate(json['date']) ??
         _readDate(json['loggedAt']) ??
@@ -189,47 +214,155 @@ abstract final class ApiMealMapper {
       fat = fat * 100 / grams;
     }
 
+    final servingText = _readString(json, const [
+      'serving',
+      'servingSize',
+      'serving_size',
+      'portion',
+      'servingDescription',
+      'serving_description',
+    ]);
+    final serving = servingText == null
+        ? null
+        : FoodServing.parseDescription(servingText);
+
     return FoodItem(
       name: name,
       caloriesPer100g: caloriesPer100g,
       protein: protein,
       carbs: carbs,
       fat: fat,
-      emoji: _readString(json, const ['emoji', 'icon']) ?? '🍽️',
-      imageUrl: _readString(json, const [
-        'image',
-        'imageUrl',
-        'image_url',
-        'photo',
-        'photoUrl',
-        'thumbnail',
-      ]),
+      emoji: _readString(json, const ['emoji']) ?? '🍽️',
+      imageUrl: MediaUrl.fromJson(json),
+      category: FoodServing.categoryFromApi(json),
+      servingQuantity: serving?.quantity ?? 100,
+      servingUnit: serving?.unit ?? 'g',
+      gramsPerServing: serving != null && serving.isHousehold
+          ? serving.gramsPerServing
+          : 1,
     );
   }
 
   static FoodItem _foodFromApiJson(Map<String, dynamic> json) {
-    return FoodItem(
-      name: _readString(json, const ['name', 'foodName', 'food_name']) ?? 'Food',
-      caloriesPer100g: _readInt(json, const [
-            'caloriesPer100g',
-            'calories_per_100g',
-            'caloriesPer100G',
-            'kcalPer100g',
-          ]) ??
-          0,
-      protein:
-          _readDouble(json, const ['protein', 'proteinG', 'protein_g']) ?? 0,
-      carbs: _readDouble(json, const ['carbs', 'carbsG', 'carbs_g']) ?? 0,
-      fat: _readDouble(json, const ['fat', 'fatG', 'fat_g']) ?? 0,
-      emoji: _readString(json, const ['emoji', 'icon']) ?? '🍽️',
-      imageUrl: _readString(json, const [
-        'image',
-        'imageUrl',
-        'image_url',
-        'photo',
-        'photoUrl',
-        'thumbnail',
-      ]),
+    return FoodItem.tryFromApiJson(json) ??
+        FoodItem(
+          name: _readString(json, const ['name', 'foodName', 'food_name']) ??
+              'Food',
+          caloriesPer100g: _readInt(json, const [
+                'caloriesPer100g',
+                'calories_per_100g',
+                'caloriesPer100G',
+                'kcalPer100g',
+              ]) ??
+              0,
+          protein:
+              _readDouble(json, const ['protein', 'proteinG', 'protein_g']) ??
+                  0,
+          carbs: _readDouble(json, const ['carbs', 'carbsG', 'carbs_g']) ?? 0,
+          fat: _readDouble(json, const ['fat', 'fatG', 'fat_g']) ?? 0,
+          emoji: _readString(json, const ['emoji']) ?? '🍽️',
+          imageUrl: MediaUrl.fromJson(json),
+        );
+  }
+
+  /// Logged meals store grams in [grams], or [quantity] as grams / serving count.
+  static int _loggedGrams(Map<String, dynamic> json) {
+    final quantity = _readDouble(json, const ['quantity', 'amount']);
+    final unitRaw = _readString(json, const [
+      'servingUnit',
+      'serving_unit',
+      'unit',
+    ]);
+    final unit = FoodServing.normalizeUnit(unitRaw ?? 'g');
+    final gramsPerServing = _readInt(json, const [
+          'gramsPerServing',
+          'grams_per_serving',
+        ]) ??
+        FoodServing.typicalGramsFor(unit);
+    final explicitGrams = _readInt(json, const [
+      'grams',
+      'servingGrams',
+      'serving_grams',
+    ]);
+
+    if (explicitGrams != null && explicitGrams > 0) {
+      if (FoodServing.isHouseholdUnit(unit) &&
+          quantity != null &&
+          quantity > 0 &&
+          quantity <= 30 &&
+          explicitGrams < 30 &&
+          quantity * gramsPerServing > explicitGrams) {
+        return (quantity * gramsPerServing).round().clamp(1, 5000);
+      }
+      return explicitGrams;
+    }
+
+    if (quantity == null || quantity <= 0) return 0;
+    if (!FoodServing.isHouseholdUnit(unit)) {
+      return quantity.round().clamp(1, 5000);
+    }
+
+    // Legacy posts sent quantity as grams with a household unit.
+    if (quantity > 30 || quantity >= gramsPerServing) {
+      return quantity.round().clamp(1, 5000);
+    }
+    return (quantity * gramsPerServing).round().clamp(1, 5000);
+  }
+
+  /// Logged meals store [quantity] as grams. [unit] is display-only (bowl/plate).
+  static FoodItem _applyLoggedMealServing(
+    FoodItem food,
+    Map<String, dynamic> json,
+  ) {
+    if (food.usesHouseholdServing) return food;
+
+    final servingText = _readString(json, const [
+      'serving',
+      'servingSize',
+      'serving_size',
+      'portion',
+      'servingDescription',
+      'serving_description',
+    ]);
+    final fromText = servingText == null
+        ? null
+        : FoodServing.parseDescription(servingText);
+    if (fromText != null && fromText.isHousehold) {
+      return food.copyWith(
+        servingQuantity: fromText.quantity,
+        servingUnit: fromText.unit,
+        gramsPerServing: fromText.gramsPerServing,
+        category: food.category ?? FoodServing.categoryFromApi(json),
+      );
+    }
+
+    final unitRaw = _readString(json, const [
+      'servingUnit',
+      'serving_unit',
+      'unit',
+    ]);
+    if (unitRaw == null) return food;
+
+    final unit = FoodServing.normalizeUnit(unitRaw);
+    if (unit == 'ml') {
+      return food.copyWith(
+        servingUnit: 'ml',
+        gramsPerServing: 1,
+        category: food.category ?? FoodServing.categoryFromApi(json),
+      );
+    }
+    if (!FoodServing.isHouseholdUnit(unit)) return food;
+
+    final gramsPerServing = _readInt(json, const [
+          'gramsPerServing',
+          'grams_per_serving',
+        ]) ??
+        FoodServing.typicalGramsFor(unit);
+    return food.copyWith(
+      servingQuantity: 1,
+      servingUnit: unit,
+      gramsPerServing: gramsPerServing.clamp(1, 5000),
+      category: food.category ?? FoodServing.categoryFromApi(json),
     );
   }
 

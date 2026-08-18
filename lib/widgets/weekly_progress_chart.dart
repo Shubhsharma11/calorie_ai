@@ -36,6 +36,10 @@ class WeeklyProgressChart extends StatelessWidget {
 
   static const double _valueLabelHeight = 18;
   static const double _dayLabelHeight = 22;
+  // Match Stats weekly bars: slot minus 10px gap, capped at 40px.
+  static const double _maxBarWidth = 40;
+  static const double _barGap = 10;
+  static const double _barRadius = 6;
 
   int? get _activeGoal {
     final goal = switch (metric) {
@@ -92,74 +96,81 @@ class WeeklyProgressChart extends StatelessWidget {
                         ),
                       ),
                     Positioned.fill(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: List.generate(days.length, (index) {
-                          final day = days[index];
-                          final value = values[index];
-                          final hasValue = day.hasData && value > 0;
-                          final labelHeight = hasValue
-                              ? _valueLabelHeight
-                              : 0.0;
-                          final availableBarHeight =
-                              barAreaHeight - labelHeight;
-                          final barHeight = maxValue > 0
-                              ? (value / maxValue * availableBarHeight).clamp(
-                                  day.hasData ? 4.0 : 2.0,
-                                  availableBarHeight,
-                                )
-                              : 2.0;
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final slotCount = days.isEmpty ? 1 : days.length;
+                          final slotWidth = constraints.maxWidth / slotCount;
+                          final barWidth = (slotWidth - _barGap).clamp(
+                            3.0,
+                            _maxBarWidth,
+                          );
 
-                          return Expanded(
-                            key: ValueKey('w-bar-$index-$value'),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 3,
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  if (hasValue)
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: List.generate(days.length, (index) {
+                              final day = days[index];
+                              final value = values[index];
+                              final hasValue = day.hasData && value > 0;
+                              final labelHeight = hasValue
+                                  ? _valueLabelHeight
+                                  : 0.0;
+                              final availableBarHeight =
+                                  barAreaHeight - labelHeight;
+                              final barHeight = maxValue > 0
+                                  ? (value / maxValue * availableBarHeight)
+                                        .clamp(
+                                          day.hasData ? 4.0 : 2.0,
+                                          availableBarHeight,
+                                        )
+                                  : 2.0;
+
+                              return Expanded(
+                                key: ValueKey('w-bar-$index-$value'),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    if (hasValue)
+                                      SizedBox(
+                                        height: _valueLabelHeight,
+                                        child: Align(
+                                          alignment: Alignment.bottomCenter,
+                                          child: Text(
+                                            _formatValue(value),
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textSecondary,
+                                              height: 1,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
                                     SizedBox(
-                                      height: _valueLabelHeight,
+                                      height: barHeight,
                                       child: Align(
                                         alignment: Alignment.bottomCenter,
-                                        child: Text(
-                                          _formatValue(value),
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.textSecondary,
-                                            height: 1,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ),
-                                  SizedBox(
-                                    height: barHeight,
-                                    child: Align(
-                                      alignment: Alignment.bottomCenter,
-                                      child: Container(
-                                        width: double.infinity,
-                                        height: barHeight,
-                                        decoration: BoxDecoration(
-                                          color: day.hasData
-                                              ? _metricColor(metric)
-                                              : AppColors.border,
-                                          borderRadius: BorderRadius.circular(
-                                            6,
+                                        child: Container(
+                                          width: barWidth,
+                                          height: barHeight,
+                                          decoration: BoxDecoration(
+                                            color: day.hasData
+                                                ? _metricColor(metric)
+                                                : AppColors.border,
+                                            borderRadius: BorderRadius.circular(
+                                              _barRadius,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                                  ],
+                                ),
+                              );
+                            }),
                           );
-                        }),
+                        },
                       ),
                     ),
                   ],

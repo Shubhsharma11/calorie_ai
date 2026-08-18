@@ -1,3 +1,5 @@
+import '../core/food_serving.dart';
+import '../core/media_url.dart';
 import 'food_item.dart';
 import 'meal_type.dart';
 import 'saved_meal_item.dart';
@@ -24,8 +26,8 @@ abstract final class ApiFavouriteMealMapper {
       'mealtime': mealtimeForApi(item.meal),
     };
 
-    final image = imageUrl?.trim() ?? '';
-    if (image.isNotEmpty) {
+    final image = _itemImageForApi(imageUrl) ?? _itemImageForApi(item.food.imageUrl);
+    if (image != null) {
       body['image'] = image;
     }
 
@@ -124,12 +126,25 @@ abstract final class ApiFavouriteMealMapper {
     Map<String, dynamic> json, {
     SavedMealItem? source,
   }) {
-    final parsed = itemFromApiJson(_unwrapData(json));
+    final parsed = itemFromApiJson(_normalizeApiJson(json));
     if (parsed == null) return source;
     if (source == null) return parsed;
+
+    final parsedEmoji = parsed.food.emoji.trim();
+    final keepParsedEmoji = parsedEmoji.isNotEmpty &&
+        parsedEmoji != '🍽️' &&
+        parsedEmoji != '⭐' &&
+        !MediaUrl.looksLikeImageRef(parsedEmoji);
+
     return source.copyWith(
       id: parsed.id,
-      food: parsed.food,
+      food: parsed.food.copyWith(
+        imageUrl: MediaUrl.preferLoadable([
+          parsed.food.imageUrl,
+          source.food.imageUrl,
+        ]),
+        emoji: keepParsedEmoji ? parsedEmoji : source.food.emoji,
+      ),
       grams: parsed.grams,
       meal: parsed.meal,
       servingQuantity: parsed.servingQuantity,
@@ -142,6 +157,7 @@ abstract final class ApiFavouriteMealMapper {
   }
 
   static SavedMealItem? itemFromApiJson(Map<String, dynamic> json) {
+    json = _normalizeApiJson(json);
     final name = (json['name'] as String?)?.trim();
     if (name == null || name.isEmpty) return null;
 
@@ -155,9 +171,11 @@ abstract final class ApiFavouriteMealMapper {
         (json['quantity'] as num?)?.toDouble() ??
         (json['servingQuantity'] as num?)?.toDouble() ??
         100;
-    final unit = (json['unit'] as String?)?.trim().isNotEmpty == true
-        ? (json['unit'] as String).trim()
-        : 'g';
+    final unit = FoodServing.normalizeUnit(
+      (json['unit'] as String?)?.trim().isNotEmpty == true
+          ? (json['unit'] as String).trim()
+          : 'g',
+    );
     final carbs = (json['carbs'] as num?)?.toDouble() ?? 0;
     final protein = (json['protein'] as num?)?.toDouble() ?? 0;
     final fat = (json['fat'] as num?)?.toDouble() ?? 0;
@@ -168,7 +186,10 @@ abstract final class ApiFavouriteMealMapper {
       (json['mealtime'] ?? json['mealTime'] ?? json['meal'])?.toString(),
     );
 
-    final grams = unit == 'g' ? quantity.round().clamp(1, 5000) : 100;
+    final household = FoodServing.isHouseholdUnit(unit);
+    final grams = unit == 'g' || unit == 'ml'
+        ? quantity.round().clamp(1, 5000)
+        : 100;
 
     return SavedMealItem(
       id: id,
@@ -178,12 +199,11 @@ abstract final class ApiFavouriteMealMapper {
         protein: protein,
         carbs: carbs,
         fat: fat,
-        emoji: '⭐',
-        imageUrl: (json['image'] as String?)?.trim().isNotEmpty == true
-            ? (json['image'] as String).trim()
-            : (json['imageUrl'] as String?)?.trim().isNotEmpty == true
-                ? (json['imageUrl'] as String).trim()
-                : null,
+        emoji: _emojiFromApi(json),
+        imageUrl: MediaUrl.fromJson(json),
+        servingQuantity: household ? 1 : quantity,
+        servingUnit: unit,
+        gramsPerServing: 1,
       ),
       grams: grams,
       meal: meal,
@@ -206,11 +226,79 @@ abstract final class ApiFavouriteMealMapper {
     return result;
   }
 
-  static Map<String, dynamic> _unwrapData(Map<String, dynamic> json) {
-    final data = json['data'];
-    if (data is Map<String, dynamic>) return data;
-    if (data is Map) return Map<String, dynamic>.from(data);
-    return json;
+  static Map<String, dynamic> _normalizeApiJson(Map<String, dynamic> json) {
+    var map = Map<String, dynamic>.from(json);
+    final data = map['data'];
+    if (data is Map) {
+      map = Map<String, dynamic>.from(data);
+    }
+
+    final nested =
+        map['food'] ??
+        map['favouriteMeal'] ??
+        map['favoriteMeal'] ??
+        map['item'];
+    if (nested is Map) {
+      final nestedMap = Map<String, dynamic>.from(nested);
+      map['name'] ??= nestedMap['name'];
+      map['id'] ??= nestedMap['id'] ?? nestedMap['_id'];
+      for (final key in const [
+        'image',
+        'imageUrl',
+        'image_url',
+        'photo',
+        'thumbnail',
+        'icon',
+        'signedUrl',
+        'quantity',
+        'unit',
+        'calories',
+        'carbs',
+        'protein',
+        'fat',
+        'mealtime',
+        'mealTime',
+        'meal',
+        'emoji',
+      ]) {
+        if (!_hasValue(map[key]) && _hasValue(nestedMap[key])) {
+          map[key] = nestedMap[key];
+        }
+      }
+    }
+    return map;
+  }
+
+  static bool _hasValue(Object? value) {
+    if (value == null) return false;
+    if (value is String) return value.trim().isNotEmpty;
+    if (value is Map) return value.isNotEmpty;
+    if (value is List) return value.isNotEmpty;
+    return true;
+  }
+
+  static String _emojiFromApi(Map<String, dynamic> json) {
+    for (final key in const ['emoji', 'icon']) {
+      final value = json[key];
+      if (value is! String) continue;
+      final trimmed = value.trim();
+      if (trimmed.isEmpty || MediaUrl.looksLikeImageRef(trimmed)) continue;
+      if (trimmed == '⭐') continue;
+      return trimmed;
+    }
+    return '🍽️';
+  }
+
+  static String? _itemImageForApi(String? imageUrl) {
+    final key = MediaUrl.apiImageKey(imageUrl);
+    if (key != null) return key;
+    final resolved = MediaUrl.resolve(imageUrl);
+    if (resolved == null || resolved.isEmpty) return null;
+    final lower = resolved.toLowerCase();
+    if (lower.contains('x-amz-signature=') || lower.contains('signature=')) {
+      return null;
+    }
+    return resolved;
   }
 
   static num _roundMacro(double value) {

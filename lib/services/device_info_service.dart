@@ -11,7 +11,7 @@ class DeviceInfoService {
     DeviceInfoPlugin? deviceInfo,
     Future<PackageInfo> Function()? packageInfo,
   })  : _deviceInfo = deviceInfo ?? DeviceInfoPlugin(),
-        _packageInfo = packageInfo ?? PackageInfo.fromPlatform;
+        _packageInfo = packageInfo ?? PackageInfo.fromPlatform; 
 
   final DeviceInfoPlugin _deviceInfo;
   final Future<PackageInfo> Function() _packageInfo;

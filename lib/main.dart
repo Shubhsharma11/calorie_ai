@@ -11,24 +11,28 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'bindings/home_binding.dart';
 import 'bindings/initial_binding.dart';
 import 'controllers/settings_controller.dart';
 import 'controllers/theme_controller.dart';
 import 'controllers/user_controller.dart';
 import 'core/app_page_transitions.dart';
 import 'core/app_route_observer.dart';
+import 'core/startup_route.dart';
 import 'firebase_options.dart';
 import 'routes/app_pages.dart';
 import 'routes/app_routes.dart';
 import 'services/analytics_service.dart';
 import 'services/firebase_messaging_background.dart';
-import 'services/local_storage_service.dart';
 import 'services/notification_service.dart';
+import 'services/platform_http_client.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
+import 'widgets/session_busy_barrier.dart';
 
 Future<void> main() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  installPlatformHttpOverrides();
   // Keep the native splash up until startup finishes (no second Flutter splash).
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   await SystemChrome.setPreferredOrientations([
@@ -76,8 +80,7 @@ Future<String> _resolveInitialRoute() async {
   final user = Get.find<UserController>();
 
   try {
-    await LocalStorageService().wipeLegacyApiCachesIfNeeded();
-    await user.loadAuthSession();
+    final route = await resolveStartupRoute(user: user);
     if (user.isLoggedIn) {
       await AnalyticsService.setUser(
         userId: user.userId.isEmpty ? null : user.userId,
@@ -86,6 +89,39 @@ Future<String> _resolveInitialRoute() async {
         provider: user.authProvider,
       );
     }
+
+    await Future.any<void>([
+      Future.wait<void>([
+        _ignoreInitErrors(theme.loadTheme(), 'theme'),
+        _ignoreInitErrors(settings.settingsReady, 'settings'),
+      ]),
+      Future<void>.delayed(const Duration(seconds: 2)),
+    ]);
+
+    unawaited(
+      _ignoreInitErrors(
+        NotificationService.instance.initialize(),
+        'notifications',
+      ),
+    );
+    unawaited(
+      _ignoreInitErrors(
+        GoogleSignIn.instance.initialize(
+          serverClientId:
+              '950645223660-73fq24ua6hn9h7u92bc9nhtg22rjag1d.apps.googleusercontent.com',
+        ),
+        'google_sign_in',
+      ),
+    );
+
+    if (user.isLoggedIn && user.accessToken.isNotEmpty) {
+      unawaited(
+        NotificationService.instance.syncTokenWithBackend(
+          accessToken: user.accessToken,
+        ),
+      );
+    }
+    return route;
   } catch (error, stackTrace) {
     debugPrint('Startup auth restore failed: $error\n$stackTrace');
     await AnalyticsService.recordError(
@@ -102,41 +138,7 @@ Future<String> _resolveInitialRoute() async {
     ]),
     Future<void>.delayed(const Duration(seconds: 2)),
   ]);
-
-  unawaited(
-    _ignoreInitErrors(
-      NotificationService.instance.initialize(),
-      'notifications',
-    ),
-  );
-  unawaited(
-    _ignoreInitErrors(
-      GoogleSignIn.instance.initialize(
-        serverClientId:
-            '950645223660-73fq24ua6hn9h7u92bc9nhtg22rjag1d.apps.googleusercontent.com',
-      ),
-      'google_sign_in',
-    ),
-  );
-
-  if (user.isLoggedIn && user.accessToken.isNotEmpty) {
-    unawaited(
-      NotificationService.instance.syncTokenWithBackend(
-        accessToken: user.accessToken,
-      ),
-    );
-    try {
-      await LocalStorageService().saveWelcomeIntroSeen(seen: true);
-    } catch (_) {}
-    return user.resolveSetupResumeRoute();
-  }
-
-  try {
-    if (await LocalStorageService().isWelcomeIntroSeen()) {
-      return AppRoutes.login;
-    }
-  } catch (_) {}
-  return AppRoutes.onboarding;
+  return AppRoutes.login;
 }
 
 Future<void> _ignoreInitErrors(Future<void> future, String label) async {
@@ -183,7 +185,14 @@ class _FitBuddyAiAppState extends State<FitBuddyAiApp> {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.light,
-      initialBinding: InitialBinding(),
+      initialBinding: BindingsBuilder(() {
+        InitialBinding().dependencies();
+        // GetX often skips the page binding for [initialRoute]. Register
+        // home controllers here so meals/plan load on cold start too.
+        if (widget.initialRoute == AppRoutes.main) {
+          HomeBinding().dependencies();
+        }
+      }),
       initialRoute: widget.initialRoute,
       getPages: AppPages.pages,
       navigatorObservers: [
@@ -210,7 +219,9 @@ class _FitBuddyAiAppState extends State<FitBuddyAiApp> {
             data: brightness == Brightness.dark
                 ? AppTheme.dark
                 : AppTheme.light,
-            child: child ?? const SizedBox.shrink(),
+            child: SessionBusyBarrier(
+              child: child ?? const SizedBox.shrink(),
+            ),
           );
         });
       },

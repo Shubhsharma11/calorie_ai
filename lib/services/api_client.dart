@@ -6,11 +6,15 @@ import 'package:http/http.dart' as http;
 
 import 'analytics_service.dart';
 import 'api_endpoints.dart';
+import 'platform_http_client.dart';
 
 class ApiClient {
   ApiClient({http.Client? client, String? baseUrl})
-    : _client = client ?? http.Client(),
+    : _client = client ?? createPlatformHttpClient(),
       _baseUrl = baseUrl ?? ApiEndpoints.baseUrl;
+
+  static const _requestTimeout = Duration(seconds: 25);
+  static const _uploadTimeout = Duration(seconds: 45);
 
   final http.Client _client;
   final String _baseUrl;
@@ -105,6 +109,7 @@ class ApiClient {
       baseUrl: baseUrl,
       mergeDefaultJsonHeaders: false,
       headers: headers,
+      timeout: _uploadTimeout,
       send: (uri, requestHeaders) {
         return Future(() async {
           final request = http.MultipartRequest('POST', uri);
@@ -113,7 +118,7 @@ class ApiClient {
           request.files.addAll(files);
           final streamed = await _client.send(request);
           return http.Response.fromStream(streamed);
-        }).timeout(const Duration(seconds: 45));
+        });
       },
     );
   }
@@ -155,6 +160,7 @@ class ApiClient {
     String? baseUrl,
     int? requestPayloadSize,
     bool mergeDefaultJsonHeaders = true,
+    Duration timeout = _requestTimeout,
   }) async {
     final uri = _uri(endpoint, baseUrl: baseUrl);
     final requestHeaders = mergeDefaultJsonHeaders
@@ -173,7 +179,7 @@ class ApiClient {
     }
 
     try {
-      final response = await send(uri, requestHeaders);
+      final response = await send(uri, requestHeaders).timeout(timeout);
       final activeMetric = metric;
       if (activeMetric != null) {
         activeMetric.httpResponseCode = response.statusCode;

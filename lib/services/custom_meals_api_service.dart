@@ -152,7 +152,22 @@ class CustomMealsApiService {
 
     if (decoded == null) return [];
 
-    return ApiCustomMealMapper.presetsFromResponse(decoded);
+    if (decoded is Map) {
+      debugPrint(
+        'CustomMealsApiService: NETWORK GET /my-meals '
+        'requestId=#$requestId topKeys=${decoded.keys.toList()} '
+        'dataType=${decoded['data'].runtimeType}',
+      );
+    }
+
+    final presets = ApiCustomMealMapper.presetsFromResponse(decoded);
+    for (final meal in presets.take(8)) {
+      debugPrint(
+        'CustomMealsApiService:   id=${meal.id} name=${meal.name} '
+        'image=${meal.imageUrl}',
+      );
+    }
+    return presets;
   }
 
   CustomMealPreset _parseCreateResponse(

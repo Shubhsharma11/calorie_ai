@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/access_token_resolution.dart';
 import '../models/activity_level.dart';
+import '../models/avatar_upload_result.dart';
 import '../models/goal_type.dart';
 import '../models/health_concern.dart';
 import '../models/health_problem_api_mapper.dart';
@@ -19,21 +22,28 @@ import '../repositories/nutrition_plan_repository.dart';
 import '../repositories/onboarding_repository.dart';
 import '../routes/app_routes.dart';
 import '../core/app_snackbar.dart';
+import '../core/image_downscale.dart';
+import '../core/media_url.dart';
+import '../core/photo_permission.dart';
+import '../core/pick_cropped_image.dart';
+import '../core/wait_for_resume.dart';
 import '../core/weight_goal_calculator.dart';
 import '../services/auth_api_service.dart';
 import '../services/analytics_service.dart';
 import '../services/notification_service.dart';
 import '../services/nutrition_plan_api_service.dart';
 import '../services/onboarding_api_service.dart';
+import '../widgets/profile_photo_sheet.dart';
 import 'dashboard_controller.dart';
 import 'food_controller.dart';
 import 'main_controller.dart';
 import 'notifications_controller.dart';
 import 'nutrition_plan_controller.dart';
+import 'scan_controller.dart';
 // import 'streak_controller.dart';
 import 'tracker_controller.dart';
 
-class UserController extends GetxController {
+class UserController extends GetxController with WidgetsBindingObserver {
   UserController({
     AuthRepository? authRepository,
     OnboardingRepository? onboardingRepository,
@@ -51,9 +61,16 @@ class UserController extends GetxController {
   bool isLoggedIn = false;
   bool isLoggingOut = false;
   bool isDeletingAccount = false;
+  /// Drives the full-screen lock overlay during logout / account deletion.
+  final isSessionBusy = false.obs;
   bool isSubmittingOnboarding = false;
   bool isPatchingOnboarding = false;
   bool isLoadingProfile = false;
+  bool isUploadingAvatar = false;
+  bool _avatarRemovedLocally = false;
+  bool _pickingProfilePhoto = false;
+  bool _recoveringLostAvatar = false;
+  bool _avatarUiDirty = false;
   String userId = '';
   String authProvider = '';
   String accessToken = '';
@@ -72,6 +89,12 @@ class UserController extends GetxController {
 
   /// Last HTTP status from [fetchProfile] (e.g. 429 rate limit).
   int? lastProfileFetchStatusCode;
+  Future<String?>? _fetchProfileInFlight;
+
+  /// Bumped on login/logout so an in-flight profile fetch cannot apply to
+  /// the next session (wrong calorie / weight goal after sign-in).
+  int _sessionEpoch = 0;
+  int _profileFetchEpoch = -1;
 
   /// Goal weight the user entered during onboarding (before AI recommendation).
   double? userOnboardingGoalWeightKg;
@@ -104,8 +127,17 @@ class UserController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
     _localProfileReady = Completer<void>();
     unawaited(_initializeLocalProfile());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || isClosed) return;
+    if (!_avatarUiDirty) return;
+    _avatarUiDirty = false;
+    update();
   }
 
   Future<void> get localProfileReady =>
@@ -126,18 +158,31 @@ class UserController extends GetxController {
 
     if (isLoggedIn && accessToken.isNotEmpty) {
       unawaited(hydrateProfileInBackground());
+      unawaited(recoverLostAvatarIfNeeded());
+    }
+  }
+
+  void _applyStoredAvatar(Map<String, dynamic> saved) {
+    final url = saved['avatarUrl'];
+    if (url is String && url.trim().isNotEmpty) {
+      user.avatarUrl = url.trim();
+    }
+    final expiresAt = saved['avatarExpiresAt'];
+    if (expiresAt is String && expiresAt.isNotEmpty) {
+      user.avatarExpiresAt = DateTime.tryParse(expiresAt);
     }
   }
 
   /// Loads onboarding/profile from the API after the UI is already showing.
   Future<void> hydrateProfileInBackground({
-    bool refreshGoalTarget = true,
+    bool refreshGoalTarget = false,
   }) async {
     try {
       await fetchProfile(
         refreshGoalTarget: refreshGoalTarget,
         maxAttempts: 3,
       );
+      await refreshAvatarUrl(force: true);
     } catch (error, stackTrace) {
       debugPrint(
         'UserController: background profile hydrate failed: $error\n$stackTrace',
@@ -180,6 +225,10 @@ class UserController extends GetxController {
     if (refreshToken.isEmpty) {
       refreshToken = readBackendString(backendLoginResponse, 'refreshToken');
     }
+    // Login payload still has Google's `picture`. Apply it first, then the
+    // dedicated session avatarUrl so a custom upload from /auth/me wins.
+    _applyAvatarFromResponse(backendLoginResponse);
+    _applyStoredAvatar(saved);
     update();
   }
 
@@ -296,7 +345,7 @@ class UserController extends GetxController {
   ) sync* {
     yield response;
 
-    final data = response['data'];
+    final data = response['data']; 
     if (data is Map<String, dynamic>) {
       yield data;
       final nestedUser = data['user'];
@@ -325,59 +374,318 @@ class UserController extends GetxController {
   }
 
   Future<void> pickProfilePhoto(ImageSource source) async {
-    final file = await _imagePicker.pickImage(
-      source: source,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 85,
-    );
-    if (file == null) return;
-    user.profilePhotoBytes = await file.readAsBytes();
-    update();
+    if (isUploadingAvatar || _pickingProfilePhoto) return;
+    _pickingProfilePhoto = true;
+    try {
+      await _prepareForExternalImageCapture();
+
+      final allowed = await ensureImageSourcePermission(source);
+      if (!allowed) {
+        if (!isClosed) {
+          AppSnackbar.error(
+            photoPermissionDeniedMessage(source),
+            title: 'Permission needed',
+          );
+        }
+        return;
+      }
+
+      XFile? file;
+      try {
+        // Do not pass maxWidth/imageQuality — the Android plugin decodes the
+        // full camera bitmap to resize, which OOMs and kills MainActivity.
+        file = await _imagePicker.pickImage(
+          source: source,
+          requestFullMetadata: false,
+        );
+      } catch (error, stackTrace) {
+        debugPrint('UserController: image pick failed: $error\n$stackTrace');
+        final resumed = await waitForAppResumed();
+        if (resumed && !isClosed) {
+          AppSnackbar.error(
+            'Could not open the camera or gallery. Please try again.',
+            title: 'Photo failed',
+          );
+        }
+        return;
+      }
+
+      final resumed = await waitForAppResumed();
+      if (isClosed || !resumed) return;
+
+      if (file == null) {
+        await recoverLostAvatarIfNeeded();
+        return;
+      }
+
+      Uint8List scaled;
+      try {
+        final cropped = await cropPhotoAtPath(
+          sourcePath: file.path,
+          cropTitle: 'Crop profile photo',
+          aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+          lockAspectRatio: true,
+          maxEdge: kAvatarMaxEdge,
+        );
+        final cropResumed = await waitForAppResumed();
+        if (isClosed || !cropResumed) return;
+        if (cropped == null) return;
+
+        scaled = cropped.isEmpty
+            ? await downscaleImageBytes(await file.readAsBytes())
+            : await downscaleImageBytes(cropped);
+      } catch (error, stackTrace) {
+        debugPrint('UserController: photo read failed: $error\n$stackTrace');
+        AppSnackbar.error(
+          'Could not read that photo. Please try another one.',
+          title: 'Photo failed',
+        );
+        return;
+      }
+      if (scaled.isEmpty || isClosed) return;
+      await _uploadAvatarBytes(scaled);
+    } finally {
+      _pickingProfilePhoto = false;
+    }
+  }
+
+  Future<void> recoverLostAvatarIfNeeded() async {
+    if (_pickingProfilePhoto ||
+        _recoveringLostAvatar ||
+        isUploadingAvatar ||
+        isClosed ||
+        !isLoggedIn) {
+      return;
+    }
+    _recoveringLostAvatar = true;
+    try {
+      final lost = await _imagePicker.retrieveLostData();
+      if (lost.isEmpty) return;
+      final file = lost.file ??
+          ((lost.files != null && lost.files!.isNotEmpty)
+              ? lost.files!.first
+              : null);
+      if (file == null) return;
+      debugPrint('UserController: recovered profile photo after camera restart');
+      final resumed = await waitForAppResumed();
+      if (!resumed || isClosed) return;
+      Uint8List bytes;
+      try {
+        final cropped = await cropPhotoAtPath(
+          sourcePath: file.path,
+          cropTitle: 'Crop profile photo',
+          aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+          lockAspectRatio: true,
+          maxEdge: kAvatarMaxEdge,
+        );
+        final cropResumed = await waitForAppResumed();
+        if (!cropResumed || isClosed) return;
+        if (cropped == null) return;
+        bytes = cropped.isEmpty ? await file.readAsBytes() : cropped;
+      } catch (error, stackTrace) {
+        debugPrint('UserController: recovered crop failed: $error\n$stackTrace');
+        bytes = await file.readAsBytes();
+      }
+      if (bytes.isEmpty || isClosed) return;
+      final scaled = await downscaleImageBytes(bytes);
+      if (scaled.isEmpty || isClosed) return;
+      await _uploadAvatarBytes(scaled);
+    } catch (error, stackTrace) {
+      debugPrint('UserController: retrieveLostData: $error\n$stackTrace');
+    } finally {
+      _recoveringLostAvatar = false;
+    }
+  }
+
+  Future<void> _prepareForExternalImageCapture() async {
+    if (Get.isRegistered<ScanController>()) {
+      await Get.find<ScanController>().releaseHardwareCamera();
+    }
+    // Do not clear imageCache here. Evicting the current avatar bitmap and
+    // then pausing for the gallery re-decodes it on a destroyed surface and
+    // kills the Flutter engine on Android (Lost connection to device).
+  }
+
+  Future<void> _uploadAvatarBytes(Uint8List bytes) async {
+    if (isClosed || isUploadingAvatar || bytes.isEmpty) return;
+
+    final token = await resolveAccessToken();
+    if (token == null || token.isEmpty || isClosed) return;
+
+    // Keep the existing photo on screen and only show a spinner. Swapping in
+    // a new MemoryImage before the surface is stable is what crashes re-upload.
+    isUploadingAvatar = true;
+    _refreshAvatarUi();
+    try {
+      final result = await _authRepository.uploadAvatar(
+        accessToken: token,
+        imageBytes: bytes,
+        filename: avatarUploadFilename(bytes),
+      );
+      await waitForAppResumed();
+      if (isClosed) return;
+      user.profilePhotoBytes = bytes;
+      _applyAvatarUrl(result.avatarUrl, expiresIn: result.expiresIn);
+      _avatarRemovedLocally = false;
+      await _persistCurrentAuthSession();
+    } on AuthApiException catch (error) {
+      if (isAppResumed) {
+        AppSnackbar.error(error.message, title: 'Photo upload failed');
+      }
+    } catch (error, stackTrace) {
+      debugPrint('UserController: avatar upload failed: $error\n$stackTrace');
+      if (isAppResumed) {
+        AppSnackbar.error(
+          'Could not upload your photo. Please try again.',
+          title: 'Photo upload failed',
+        );
+      }
+    } finally {
+      isUploadingAvatar = false;
+      if (!isClosed) _refreshAvatarUi();
+    }
   }
 
   void removeProfilePhoto() {
     user.profilePhotoBytes = null;
+    user.avatarUrl = null;
+    user.avatarExpiresAt = null;
+    _avatarRemovedLocally = true;
+    unawaited(_persistCurrentAuthSession());
     update();
   }
 
-  Future<void> showProfilePhotoOptions(BuildContext context) async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(Icons.photo_library_outlined),
-              title: const Text('Choose from gallery'),
-              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-            ),
-            ListTile(
-              leading: Icon(Icons.photo_camera_outlined),
-              title: const Text('Take a photo'),
-              onTap: () => Navigator.pop(ctx, ImageSource.camera),
-            ),
-            if (user.profilePhotoBytes != null)
-              ListTile(
-                leading: Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text(
-                  'Remove photo',
-                  style: TextStyle(color: Colors.red),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  removeProfilePhoto();
-                },
-              ),
-          ],
-        ),
-      ),
+  Future<void> refreshAvatarUrl({bool force = false}) async {
+    if (_avatarRemovedLocally && !force) return;
+    final token = await resolveAccessToken();
+    if (token == null || token.isEmpty) return;
+
+    final expiresAt = user.avatarExpiresAt;
+    final stillFresh =
+        expiresAt != null &&
+        expiresAt.isAfter(DateTime.now().add(const Duration(minutes: 5)));
+    final currentIsGoogle = MediaUrl.isGooglePhoto(user.avatarUrl);
+    // Google photos are a fallback. Always re-read /auth/me so a custom
+    // `avatars/…` upload is not stuck behind the Google Sign-In picture.
+    if (!force &&
+        !currentIsGoogle &&
+        user.avatarUrl != null &&
+        stillFresh) {
+      return;
+    }
+
+    try {
+      final me = await _authRepository.fetchMe(accessToken: token);
+      _applyAvatarFromResponse(me);
+      await _persistCurrentAuthSession();
+    } catch (error, stackTrace) {
+      debugPrint('UserController: avatar refresh failed: $error\n$stackTrace');
+    }
+  }
+
+  void _applyAvatarFromResponse(Map<String, dynamic>? response) {
+    final url = AvatarUploadResult.urlFromResponse(response);
+    if (url == null || url.isEmpty) return;
+    if (!MediaUrl.shouldReplaceAvatar(user.avatarUrl, url)) return;
+    _applyAvatarUrl(
+      url,
+      expiresIn: AvatarUploadResult.expiresInFromResponse(response),
     );
-    if (source != null) await pickProfilePhoto(source);
+  }
+
+  void _applyAvatarUrl(String url, {int? expiresIn}) {
+    user.avatarUrl = url;
+    if (MediaUrl.isGooglePhoto(url)) {
+      // Do not treat Google's photo as a fresh custom avatar. /auth/me must
+      // still run after login so the uploaded S3 object can win.
+      user.avatarExpiresAt = null;
+    } else {
+      final ttl = expiresIn ?? 3600;
+      if (ttl > 0) {
+        user.avatarExpiresAt = DateTime.now().add(Duration(seconds: ttl));
+      }
+    }
+    if (MediaUrl.isUploadedAvatar(url)) {
+      _rememberUploadedAvatarInLoginPayload(url);
+    }
+  }
+
+  /// Stops the original Google login JSON from overwriting a custom upload
+  /// the next time the session is loaded or persisted.
+  void _rememberUploadedAvatarInLoginPayload(String url) {
+    Map<String, dynamic> copyMap(Map<dynamic, dynamic> source) =>
+        Map<String, dynamic>.from(source);
+
+    void writeAvatar(Map<String, dynamic> map) {
+      map['avatarUrl'] = url;
+      map.remove('picture');
+      map.remove('photoUrl');
+      map.remove('photo_url');
+    }
+
+    final next = copyMap(backendLoginResponse);
+    writeAvatar(next);
+    final data = next['data'];
+    if (data is Map) {
+      final dataMap = copyMap(data);
+      writeAvatar(dataMap);
+      final nestedUser = dataMap['user'];
+      if (nestedUser is Map) {
+        final userMap = copyMap(nestedUser);
+        writeAvatar(userMap);
+        dataMap['user'] = userMap;
+      }
+      next['data'] = dataMap;
+    }
+    final nestedUser = next['user'];
+    if (nestedUser is Map) {
+      final userMap = copyMap(nestedUser);
+      writeAvatar(userMap);
+      next['user'] = userMap;
+    }
+    backendLoginResponse = next;
+  }
+
+  void _refreshAvatarUi() {
+    if (isClosed) return;
+    if (isAppResumed) {
+      _avatarUiDirty = false;
+      update();
+      return;
+    }
+    _avatarUiDirty = true;
+  }
+
+  Future<void> showProfilePhotoOptions(BuildContext context) async {
+    if (isUploadingAvatar) return;
+    // The photo sheet is a modal route, so MainView freezes/remounts Profile
+    // while it is open. Do not reuse Profile's BuildContext after the sheet.
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final action = await showProfilePhotoSheet(context: context, user: user);
+    if (action == null || isClosed) return;
+
+    if (action == ProfilePhotoAction.remove) {
+      removeProfilePhoto();
+      return;
+    }
+
+    // Wait for the sheet route to finish disposing before opening native UI
+    // or another overlay. Opening during teardown can drop GetMaterialApp's
+    // navigator child and leave Profile on a white screen.
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 280));
+    if (isClosed || isUploadingAvatar || !navigator.mounted) return;
+
+    if (action == ProfilePhotoAction.view) {
+      await showProfilePhotoViewer(context: navigator.context, user: user);
+      return;
+    }
+
+    await pickProfilePhoto(
+      action == ProfilePhotoAction.camera
+          ? ImageSource.camera
+          : ImageSource.gallery,
+    );
   }
 
   /// True while editing goals from My Goals (in-memory journey, API commit on save).
@@ -598,12 +906,37 @@ class UserController extends GetxController {
   Future<String?> fetchProfile({
     bool refreshGoalTarget = false,
     int maxAttempts = 3,
-  }) async {
-    if (isLoadingProfile) return null;
+  }) {
+    if (_fetchProfileInFlight != null && _profileFetchEpoch == _sessionEpoch) {
+      return _fetchProfileInFlight!;
+    }
 
+    final epoch = _sessionEpoch;
+    _profileFetchEpoch = epoch;
+    final future = _fetchProfile(
+      refreshGoalTarget: refreshGoalTarget,
+      maxAttempts: maxAttempts,
+      epoch: epoch,
+    );
+    _fetchProfileInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_fetchProfileInFlight, future)) {
+        _fetchProfileInFlight = null;
+      }
+    });
+  }
+
+  Future<String?> _fetchProfile({
+    required bool refreshGoalTarget,
+    required int maxAttempts,
+    required int epoch,
+  }) async {
     final token = await resolveAccessToken();
     if (token == null || token.isEmpty) {
       return 'Sign in to load your profile.';
+    }
+    if (epoch != _sessionEpoch) {
+      return 'Profile fetch cancelled.';
     }
 
     isLoadingProfile = true;
@@ -613,20 +946,22 @@ class UserController extends GetxController {
     try {
       OnboardingApiException? lastError;
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (epoch != _sessionEpoch) return 'Profile fetch cancelled.';
         try {
           final response = await _onboardingRepository.fetchOnboarding(
             accessToken: token,
           );
+          if (epoch != _sessionEpoch) return 'Profile fetch cancelled.';
           lastProfileFetchStatusCode = 200;
           // Once the user has a pinned target (lose/gain/maintain), casual profile
-      // refreshes must not adopt server mutations caused by weight logs
-      // (goalWeight rewritten ≈ current).
-      final hasPinnedTarget = user.pinnedGoalWeightKg != null &&
-          (user.pinnedGoalType ?? user.goal) != null;
-      _applyOnboardingResponse(
-        response,
-        applyGoalFields: refreshGoalTarget || !hasPinnedTarget,
-      );
+          // refreshes must not adopt server mutations caused by weight logs
+          // (goalWeight rewritten ≈ current).
+          final hasPinnedTarget = user.pinnedGoalWeightKg != null &&
+              (user.pinnedGoalType ?? user.goal) != null;
+          _applyOnboardingResponse(
+            response,
+            applyGoalFields: refreshGoalTarget || !hasPinnedTarget,
+          );
           syncWeightFromProfile();
           // Profile loaded from API — treat setup as done when personal basics exist.
           if (user.hasProfileBasics) {
@@ -660,9 +995,20 @@ class UserController extends GetxController {
       debugPrint('UserController: fetchProfile failed: $error');
       return 'Unable to load your profile. Please try again.';
     } finally {
-      isLoadingProfile = false;
-      update();
+      if (epoch == _sessionEpoch) {
+        isLoadingProfile = false;
+        update();
+      }
     }
+  }
+
+  /// Drops a restored session that the API rejected (401/403) without navigating.
+  Future<void> clearInvalidSession() async {
+    _clearApiOwnedControllers();
+    _clearInMemoryAuthState();
+    user.resetToDefaults();
+    await _authRepository.clearLocalAuthData();
+    update();
   }
 
   Future<PickTargetDateResult> pickTargetDate(
@@ -784,6 +1130,7 @@ class UserController extends GetxController {
     NutritionPlanModel plan, {
     bool applyTargetWeight = false,
   }) async {
+    if (!isLoggedIn) return;
     if (applyTargetWeight) {
       _captureUserOnboardingGoalWeightIfNeeded();
     }
@@ -1258,6 +1605,7 @@ class UserController extends GetxController {
 
   @override
   void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
     _onboardingDraftSaveTimer?.cancel();
     super.onClose();
   }
@@ -1497,6 +1845,9 @@ class UserController extends GetxController {
   }) {
     final raw = response.raw;
     if (raw == null) return;
+    if (!_avatarRemovedLocally) {
+      _applyAvatarFromResponse(raw);
+    }
 
     // Weight-only / casual profile syncs must not overwrite the user's target.
     final preservedPinnedGoal =
@@ -1845,6 +2196,7 @@ class UserController extends GetxController {
     backendLoginResponse = backendResponse;
     user.email = email;
     user.name = name.trim().isNotEmpty ? name.trim() : '';
+    _applyAvatarFromResponse(backendResponse);
     update();
 
     // Persist tokens first. Defer FCM until after profile — parallel bursts
@@ -1858,6 +2210,8 @@ class UserController extends GetxController {
       refreshToken: refreshToken,
       backendResponse: backendResponse,
       setupComplete: _onboardingCompleted || user.hasProfileBasics,
+      avatarUrl: user.avatarUrl,
+      avatarExpiresAt: user.avatarExpiresAt?.toIso8601String(),
     );
 
     // Keep in-memory refresh in sync with what was persisted (may be nested).
@@ -1883,7 +2237,8 @@ class UserController extends GetxController {
     debugPrint('UserController: reloading API-owned data after login');
 
     // Gate every other call on profile — this decides home vs setup.
-    await fetchProfile(refreshGoalTarget: true, maxAttempts: 4);
+    await fetchProfile(refreshGoalTarget: false, maxAttempts: 4);
+    await refreshAvatarUrl(force: true);
 
     if (Get.isRegistered<FoodController>()) {
       await Get.find<FoodController>().reloadAfterLogin();
@@ -1949,6 +2304,8 @@ class UserController extends GetxController {
       refreshToken: refreshToken.isEmpty ? null : refreshToken,
       backendResponse: backendLoginResponse,
       setupComplete: _onboardingCompleted || user.hasProfileBasics,
+      avatarUrl: user.avatarUrl,
+      avatarExpiresAt: user.avatarExpiresAt?.toIso8601String(),
     );
   }
 
@@ -1973,6 +2330,7 @@ class UserController extends GetxController {
     if (isDeletingAccount || isLoggingOut) return false;
 
     isDeletingAccount = true;
+    isSessionBusy.value = true;
     update();
 
     try {
@@ -2009,6 +2367,7 @@ class UserController extends GetxController {
       return false;
     } finally {
       isDeletingAccount = false;
+      isSessionBusy.value = false;
       update();
     }
   }
@@ -2017,6 +2376,7 @@ class UserController extends GetxController {
     if (isLoggingOut) return;
 
     isLoggingOut = true;
+    isSessionBusy.value = true;
     update();
 
     try {
@@ -2055,11 +2415,14 @@ class UserController extends GetxController {
       }
     } finally {
       isLoggingOut = false;
+      isSessionBusy.value = false;
       update();
     }
   }
 
   void _clearInMemoryAuthState() {
+    _sessionEpoch++;
+    _fetchProfileInFlight = null;
     isLoggedIn = false;
     userId = '';
     authProvider = '';
@@ -2074,6 +2437,9 @@ class UserController extends GetxController {
     _goalEditCheckpoint = null;
     weightTargetSource.value = WeightTargetSource.user;
     isRefreshingWeightTarget.value = false;
+    isUploadingAvatar = false;
+    _avatarRemovedLocally = false;
+    _avatarUiDirty = false;
 
     // Must reset setup flags — otherwise a prior account's completed onboarding
     // makes a new email skip setup and/or keep an old in-memory draft.

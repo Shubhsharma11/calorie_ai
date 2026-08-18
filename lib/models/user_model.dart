@@ -18,6 +18,8 @@ class UserModel {
   }
 
   Uint8List? profilePhotoBytes;
+  String? avatarUrl;
+  DateTime? avatarExpiresAt;
   GoalType? goal;
 
   int? age;
@@ -68,6 +70,12 @@ class UserModel {
     DateTime.now().month,
     DateTime.now().day,
   ).add(const Duration(days: 90));
+
+  bool get hasProfilePhoto {
+    if (profilePhotoBytes != null && profilePhotoBytes!.isNotEmpty) return true;
+    final url = avatarUrl?.trim() ?? '';
+    return url.isNotEmpty;
+  }
 
   /// True once onboarding/API has filled real body metrics.
   bool get hasProfileBasics {
@@ -241,6 +249,8 @@ class UserModel {
     name = '';
     email = '';
     profilePhotoBytes = null;
+    avatarUrl = null;
+    avatarExpiresAt = null;
     goal = null;
     age = null;
     gender = null;

@@ -35,6 +35,7 @@ class ProfileView extends GetView<UserController> {
                 _ProfileHeader(
                   user: ctrl.user,
                   onAvatarTap: () => ctrl.showProfilePhotoOptions(context),
+                  isUploadingAvatar: ctrl.isUploadingAvatar,
                 ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(
@@ -340,10 +341,15 @@ GestureDetector(
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.user, required this.onAvatarTap});
+  const _ProfileHeader({
+    required this.user,
+    required this.onAvatarTap,
+    this.isUploadingAvatar = false,
+  });
 
   final UserModel user;
   final VoidCallback onAvatarTap;
+  final bool isUploadingAvatar;
 
   @override
   Widget build(BuildContext context) {
@@ -378,6 +384,9 @@ class _ProfileHeader extends StatelessWidget {
                 user: user,
                 onTap: onAvatarTap,
                 radius: r.scale(42, tablet: 46, desktop: 50),
+                isUploading: isUploadingAvatar,
+                showEditBadge: true,
+                tooltip: 'Profile photo',
               ),
               SizedBox(height: r.scale(16)),
               Text(

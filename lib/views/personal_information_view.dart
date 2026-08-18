@@ -15,6 +15,7 @@ import '../models/profile_sync_snapshot.dart';
 import '../models/user_model.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/app_bottom_sheet.dart';
 import '../widgets/primary_button.dart';
 
 class PersonalInformationView extends StatefulWidget {
@@ -127,40 +128,14 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
 
   Future<void> _editGender(UserModel user) async {
     const options = ['Male', 'Female', 'Other'];
-    final selected = await showModalBottomSheet<String>(
+    final selected = await showAppOptionsSheet<String>(
       context: context,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Select gender',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimaryOf(context),
-                  ),
-                ),
-              ),
-              for (final option in options)
-                ListTile(
-                  title: Text(option),
-                  trailing: user.gender == option
-                      ? const Icon(Icons.check_rounded, color: AppColors.primary)
-                      : null,
-                  onTap: () => Navigator.of(ctx).pop(option),
-                ),
-            ],
-          ),
-        );
-      },
+      title: 'Select gender',
+      selected: user.gender,
+      options: [
+        for (final option in options)
+          AppSheetOption(value: option, label: option),
+      ],
     );
     if (selected == null) return;
     setState(() => user.gender = selected);
@@ -246,7 +221,9 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
       );
       return;
     }
-    setState(() => user.weightKg = BodyMeasurementUnits.kgFromLbs(lbs.toDouble()));
+    setState(
+      () => user.weightKg = BodyMeasurementUnits.kgFromLbs(lbs.toDouble()),
+    );
     _userController.update();
   }
 
@@ -266,63 +243,38 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
   }
 
   Future<void> _editActivityLevel(UserModel user) async {
-    final selected = await showModalBottomSheet<ActivityLevel>(
+    final selected = await showAppBottomSheet<ActivityLevel>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.background,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) {
-        final r = context.responsive;
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              r.scale(16),
-              r.scale(12),
-              r.scale(16),
-              r.scale(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+        final r = ctx.responsive;
+        return AppSheetScaffold(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Activity Level',
+                style: TextStyle(
+                  fontSize: r.scale(18),
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              SizedBox(height: r.scale(14)),
+              ...ActivityLevel.values.map(
+                (level) => Padding(
+                  padding: EdgeInsets.only(bottom: r.scale(8)),
+                  child: _ActivityOptionTile(
+                    level: level,
+                    selected: user.activityLevel == level,
+                    onTap: () => Navigator.of(ctx).pop(level),
                   ),
                 ),
-                SizedBox(height: r.scale(14)),
-                Text(
-                  'Activity Level',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: r.scale(17, tablet: 18),
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimaryOf(context),
-                  ),
-                ),
-                SizedBox(height: r.scale(14)),
-                ...ActivityLevel.values.map(
-                  (level) => Padding(
-                    padding: EdgeInsets.only(bottom: r.scale(8)),
-                    child: _ActivityOptionTile(
-                      level: level,
-                      selected: user.activityLevel == level,
-                      onTap: () => Navigator.of(ctx).pop(level),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
-      },
+      }
     );
 
     if (selected == null) return;
@@ -347,10 +299,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           maxLength: maxLength,
           autofocus: true,
-          decoration: InputDecoration(
-            suffixText: unit,
-            counterText: '',
-          ),
+          decoration: InputDecoration(suffixText: unit, counterText: ''),
         ),
         actions: [
           TextButton(
@@ -442,124 +391,125 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
       body: Obx(() {
         _settings.useMetricUnits.value;
         return GetBuilder<UserController>(
-        builder: (_) {
-          final user = _userController.user;
-          final useMetric = _settings.useMetricUnits.value;
+          builder: (_) {
+            final user = _userController.user;
+            final useMetric = _settings.useMetricUnits.value;
 
-          return Column(
-            children: [
-              if (_userController.isLoadingProfile)
-                const LinearProgressIndicator(minHeight: 2),
-              Expanded(
-                child: ClipRect(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                      r.scale(20, tablet: 28),
-                      r.scale(12),
-                      r.scale(20, tablet: 28),
-                      r.scale(32) + MediaQuery.viewInsetsOf(context).bottom * 0.1,
-                    ),
-                    child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Update your personal details',
-                        style: TextStyle(
-                          fontSize: r.scale(13, tablet: 14),
-                          color: AppColors.textSecondaryOf(context),
-                          height: 1.35,
-                        ),
+            return Column(
+              children: [
+                if (_userController.isLoadingProfile)
+                  const LinearProgressIndicator(minHeight: 2),
+                Expanded(
+                  child: ClipRect(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.fromLTRB(
+                        r.scale(20, tablet: 28),
+                        r.scale(12),
+                        r.scale(20, tablet: 28),
+                        r.scale(32) +
+                            MediaQuery.viewInsetsOf(context).bottom * 0.1,
                       ),
-                      SizedBox(height: r.scale(24)),
-                      _SectionLabel(title: 'BASIC DETAILS'),
-                      SizedBox(height: r.scale(10)),
-                      _InfoRow(
-                        label: 'Age',
-                        subtitle: 'Your current age',
-                        value: user.age != null ? '${user.age}' : '—',
-                        unit: 'years',
-                        onTap: () => _editAge(user),
-                      ),
-                      SizedBox(height: r.scale(10)),
-                      _InfoRow(
-                        label: 'Gender',
-                        subtitle: 'Select your gender',
-                        value: user.gender ?? '—',
-                        onTap: () => _editGender(user),
-                      ),
-                      SizedBox(height: r.scale(22)),
-                      _SectionLabel(title: 'BODY MEASUREMENTS'),
-                      SizedBox(height: r.scale(10)),
-                      _InfoRow(
-                        label: 'Height',
-                        subtitle: useMetric
-                            ? 'Your height in cm'
-                            : 'Your height in feet and inches',
-                        value: _heightDisplay(user),
-                        unit: user.heightCm == null
-                            ? null
-                            : useMetric
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Update your personal details',
+                            style: TextStyle(
+                              fontSize: r.scale(13, tablet: 14),
+                              color: AppColors.textSecondaryOf(context),
+                              height: 1.35,
+                            ),
+                          ),
+                          SizedBox(height: r.scale(24)),
+                          _SectionLabel(title: 'BASIC DETAILS'),
+                          SizedBox(height: r.scale(10)),
+                          _InfoRow(
+                            label: 'Age',
+                            subtitle: 'Your current age',
+                            value: user.age != null ? '${user.age}' : '—',
+                            unit: 'years',
+                            onTap: () => _editAge(user),
+                          ),
+                          SizedBox(height: r.scale(10)),
+                          _InfoRow(
+                            label: 'Gender',
+                            subtitle: 'Select your gender',
+                            value: user.gender ?? '—',
+                            onTap: () => _editGender(user),
+                          ),
+                          SizedBox(height: r.scale(22)),
+                          _SectionLabel(title: 'BODY MEASUREMENTS'),
+                          SizedBox(height: r.scale(10)),
+                          _InfoRow(
+                            label: 'Height',
+                            subtitle: useMetric
+                                ? 'Your height in cm'
+                                : 'Your height in feet and inches',
+                            value: _heightDisplay(user),
+                            unit: user.heightCm == null
+                                ? null
+                                : useMetric
                                 ? 'cm'
                                 : null,
-                        wideValue: !useMetric,
-                        onTap: () => _editHeight(user),
-                      ),
-                      SizedBox(height: r.scale(10)),
-                      _InfoRow(
-                        label: 'Weight',
-                        subtitle: useMetric
-                            ? 'Your current weight in kg'
-                            : 'Your current weight in lb',
-                        value: _weightDisplay(user),
-                        unit: user.weightKg == null
-                            ? null
-                            : useMetric
+                            wideValue: !useMetric,
+                            onTap: () => _editHeight(user),
+                          ),
+                          SizedBox(height: r.scale(10)),
+                          _InfoRow(
+                            label: 'Weight',
+                            subtitle: useMetric
+                                ? 'Your current weight in kg'
+                                : 'Your current weight in lb',
+                            value: _weightDisplay(user),
+                            unit: user.weightKg == null
+                                ? null
+                                : useMetric
                                 ? 'kg'
                                 : 'lb',
-                        onTap: () => _editWeight(user),
+                            onTap: () => _editWeight(user),
+                          ),
+                          SizedBox(height: r.scale(22)),
+                          _SectionLabel(title: 'LIFESTYLE'),
+                          SizedBox(height: r.scale(10)),
+                          _InfoRow(
+                            label: 'Activity Level',
+                            subtitle: 'Your daily activity level',
+                            value: user.activityLevel?.title ?? 'Not set',
+                            wideValue: true,
+                            onTap: () => _editActivityLevel(user),
+                          ),
+                          SizedBox(height: r.scale(22)),
+                          const _WhyWeNeedThisCard(),
+                        ],
                       ),
-                      SizedBox(height: r.scale(22)),
-                      _SectionLabel(title: 'LIFESTYLE'),
-                      SizedBox(height: r.scale(10)),
-                      _InfoRow(
-                        label: 'Activity Level',
-                        subtitle: 'Your daily activity level',
-                        value: user.activityLevel?.title ?? 'Not set',
-                        wideValue: true,
-                        onTap: () => _editActivityLevel(user),
-                      ),
-                      SizedBox(height: r.scale(22)),
-                      const _WhyWeNeedThisCard(),
-                    ],
-                  ),
-                  ),
-                ),
-              ),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  border: Border(
-                    top: BorderSide(
-                      color: AppColors.border.withValues(alpha: 0.45),
                     ),
                   ),
                 ),
-                padding: EdgeInsets.fromLTRB(
-                  r.scale(20, tablet: 28),
-                  r.scale(12),
-                  r.scale(20, tablet: 28),
-                  r.scale(12) + MediaQuery.paddingOf(context).bottom,
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    border: Border(
+                      top: BorderSide(
+                        color: AppColors.border.withValues(alpha: 0.45),
+                      ),
+                    ),
+                  ),
+                  padding: EdgeInsets.fromLTRB(
+                    r.scale(20, tablet: 28),
+                    r.scale(12),
+                    r.scale(20, tablet: 28),
+                    r.scale(12) + MediaQuery.paddingOf(context).bottom,
+                  ),
+                  child: PrimaryButton(
+                    label: 'Save Changes',
+                    isLoading: _isSaving,
+                    onPressed: _saveChanges,
+                  ),
                 ),
-                child: PrimaryButton(
-                  label: 'Save Changes',
-                  isLoading: _isSaving,
-                  onPressed: _saveChanges,
-                ),
-              ),
-            ],
-          );
-        },
-      );
+              ],
+            );
+          },
+        );
       }),
     );
   }
@@ -684,7 +634,9 @@ class _InfoRow extends StatelessWidget {
                     vertical: r.scale(9),
                   ),
                   decoration: BoxDecoration(
-                    color: _PersonalInformationViewState._valueBackground(context),
+                    color: _PersonalInformationViewState._valueBackground(
+                      context,
+                    ),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: AppColors.border.withValues(alpha: 0.65),
@@ -706,7 +658,9 @@ class _InfoRow extends StatelessWidget {
                           style: TextStyle(
                             fontSize: r.scale(13, tablet: 14),
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimaryOf(context).withValues(alpha: 0.82),
+                            color: AppColors.textPrimaryOf(
+                              context,
+                            ).withValues(alpha: 0.82),
                           ),
                         ),
                       ),
@@ -714,7 +668,9 @@ class _InfoRow extends StatelessWidget {
                       Icon(
                         Icons.chevron_right_rounded,
                         size: r.scale(18),
-                        color: AppColors.textSecondaryOf(context).withValues(alpha: 0.75),
+                        color: AppColors.textSecondaryOf(
+                          context,
+                        ).withValues(alpha: 0.75),
                       ),
                     ],
                   ),
@@ -873,7 +829,9 @@ class _ActivityOptionTile extends StatelessWidget {
                 selected
                     ? Icons.radio_button_checked_rounded
                     : Icons.radio_button_off_rounded,
-                color: selected ? AppColors.primary : AppColors.textSecondaryOf(context),
+                color: selected
+                    ? AppColors.primary
+                    : AppColors.textSecondaryOf(context),
                 size: r.scale(22),
               ),
             ],

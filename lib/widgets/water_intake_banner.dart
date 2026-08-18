@@ -115,6 +115,8 @@ final goalMl = settings?.waterGoalMl.value ??
                             Expanded(
                               child: Text(
                                 'Water Intake',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: r.scale(14),
                                   fontWeight: FontWeight.w700,
@@ -154,53 +156,62 @@ final goalMl = settings?.waterGoalMl.value ??
                             color: color.withValues(alpha: 0.07),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Row(
-                            children: [
-                              ...List.generate(shownGoal, (index) {
-                                final filled = index < filledShown;
-                                return Expanded(
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: r.scale(2),
-                                    ),
-                                    child: _GlassCup(
-                                      filled: filled,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final statusGap = r.scale(8);
+                              final minGlassesWidth = r.scale(36);
+                              final statusMaxWidth = (constraints.maxWidth -
+                                      statusGap -
+                                      minGlassesWidth)
+                                  .clamp(0.0, r.scale(88));
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: _AdaptiveGlassesRow(
+                                      count: shownGoal,
+                                      filled: filledShown,
                                       color: color,
-                                      height: r.scale(26),
+                                      maxHeight: r.scale(26),
                                     ),
                                   ),
-                                );
-                              }),
-                              SizedBox(width: r.scale(8)),
-                              ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: r.scale(84),
-                                ),
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: r.scale(8),
-                                    vertical: r.scale(4),
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.card.withValues(alpha: 0.85),
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: Text(
-                                    status,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: r.scale(11),
-                                      fontWeight: FontWeight.w700,
-                                      color: isComplete || overGlasses > 0
-                                          ? color
-                                          : AppColors.textSecondary,
+                                  if (statusMaxWidth > 0) ...[
+                                    SizedBox(width: statusGap),
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxWidth: statusMaxWidth,
+                                      ),
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: r.scale(8),
+                                          vertical: r.scale(4),
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.card
+                                              .withValues(alpha: 0.85),
+                                          borderRadius:
+                                              BorderRadius.circular(999),
+                                        ),
+                                        child: Text(
+                                          status,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          softWrap: false,
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: r.scale(11),
+                                            fontWeight: FontWeight.w700,
+                                            color: isComplete ||
+                                                    overGlasses > 0
+                                                ? color
+                                                : AppColors.textSecondary,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                                  ],
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -209,21 +220,29 @@ final goalMl = settings?.waterGoalMl.value ??
                 ),
               ),
               SizedBox(width: r.scale(10)),
-              IconButton.filled(
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                tracker.addWater(date: DateTime.now());
-                },
-                tooltip: 'Add 1 glass',
-                style: IconButton.styleFrom(
-                  backgroundColor: color,
-                  foregroundColor: AppColors.onPrimary,
-                  minimumSize: Size(r.scale(40), r.scale(40)),
-                  padding: EdgeInsets.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              Tooltip(
+                message: 'Add 1 glass',
+                child: Material(
+                  color: color,
                   shape: const CircleBorder(),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      tracker.addWater(date: DateTime.now());
+                    },
+                    child: SizedBox(
+                      width: r.scale(40),
+                      height: r.scale(40),
+                      child: Icon(
+                        Icons.add_rounded,
+                        size: r.scale(22),
+                        color: AppColors.onPrimary,
+                      ),
+                    ),
+                  ),
                 ),
-                icon: Icon(Icons.add_rounded, size: r.scale(22)),
               ),
             ],
           ),
@@ -232,6 +251,75 @@ final goalMl = settings?.waterGoalMl.value ??
       if (coachKey == null) return card;
       return AppCoachMarks.target(key: coachKey!, child: card);
     });
+  }
+}
+
+/// Glasses that shrink to the leftover width so the status chip never overflows.
+class _AdaptiveGlassesRow extends StatelessWidget {
+  const _AdaptiveGlassesRow({
+    required this.count,
+    required this.filled,
+    required this.color,
+    required this.maxHeight,
+  });
+
+  final int count;
+  final int filled;
+  final Color color;
+  final double maxHeight;
+
+  static const _aspect = 0.62;
+  static const _minGap = 2.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final n = count.clamp(1, 100);
+        final available = constraints.maxWidth;
+        if (!available.isFinite || available <= 0) {
+          return const SizedBox.shrink();
+        }
+
+        final maxW = maxHeight * _aspect;
+        final idealGap = (maxHeight * 0.23).clamp(3.0, 6.0);
+
+        var glassW = maxW;
+        var gap = n > 1 ? idealGap : 0.0;
+        final idealTotal = n * glassW + (n - 1) * gap;
+
+        if (idealTotal > available) {
+          final gapAtFullSize =
+              n > 1 ? (available - n * maxW) / (n - 1) : 0.0;
+          if (gapAtFullSize >= _minGap) {
+            gap = gapAtFullSize;
+          } else {
+            gap = n > 1 ? _minGap : 0.0;
+            glassW = ((available - (n - 1) * gap) / n).clamp(0.0, maxW);
+          }
+        }
+
+        final glassH = glassW / _aspect;
+
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < n; i++) ...[
+                if (i > 0) SizedBox(width: gap),
+                _GlassCup(
+                  filled: i < filled,
+                  color: color,
+                  height: glassH,
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -287,11 +375,16 @@ class _GlassCupState extends State<_GlassCup>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
-        return CustomPaint(
-          size: Size(widget.height * 0.7, widget.height),
-          painter: _GlassCupPainter(
-            fillAmount: Curves.easeOutCubic.transform(_controller.value),
-            color: widget.color,
+        final size = Size(widget.height * 0.62, widget.height);
+        return SizedBox(
+          width: size.width,
+          height: size.height,
+          child: CustomPaint(
+            size: size,
+            painter: _GlassCupPainter(
+              fillAmount: Curves.easeOutCubic.transform(_controller.value),
+              color: widget.color,
+            ),
           ),
         );
       },

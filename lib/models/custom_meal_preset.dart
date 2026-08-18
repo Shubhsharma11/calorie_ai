@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../core/media_url.dart';
+import 'food_item.dart';
 import 'saved_meal_item.dart';
 
 enum MealShareVisibility {
@@ -9,6 +11,11 @@ enum MealShareVisibility {
 
   String get label => switch (this) {
         MealShareVisibility.onlyMe => 'Only me',
+        MealShareVisibility.public => 'Public',
+      };
+
+  String get badgeLabel => switch (this) {
+        MealShareVisibility.onlyMe => 'Private',
         MealShareVisibility.public => 'Public',
       };
 
@@ -32,6 +39,7 @@ class CustomMealPreset {
     required this.items,
     this.visibility = MealShareVisibility.onlyMe,
     this.imageBytes,
+    this.imageUrl,
   });
 
   final String id;
@@ -41,6 +49,7 @@ class CustomMealPreset {
   final List<SavedMealItem> items;
   final MealShareVisibility visibility;
   final Uint8List? imageBytes;
+  final String? imageUrl;
 
   int get totalCalories =>
       items.fold(0, (sum, item) => sum + item.calories);
@@ -88,6 +97,33 @@ class CustomMealPreset {
     return '${items.first.food.name} + ${items.length - 1} more';
   }
 
+  bool containsFoodNamed(String name) {
+    final key = name.trim().toLowerCase();
+    if (key.isEmpty) return false;
+    if (this.name.trim().toLowerCase() == key) return true;
+    return items.any((item) => item.food.name.trim().toLowerCase() == key);
+  }
+
+  /// One Quick Items row for this template — uses the meal name, not foods.
+  SavedMealItem toQuickItem() {
+    final first = items.isEmpty ? null : items.first;
+    return SavedMealItem(
+      food: FoodItem(
+        name: name,
+        caloriesPer100g: totalCalories,
+        protein: totalProtein,
+        carbs: totalCarbs,
+        fat: totalFat,
+        emoji: first?.food.displayEmoji ?? '🍽️',
+        imageUrl: imageUrl ?? first?.food.imageUrl,
+      ),
+      grams: 100,
+      meal: meal,
+      servingQuantity: items.isEmpty ? 1 : items.length.toDouble(),
+      servingUnit: 'food',
+    );
+  }
+
   CustomMealPreset copyWith({
     String? id,
     String? name,
@@ -96,6 +132,7 @@ class CustomMealPreset {
     List<SavedMealItem>? items,
     MealShareVisibility? visibility,
     Uint8List? imageBytes,
+    String? imageUrl,
   }) {
     return CustomMealPreset(
       id: id ?? this.id,
@@ -105,6 +142,7 @@ class CustomMealPreset {
       items: items ?? this.items,
       visibility: visibility ?? this.visibility,
       imageBytes: imageBytes ?? this.imageBytes,
+      imageUrl: imageUrl ?? this.imageUrl,
     );
   }
 
@@ -116,6 +154,7 @@ class CustomMealPreset {
         'items': items.map((item) => item.toJson()).toList(),
         'visibility': visibility.toJson(),
         if (imageBytes != null) 'imageBase64': base64Encode(imageBytes!),
+        if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
       };
 
   factory CustomMealPreset.fromJson(Map<String, dynamic> json) {
@@ -141,6 +180,13 @@ class CustomMealPreset {
           .toList(),
       visibility: MealShareVisibility.fromJson(json['visibility'] as String?),
       imageBytes: imageBytes,
+      imageUrl: MediaUrl.resolve(
+        (json['imageUrl'] as String?)?.trim().isNotEmpty == true
+            ? (json['imageUrl'] as String).trim()
+            : (json['image'] as String?)?.trim().isNotEmpty == true
+                ? (json['image'] as String).trim()
+                : null,
+      ),
     );
   }
 }

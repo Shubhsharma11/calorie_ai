@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../controllers/user_controller.dart';
+import '../core/android_sdk.dart';
 import '../models/notification_model.dart';
 import '../models/notification_type.dart';
 import '../repositories/notification_repository.dart';
@@ -275,9 +276,12 @@ class NotificationService {
     }
 
     if (Platform.isAndroid) {
-      final status = await Permission.notification.request();
-      if (kDebugMode) {
-        debugPrint('Android notification permission: $status');
+      final sdk = await readAndroidSdkInt();
+      if (sdk == null || sdk >= android13Sdk) {
+        final status = await Permission.notification.request();
+        if (kDebugMode) {
+          debugPrint('Android notification permission: $status');
+        }
       }
     }
   }
@@ -340,7 +344,6 @@ class NotificationService {
     final body = model.body ?? _defaultBody(model.type);
     final notificationId = _notificationIdFor(model);
     final channel = _androidChannels[model.type.channelId];
-
     final androidDetails = AndroidNotificationDetails(
       channel?.id ?? model.type.channelId,
       channel?.name ?? model.type.channelName,

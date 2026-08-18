@@ -1,8 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../core/api_timezone.dart';
+import '../models/avatar_upload_result.dart';
 import 'api_client.dart';
 import 'api_endpoints.dart';
 
@@ -115,8 +118,89 @@ class AuthApiService {
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw AuthApiException(
-        message ??
+        message ?? 
             'Phone backend login failed (${response.statusCode}). $body',
+      );
+    }
+
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  Future<AvatarUploadResult> uploadAvatar({
+    required String accessToken,
+    required List<int> imageBytes,
+    String filename = 'avatar.jpg',
+  }) async {
+    if (imageBytes.isEmpty) {
+      throw const AuthApiException('Selected photo could not be read.');
+    }
+
+    final safeName = filename.trim().isEmpty ? 'avatar.jpg' : filename.trim();
+    final mimeType = _avatarMimeType(safeName);
+    debugPrint(
+      'AuthApiService: POST ${ApiEndpoints.authMeAvatarUrl} '
+      'Authorization: Bearer *** file=$safeName contentType=$mimeType '
+      'bytes=${imageBytes.length}',
+    );
+
+    final response = await _apiClient.postMultipart(
+      ApiEndpoints.authMeAvatar,
+      fields: const {},
+      files: [
+        http.MultipartFile.fromBytes(
+          'image',
+          imageBytes,
+          filename: safeName,
+          contentType: MediaType.parse(mimeType),
+        ),
+      ],
+      headers: apiAuthHeaders(accessToken),
+    );
+
+    final decoded = _decodeSuccessMap(
+      response,
+      fallback: 'Profile image upload failed',
+    );
+    try {
+      return AvatarUploadResult.fromJson(decoded);
+    } on FormatException {
+      throw const AuthApiException(
+        'Profile image uploaded, but the server did not return an image URL.',
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchMe({required String accessToken}) async {
+    debugPrint(
+      'AuthApiService: GET ${ApiEndpoints.authMeUrl} Authorization: Bearer ***',
+    );
+
+    final response = await _apiClient.get(
+      ApiEndpoints.authMe,
+      headers: apiAuthHeaders(accessToken),
+    );
+
+    return _decodeSuccessMap(response, fallback: 'Could not load profile image');
+  }
+
+  Map<String, dynamic> _decodeSuccessMap(
+    http.Response response, {
+    required String fallback,
+  }) {
+    final body = response.body.trim();
+    debugPrint(
+      'AuthApiService: response ${response.statusCode}: '
+      '${_logBody(body)}',
+    );
+    final decoded = _tryDecodeJson(body);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = decoded is Map<String, dynamic>
+          ? decoded['message'] as String? ?? decoded['error'] as String?
+          : null;
+      throw AuthApiException(
+        message ?? '$fallback (${response.statusCode}). $body',
       );
     }
 
@@ -209,6 +293,20 @@ class AuthApiService {
     } on FormatException {
       return null;
     }
+  }
+
+  static String _avatarMimeType(String filename) {
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    return 'image/jpeg';
+  }
+
+  String _logBody(String body, {int maxChars = 400}) {
+    final redacted = _redactTokenFields(body);
+    if (redacted.length <= maxChars) return redacted;
+    return '${redacted.substring(0, maxChars)}…';
   }
 
   String _redactTokenFields(String body) {

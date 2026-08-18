@@ -23,14 +23,12 @@ class ScanController extends GetxController {
   MobileScannerController? barcodeScannerController;
   bool _handlingDetection = false;
 
-  @override
-  void onInit() {
-    super.onInit();
-    _ensureBarcodeScanner();
-  }
+  /// Bumps when the scanner is created or disposed so ScanView can unmount it.
+  final cameraSessionId = 0.obs;
 
   void _ensureBarcodeScanner() {
-    barcodeScannerController ??= MobileScannerController(
+    if (barcodeScannerController != null) return;
+    barcodeScannerController = MobileScannerController(
       // Keep camera stable; start/stop is managed by the scan tab.
       autoStart: false,
       detectionSpeed: DetectionSpeed.normal,
@@ -45,12 +43,19 @@ class ScanController extends GetxController {
         BarcodeFormat.qrCode,
       ],
     );
+    cameraSessionId.value++;
   }
 
   void _disposeBarcodeScanner() {
-    barcodeScannerController?.dispose();
+    final current = barcodeScannerController;
+    if (current == null) return;
     barcodeScannerController = null;
+    cameraSessionId.value++;
+    current.dispose();
   }
+
+  /// Drops CameraX so the system camera / gallery can run without OOM.
+  Future<void> releaseHardwareCamera() => pauseBarcodeScan();
 
   Future<bool> _ensureCameraPermission() async {
     var status = await Permission.camera.status;
@@ -133,6 +138,7 @@ class ScanController extends GetxController {
     if (!granted) return;
 
     _ensureBarcodeScanner();
+    await Future<void>.delayed(Duration.zero);
     try {
       await barcodeScannerController?.start();
     } catch (error) {
@@ -151,6 +157,7 @@ class ScanController extends GetxController {
     } catch (_) {
       // Ignore stop failures when camera was never started.
     }
+    _disposeBarcodeScanner();
   }
 
   void openFoodDetails(FoodItem food) {

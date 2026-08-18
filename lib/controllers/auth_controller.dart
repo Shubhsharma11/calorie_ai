@@ -112,7 +112,7 @@ class AuthController extends GetxController {
         await user.markOnboardingComplete();
         MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);
-        unawaited(user.fetchProfile(refreshGoalTarget: true, maxAttempts: 4));
+        unawaited(user.fetchProfile(refreshGoalTarget: false, maxAttempts: 4));
       } else {
         await user.restoreOnboardingProgress();
         final resumeRoute = await user.resolveSetupResumeRoute();

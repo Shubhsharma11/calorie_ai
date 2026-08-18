@@ -77,13 +77,13 @@ void main() {
 
     final body = ApiCustomMealMapper.toPatchRequestBody(
       preset: preset,
-      imageUrl: 'https://example.com/bowl.jpg',
+      imageUrl: 'uploads/9f3c1e7a2b8d4f6019ac5e2d7b3f8c41.jpg',
     );
 
     expect(body['name'], 'Updated Bowl');
     expect(body['mealTime'], 'lunch');
     expect(body['visibility'], 'private');
-    expect(body['image'], 'https://example.com/bowl.jpg');
+    expect(body['image'], 'uploads/9f3c1e7a2b8d4f6019ac5e2d7b3f8c41.jpg');
     expect(body['calories'], preset.totalCalories);
     expect(body['protein'], isA<num>());
     expect(body['carbs'], isA<num>());
@@ -324,5 +324,312 @@ void main() {
     );
 
     expect(preset.id, 'srv-meal-42');
+  });
+
+  test('ApiCustomMealMapper sends uploads key on create, not signed URL', () {
+    final preset = CustomMealPreset(
+      id: 'local-1',
+      name: 'Protein Bowl',
+      createdAt: DateTime(2026, 7, 17),
+      meal: MealType.lunch,
+      imageUrl:
+          'https://fitbuddyai.s3.ap-south-1.amazonaws.com/'
+          'uploads/9f3c1e7a2b8d4f6019ac5e2d7b3f8c41.jpg?X-Amz-Signature=abc',
+      items: const [
+        SavedMealItem(
+          food: FoodItem(
+            name: 'rice',
+            caloriesPer100g: 130,
+            protein: 2.7,
+            carbs: 28,
+            fat: 0.3,
+          ),
+          grams: 100,
+          meal: MealType.lunch,
+        ),
+      ],
+    );
+
+    final body = ApiCustomMealMapper.toCreateRequestBody(preset);
+    expect(body['image'], 'uploads/9f3c1e7a2b8d4f6019ac5e2d7b3f8c41.jpg');
+  });
+
+  test('ApiCustomMealMapper resolves uploads key from list payload', () {
+    final presets = ApiCustomMealMapper.presetsFromResponse({
+      'data': [
+        {
+          'id': 'custom-1',
+          'name': 'Oat Meal',
+          'mealTime': 'breakfast',
+          'image': 'uploads/9f3c1e7a2b8d4f6019ac5e2d7b3f8c41.jpg',
+          'items': [
+            {'name': 'oats', 'quantity': 100, 'unit': 'g'},
+          ],
+        },
+      ],
+    });
+
+    expect(presets, hasLength(1));
+    expect(
+      presets.first.imageUrl,
+      'https://fitbuddyai.s3.ap-south-1.amazonaws.com/'
+      'uploads/9f3c1e7a2b8d4f6019ac5e2d7b3f8c41.jpg',
+    );
+  });
+
+  test('ApiCustomMealMapper keeps signed S3 image from GET my-meals', () {
+    const signed =
+        'https://fitbuddyai.s3.ap-south-1.amazonaws.com/'
+        'uploads/f3c0b8fbb88db1c4e7645af0289ee6ed.png'
+        '?X-Amz-Signature=abc';
+    final presets = ApiCustomMealMapper.presetsFromResponse({
+      'success': true,
+      'data': {
+        'myMeals': [
+          {
+            'id': '6a7ee5cea86e55d0a2b498b6',
+            'name': 'Grrgr',
+            'mealTime': 'breakfast',
+            'image': signed,
+            'items': [
+              {'name': 'Acorn (Edible)', 'quantity': 100, 'unit': 'g'},
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(presets, hasLength(1));
+    expect(presets.first.imageUrl, signed);
+  });
+
+  test('ApiCustomMealMapper prefers signed URL over uploads key', () {
+    const signed =
+        'https://fitbuddyai.s3.ap-south-1.amazonaws.com/'
+        'uploads/f3c0b8fbb88db1c4e7645af0289ee6ed.png'
+        '?X-Amz-Signature=abc';
+    final presets = ApiCustomMealMapper.presetsFromResponse({
+      'data': [
+        {
+          'id': 'custom-1',
+          'name': 'Oat Meal',
+          'mealTime': 'breakfast',
+          'image': 'uploads/f3c0b8fbb88db1c4e7645af0289ee6ed.png',
+          'imageUrl': signed,
+          'items': [
+            {'name': 'oats', 'quantity': 100, 'unit': 'g'},
+          ],
+        },
+      ],
+    });
+
+    expect(presets, hasLength(1));
+    expect(presets.first.imageUrl, signed);
+  });
+
+  test('ApiCustomMealMapper reads image from data.myMeal create payload', () {
+    const signed =
+        'https://fitbuddyai.s3.ap-south-1.amazonaws.com/'
+        'uploads/f3c0b8fbb88db1c4e7645af0289ee6ed.png'
+        '?X-Amz-Signature=abc';
+    final source = CustomMealPreset(
+      id: 'local-1',
+      name: 'Grrgr',
+      createdAt: DateTime(2026, 8, 14),
+      meal: MealType.breakfast,
+      items: const [
+        SavedMealItem(
+          food: FoodItem(
+            name: 'Acorn (Edible)',
+            caloriesPer100g: 120,
+            protein: 3.5,
+            carbs: 24,
+            fat: 1.5,
+          ),
+          grams: 100,
+          meal: MealType.breakfast,
+        ),
+      ],
+    );
+
+    final preset = ApiCustomMealMapper.presetFromResponse(
+      {
+        'success': true,
+        'data': {
+          'myMeal': {
+            'id': 'srv-meal-1',
+            'name': 'Grrgr',
+            'image': signed,
+            'mealTime': 'breakfast',
+            'items': [
+              {'name': 'Acorn (Edible)', 'quantity': 100, 'unit': 'g'},
+            ],
+          },
+        },
+      },
+      source: source,
+    );
+
+    expect(preset.id, 'srv-meal-1');
+    expect(preset.imageUrl, signed);
+  });
+
+  test('ApiCustomMealMapper reads food photos on meal items', () {
+    const signed =
+        'https://fitbuddyai.s3.ap-south-1.amazonaws.com/'
+        'uploads/akki-roti.png?X-Amz-Signature=abc';
+    final presets = ApiCustomMealMapper.presetsFromResponse({
+      'data': [
+        {
+          'id': 'gym-1',
+          'name': 'Gym',
+          'mealTime': 'breakfast',
+          'items': [
+            {
+              'name': 'Akki Roti',
+              'quantity': 2,
+              'unit': 'Pieces',
+              'calories': 211,
+              'image': signed,
+            },
+            {
+              'name': 'Chana Dal',
+              'quantity': 100,
+              'unit': 'g',
+              'calories': 164,
+              'icon': '/uploads/chana-dal.png',
+            },
+            {
+              'name': 'Achari Aloo',
+              'quantity': 1,
+              'unit': 'Bowl',
+              'calories': 297,
+              'food': {
+                'name': 'Achari Aloo',
+                'imageUrl':
+                    'https://fitbuddyai.srhsoftwares.com/uploads/aloo.png',
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(presets, hasLength(1));
+    expect(presets.first.items, hasLength(3));
+    expect(presets.first.items[0].food.imageUrl, signed);
+    expect(
+      presets.first.items[1].food.imageUrl,
+      'https://fitbuddyai.srhsoftwares.com/uploads/chana-dal.png',
+    );
+    expect(
+      presets.first.items[2].food.imageUrl,
+      'https://fitbuddyai.srhsoftwares.com/uploads/aloo.png',
+    );
+  });
+
+  test('ApiCustomMealMapper keeps source item photos when response omits them', () {
+    const photo =
+        'https://fitbuddyai.s3.ap-south-1.amazonaws.com/uploads/oats.png';
+    final source = CustomMealPreset(
+      id: 'local-1',
+      name: 'Oat Meal',
+      createdAt: DateTime(2026, 7, 10),
+      meal: MealType.breakfast,
+      items: const [
+        SavedMealItem(
+          food: FoodItem(
+            name: 'oats',
+            caloriesPer100g: 389,
+            protein: 13,
+            carbs: 66,
+            fat: 7,
+            imageUrl: photo,
+          ),
+          grams: 100,
+          meal: MealType.breakfast,
+        ),
+      ],
+    );
+
+    final preset = ApiCustomMealMapper.presetFromResponse(
+      {
+        'data': {
+          'id': 'srv-1',
+          'name': 'Oat Meal',
+          'mealTime': 'breakfast',
+          'items': [
+            {'name': 'oats', 'quantity': 100, 'unit': 'g'},
+          ],
+        },
+      },
+      source: source,
+    );
+
+    expect(preset.items.single.food.imageUrl, photo);
+  });
+
+  test('ApiCustomMealMapper sends item upload key on create', () {
+    final preset = CustomMealPreset(
+      id: 'local-1',
+      name: 'Protein Bowl',
+      createdAt: DateTime(2026, 7, 17),
+      meal: MealType.lunch,
+      items: const [
+        SavedMealItem(
+          food: FoodItem(
+            name: 'rice',
+            caloriesPer100g: 130,
+            protein: 2.7,
+            carbs: 28,
+            fat: 0.3,
+            imageUrl:
+                'https://fitbuddyai.s3.ap-south-1.amazonaws.com/'
+                'uploads/rice.png?X-Amz-Signature=abc',
+          ),
+          grams: 100,
+          meal: MealType.lunch,
+        ),
+      ],
+    );
+
+    final body = ApiCustomMealMapper.toCreateRequestBody(preset);
+    expect(body['items'], [
+      {
+        'name': 'rice',
+        'quantity': 100,
+        'unit': 'g',
+        'image': 'uploads/rice.png',
+      },
+    ]);
+  });
+
+  test('ApiCustomMealMapper sends catalog item photo URL on create', () {
+    final preset = CustomMealPreset(
+      id: 'local-1',
+      name: 'Gym',
+      createdAt: DateTime(2026, 7, 17),
+      meal: MealType.breakfast,
+      items: const [
+        SavedMealItem(
+          food: FoodItem(
+            name: 'Akki Roti',
+            caloriesPer100g: 117,
+            protein: 3,
+            carbs: 22,
+            fat: 2,
+            imageUrl: 'https://fitbuddyai.srhsoftwares.com/uploads/akki-roti.png',
+          ),
+          grams: 180,
+          meal: MealType.breakfast,
+        ),
+      ],
+    );
+
+    final body = ApiCustomMealMapper.toCreateRequestBody(preset);
+    expect(
+      body['items'][0]['image'],
+      'https://fitbuddyai.srhsoftwares.com/uploads/akki-roti.png',
+    );
   });
 }

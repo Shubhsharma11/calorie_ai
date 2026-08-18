@@ -7,7 +7,9 @@ import 'package:intl/intl.dart';
 import '../core/api_errors.dart';
 import '../core/app_snackbar.dart';
 import '../core/goal_progress_message.dart';
+import '../core/image_downscale.dart';
 import '../core/meal_log_group.dart';
+import '../core/media_url.dart';
 import '../models/custom_meal_preset.dart';
 import '../models/custom_food_preset.dart';
 import '../models/daily_nutrition.dart';
@@ -21,19 +23,20 @@ import '../repositories/custom_meals_repository.dart';
 import '../repositories/favourite_meals_repository.dart';
 import '../repositories/meals_repository.dart';
 import '../repositories/my_foods_repository.dart';
+import '../repositories/uploads_repository.dart';
 import '../services/food_api_service.dart';
 import '../services/api_endpoints.dart';
 import '../services/custom_meals_api_service.dart';
 import '../services/favourite_meals_api_service.dart';
 import '../services/meals_api_service.dart';
 import '../services/my_foods_api_service.dart';
+import '../services/uploads_api_service.dart';
 import '../widgets/calorie_goal_success_dialog.dart';
 import 'dashboard_controller.dart';
 // import 'streak_controller.dart';
 import 'user_controller.dart';
 
 import '../services/analytics_service.dart';
-
 
 class FoodController extends GetxController {
   FoodController({
@@ -42,19 +45,22 @@ class FoodController extends GetxController {
     CustomMealsRepository? customMealsRepository,
     MyFoodsRepository? myFoodsRepository,
     FavouriteMealsRepository? favouriteMealsRepository,
+    UploadsRepository? uploadsRepository,
   }) : _api = api ?? FoodApiService(),
        _mealsRepository = mealsRepository ?? MealsRepository(),
        _customMealsRepository =
            customMealsRepository ?? CustomMealsRepository(),
        _myFoodsRepository = myFoodsRepository ?? MyFoodsRepository(),
        _favouriteMealsRepository =
-           favouriteMealsRepository ?? FavouriteMealsRepository();
+           favouriteMealsRepository ?? FavouriteMealsRepository(),
+       _uploadsRepository = uploadsRepository ?? UploadsRepository();
 
   final FoodApiService _api;
   final MealsRepository _mealsRepository;
   final CustomMealsRepository _customMealsRepository;
   final MyFoodsRepository _myFoodsRepository;
   final FavouriteMealsRepository _favouriteMealsRepository;
+  final UploadsRepository _uploadsRepository;
 
   static const int maxMealHistory = 15;
   static const int maxQuickMealsPerSection = 5;
@@ -85,7 +91,7 @@ class FoodController extends GetxController {
   final RxList<MealLogGroup> _deletingGroups = <MealLogGroup>[].obs;
   final Set<String> _deleteCommitInFlight = <String>{};
 
-  final RxBool isSearching = false.obs; 
+  final RxBool isSearching = false.obs;
   final RxBool isLoadingMealsApi = false.obs;
   final RxnString searchErrorMessage = RxnString();
   final RxnString mealsApiErrorMessage = RxnString();
@@ -105,6 +111,15 @@ class FoodController extends GetxController {
   List<CustomMealPreset> _lastRemoteCustomMeals = const [];
   List<CustomFoodPreset> _lastRemoteMyFoods = const [];
   List<SavedMealItem> _lastRemoteFavourites = const [];
+  final Set<String> _favoriteToggleKeys = <String>{};
+
+  /// Food names removed from My Food / My Meals so they leave Quick Items.
+  final Set<String> _suppressedQuickItemNames = <String>{};
+
+  /// Catalog / search photos keyed by lowercase food name.
+  final Map<String, String> _catalogPhotoByName = <String, String>{};
+  final Map<String, FoodItem> _catalogFoodByName = <String, FoodItem>{};
+  final Set<String> _catalogPhotoMisses = <String>{};
   String? _dismissedBreakfastSuggestionDate;
   static const Duration _listRefreshCooldown = Duration(seconds: 20);
 
@@ -134,6 +149,10 @@ class FoodController extends GetxController {
     _lastRemoteCustomMeals = const [];
     _lastRemoteMyFoods = const [];
     _lastRemoteFavourites = const [];
+    _suppressedQuickItemNames.clear();
+    _catalogPhotoByName.clear();
+    _catalogFoodByName.clear();
+    _catalogPhotoMisses.clear();
     _lastCustomMealsFetchAt = null;
     _lastMyFoodsFetchAt = null;
     _lastFavouritesFetchAt = null;
@@ -207,25 +226,25 @@ class FoodController extends GetxController {
         'FoodController: favourite-meals API returned ${fetched.length} items',
       );
 
+      _rememberKnownFoodPhotos();
+      final previous = List<SavedMealItem>.from(favoriteMeals);
+
       // Prefer server list; keep unsynced local favourites without a server id.
-      final remoteKeys = {
-        for (final item in fetched) item.storageKey,
-      };
-      final remoteNameMeals = {
-        for (final item in fetched)
-          '${item.food.name.trim().toLowerCase()}|${item.meal}',
-      };
-      final localOnly = favoriteMeals.where((local) {
+      final hydrated = _uniqueFavorites([
+        for (final item in fetched) _favouriteWithKnownPhoto(item, previous),
+      ]);
+      final localOnly = previous.where((local) {
         if (local.hasServerId) return false;
-        final nameMeal =
-            '${local.food.name.trim().toLowerCase()}|${local.meal}';
-        return !remoteKeys.contains(local.storageKey) &&
-            !remoteNameMeals.contains(nameMeal);
+        return !hydrated.any(
+          (remote) => remote.food.isSameFavoriteFood(local.food),
+        );
       });
 
-      favoriteMeals.assignAll([...fetched, ...localOnly]);
-      _lastRemoteFavourites = List<SavedMealItem>.unmodifiable(fetched);
+      favoriteMeals.assignAll([...hydrated, ...localOnly]);
+      _lastRemoteFavourites = List<SavedMealItem>.unmodifiable(hydrated);
       _lastFavouritesFetchAt = DateTime.now();
+      _rememberFoodPhotos(favoriteMeals.map((item) => item.food));
+      unawaited(_hydrateFavouritePhotos());
     } on FavouriteMealsApiException catch (error) {
       debugPrint('FoodController: favourite-meals GET failed: $error');
     } catch (error) {
@@ -239,7 +258,8 @@ class FoodController extends GetxController {
     }
     if (!force &&
         _lastMyFoodsFetchAt != null &&
-        DateTime.now().difference(_lastMyFoodsFetchAt!) < _listRefreshCooldown) {
+        DateTime.now().difference(_lastMyFoodsFetchAt!) <
+            _listRefreshCooldown) {
       debugPrint(
         'FoodController: skipping GET ${ApiEndpoints.myFoods} '
         '(recent fetch within ${_listRefreshCooldown.inSeconds}s)',
@@ -276,9 +296,7 @@ class FoodController extends GetxController {
         'FoodController: my-foods API returned ${fetched.length} foods',
       );
 
-      final localById = {
-        for (final food in customFoodPresets) food.id: food,
-      };
+      final localById = {for (final food in customFoodPresets) food.id: food};
       final localByName = {
         for (final food in customFoodPresets)
           food.food.name.trim().toLowerCase(): food,
@@ -292,11 +310,13 @@ class FoodController extends GetxController {
           return remote.copyWith(imageBytes: byName.imageBytes);
         }
 
-        final remoteMacroCalories = (remote.food.carbs * 4 +
-                remote.food.protein * 4 +
-                remote.food.fat * 9)
-            .round();
-        final preferLocalCalories = local.food.caloriesPer100g > 0 &&
+        final remoteMacroCalories =
+            (remote.food.carbs * 4 +
+                    remote.food.protein * 4 +
+                    remote.food.fat * 9)
+                .round();
+        final preferLocalCalories =
+            local.food.caloriesPer100g > 0 &&
             (remote.food.caloriesPer100g <= 0 ||
                 remote.food.caloriesPer100g == remoteMacroCalories);
 
@@ -316,7 +336,14 @@ class FoodController extends GetxController {
             emoji: local.food.emoji.isNotEmpty
                 ? local.food.emoji
                 : remote.food.emoji,
-            imageUrl: local.food.imageUrl ?? remote.food.imageUrl,
+            imageUrl: MediaUrl.preferLoadable([
+              remote.food.imageUrl,
+              local.food.imageUrl,
+            ]),
+            category: local.food.category ?? remote.food.category,
+            servingQuantity: local.food.servingQuantity,
+            servingUnit: local.food.servingUnit,
+            gramsPerServing: local.food.gramsPerServing,
           ),
           servingQuantity: local.servingQuantity ?? remote.servingQuantity,
           servingUnit: local.servingUnit.isNotEmpty
@@ -328,12 +355,14 @@ class FoodController extends GetxController {
         );
       }).toList();
 
-      // Keep unsynced local foods that the server does not know about yet.
+      // Keep unsynced local drafts the server does not know about yet.
+      // Server-id foods missing from GET were deleted — do not resurrect them.
       final remoteIds = {for (final food in merged) food.id};
       final remoteNames = {
         for (final food in merged) food.food.name.trim().toLowerCase(),
       };
       for (final local in customFoodPresets) {
+        if (!_looksLikeLocalMealId(local.id)) continue;
         final nameKey = local.food.name.trim().toLowerCase();
         if (remoteIds.contains(local.id) || remoteNames.contains(nameKey)) {
           continue;
@@ -341,9 +370,11 @@ class FoodController extends GetxController {
         merged.add(local);
       }
 
+      final previousNames = _quickItemNamesForFoods(customFoodPresets);
       customFoodPresets.assignAll(merged);
       _lastRemoteMyFoods = List<CustomFoodPreset>.unmodifiable(fetched);
       _lastMyFoodsFetchAt = DateTime.now();
+      _suppressDroppedQuickItemNames(previousNames);
     } on MyFoodsApiException catch (error) {
       debugPrint('FoodController: my-foods API fetch failed: $error');
     } catch (error) {
@@ -410,19 +441,30 @@ class FoodController extends GetxController {
         final local =
             localById[remote.id] ??
             localByNameAndSlot['${remote.meal.toLowerCase()}|${remote.name.trim().toLowerCase()}'];
-        if (local == null) return remote;
-
         final items = remote.items.map((remoteItem) {
           SavedMealItem? localItem;
-          for (final candidate in local.items) {
-            if (candidate.food.name.trim().toLowerCase() ==
-                remoteItem.food.name.trim().toLowerCase()) {
-              localItem = candidate;
-              break;
+          if (local != null) {
+            for (final candidate in local.items) {
+              if (candidate.food.name.trim().toLowerCase() ==
+                  remoteItem.food.name.trim().toLowerCase()) {
+                localItem = candidate;
+                break;
+              }
             }
           }
-          if (localItem == null) return remoteItem;
-          return remoteItem.copyWith(
+          final imageUrl = MediaUrl.preferLoadable([
+            remoteItem.food.imageUrl,
+            localItem?.food.imageUrl,
+            _imageUrlForFoodName(remoteItem.food.name),
+          ]);
+          var item = remoteItem;
+          if (imageUrl != null && imageUrl != remoteItem.food.imageUrl) {
+            item = item.copyWith(
+              food: remoteItem.food.copyWith(imageUrl: imageUrl),
+            );
+          }
+          if (localItem == null) return item;
+          return item.copyWith(
             servingQuantity: localItem.servingQuantity,
             servingUnit: localItem.servingUnit,
             nutritionBasisQuantity: localItem.nutritionBasisQuantity,
@@ -432,16 +474,26 @@ class FoodController extends GetxController {
           );
         }).toList();
 
-        return remote.copyWith(items: items, imageBytes: local.imageBytes);
+        if (local == null) {
+          return remote.copyWith(items: items);
+        }
+
+        return remote.copyWith(
+          items: items,
+          imageBytes: local.imageBytes,
+          imageUrl: MediaUrl.preferLoadable([remote.imageUrl, local.imageUrl]),
+        );
       }).toList();
 
-      // Keep unsynced local meals the server does not know about yet.
+      // Keep unsynced local drafts the server does not know about yet.
+      // Server-id meals missing from GET were deleted — do not resurrect them.
       final remoteIds = {for (final meal in merged) meal.id};
       final remoteKeys = {
         for (final meal in merged)
           '${meal.meal.toLowerCase()}|${meal.name.trim().toLowerCase()}',
       };
       for (final local in customMealPresets) {
+        if (!_looksLikeLocalMealId(local.id)) continue;
         final key =
             '${local.meal.toLowerCase()}|${local.name.trim().toLowerCase()}';
         if (remoteIds.contains(local.id) || remoteKeys.contains(key)) {
@@ -450,9 +502,11 @@ class FoodController extends GetxController {
         merged.add(local);
       }
 
+      final previousNames = _quickItemNamesForMeals(customMealPresets);
       customMealPresets.assignAll(merged);
       _lastRemoteCustomMeals = List<CustomMealPreset>.unmodifiable(fetched);
       _lastCustomMealsFetchAt = DateTime.now();
+      _suppressDroppedQuickItemNames(previousNames);
     } on CustomMealsApiException catch (error) {
       debugPrint('FoodController: custom meals API fetch failed: $error');
     } catch (error) {
@@ -537,14 +591,18 @@ class FoodController extends GetxController {
     final result = <SavedMealItem>[];
 
     for (final favorite in favoriteMeals.where((item) => item.meal == meal)) {
-      if (seen.add(favorite.storageKey)) {
-        result.add(favorite);
+      if (_isHiddenFromQuickItems(favorite)) continue;
+      final collapsed = _quickItemForHistory(favorite);
+      if (seen.add(collapsed.storageKey)) {
+        result.add(collapsed);
       }
     }
 
     for (final item in _apiMealHistoryFor(meal)) {
-      if (seen.add(item.storageKey)) {
-        result.add(item);
+      if (_isHiddenFromQuickItems(item)) continue;
+      final collapsed = _quickItemForHistory(item);
+      if (seen.add(collapsed.storageKey)) {
+        result.add(collapsed);
       }
     }
 
@@ -559,6 +617,7 @@ class FoodController extends GetxController {
       apiMeals.toList(),
       limit: maxMealHistory,
       meal: meal,
+      excludeFoodNames: _hiddenQuickItemNames,
     );
   }
 
@@ -566,13 +625,19 @@ class FoodController extends GetxController {
   Future<void> refreshQuickItemsFromApi() => refreshMealsFromApi();
 
   /// Last [maxQuickMealsPerSection] unique meals from `GET /api/v1/meals`.
+  /// My Meal templates appear by name (not as their individual foods).
   List<SavedMealItem> get recentQuickMeals {
     apiMeals.length;
     isLoadingMealsApi.value;
-    return SavedMealItem.historyFromEntries(
+    customFoodPresets.length;
+    customMealPresets.length;
+    entriesRevision.value;
+    final history = SavedMealItem.historyFromEntries(
       apiMeals.toList(),
-      limit: maxQuickMealsPerSection,
+      limit: maxMealHistory,
+      excludeFoodNames: _hiddenQuickItemNames,
     );
+    return _collapseCustomMeals(history);
   }
 
   /// Most recently logged unique meals for a meal slot (from API history).
@@ -582,53 +647,426 @@ class FoodController extends GetxController {
   }) {
     apiMeals.length;
     isLoadingMealsApi.value;
+    customFoodPresets.length;
+    customMealPresets.length;
+    entriesRevision.value;
     final history = _apiMealHistoryFor(meal);
-    if (history.length <= limit) return history;
-    return history.sublist(0, limit);
+    return _collapseCustomMeals(history, limit: limit);
   }
 
-  bool isFavorite(SavedMealItem item) {
-    return favoriteMeals.any((favorite) => favorite.matchesFavorite(item));
+  /// Matching My Meal template for a Quick Items row, if this row is a meal.
+  CustomMealPreset? customMealForQuickItem(SavedMealItem item) {
+    return _liveCustomMealFor(item);
   }
 
-  bool isFavoriteFood(FoodItem food, String meal) {
-    return favoriteMeals.any((item) => item.matchesFoodAndMeal(food, meal));
+  List<SavedMealItem> _collapseCustomMeals(
+    List<SavedMealItem> history, {
+    int? limit,
+  }) {
+    if (history.isEmpty) return history;
+    final cap = limit ?? maxQuickMealsPerSection;
+    final result = <SavedMealItem>[];
+    final seen = <String>{};
+    for (final item in history) {
+      final collapsed = _quickItemForHistory(item);
+      if (!seen.add(collapsed.storageKey)) continue;
+      result.add(collapsed);
+      if (result.length >= cap) break;
+    }
+    return result;
   }
 
-  Future<void> toggleFavorite(SavedMealItem item) async {
-    final index = favoriteMeals.indexWhere(
-      (favorite) => favorite.matchesFavorite(item),
-    );
+  SavedMealItem _quickItemForHistory(SavedMealItem item) {
+    return _liveCustomMealFor(item)?.toQuickItem() ?? item;
+  }
 
-    if (index >= 0) {
-      final existing = favoriteMeals[index];
-      favoriteMeals.removeAt(index);
-      unawaited(_syncDeleteFavourite(existing));
+  CustomMealPreset? _liveCustomMealFor(SavedMealItem item) {
+    final name = item.food.name.trim().toLowerCase();
+    if (name.isEmpty || customMealPresets.isEmpty) return null;
+    for (final meal in customMealPresets) {
+      if (meal.name.trim().toLowerCase() == name) return meal;
+    }
+    for (final meal in customMealPresets) {
+      if (meal.containsFoodNamed(name)) return meal;
+    }
+    return null;
+  }
+
+  Set<String> get _liveCatalogNames => {
+    ..._quickItemNamesForFoods(customFoodPresets),
+    ..._quickItemNamesForMeals(customMealPresets),
+  };
+
+  Set<String> get _hiddenQuickItemNames {
+    final live = _liveCatalogNames;
+    return {
+      for (final name in _suppressedQuickItemNames)
+        if (!live.contains(name)) name,
+    };
+  }
+
+  bool _isHiddenFromQuickItems(SavedMealItem item) {
+    return _hiddenQuickItemNames.contains(item.food.name.trim().toLowerCase());
+  }
+
+  Set<String> _quickItemNamesForFoods(Iterable<CustomFoodPreset> foods) {
+    return {
+      for (final food in foods)
+        if (food.food.name.trim().isNotEmpty)
+          food.food.name.trim().toLowerCase(),
+    };
+  }
+
+  Set<String> _quickItemNamesForMeals(Iterable<CustomMealPreset> meals) {
+    return {
+      for (final meal in meals) ...[
+        if (meal.name.trim().isNotEmpty) meal.name.trim().toLowerCase(),
+        for (final item in meal.items)
+          if (item.food.name.trim().isNotEmpty)
+            item.food.name.trim().toLowerCase(),
+      ],
+    };
+  }
+
+  /// Fills missing ingredient photos from cache, my-foods, favourites, logs, search.
+  CustomMealPreset withItemPhotos(CustomMealPreset preset) {
+    _rememberKnownFoodPhotos();
+    final items = [
+      for (final item in preset.items)
+        if ((item.food.imageUrl ?? '').trim().isNotEmpty)
+          item
+        else
+          _itemWithKnownPhoto(item),
+    ];
+    return preset.copyWith(items: items);
+  }
+
+  /// Looks up catalog photos for meal foods that the my-meals payload omitted.
+  Future<CustomMealPreset> hydrateCustomMealPhotos(
+    CustomMealPreset preset,
+  ) async {
+    var updated = withItemPhotos(preset);
+    final missing = {
+      for (final item in updated.items)
+        if ((item.food.imageUrl ?? '').trim().isEmpty) item.food.name.trim(),
+    }..removeWhere((name) => name.isEmpty);
+
+    if (missing.isNotEmpty) {
+      await Future.wait(missing.map(_lookupCatalogPhoto));
+      updated = withItemPhotos(updated);
+    }
+
+    _storeHydratedMeal(updated);
+    return updated;
+  }
+
+  SavedMealItem _itemWithKnownPhoto(SavedMealItem item) {
+    final url = _imageUrlForFoodName(item.food.name);
+    if (url == null) return item;
+    return item.copyWith(food: item.food.copyWith(imageUrl: url));
+  }
+
+  SavedMealItem _favouriteWithKnownPhoto(
+    SavedMealItem item,
+    List<SavedMealItem> previous,
+  ) {
+    SavedMealItem? local;
+    final itemName = item.food.name.trim().toLowerCase();
+    for (final candidate in previous) {
+      if (candidate.matchesFavorite(item) ||
+          candidate.food.name.trim().toLowerCase() == itemName) {
+        local = candidate;
+        break;
+      }
+    }
+    final imageUrl = MediaUrl.preferLoadable([
+      item.food.imageUrl,
+      local?.food.imageUrl,
+      _imageUrlForFoodName(item.food.name),
+    ]);
+    if (imageUrl == null || imageUrl == item.food.imageUrl) return item;
+    return item.copyWith(food: item.food.copyWith(imageUrl: imageUrl));
+  }
+
+  Future<void> _hydrateFavouritePhotos() async {
+    _rememberKnownFoodPhotos();
+    final missing = <String>{
+      for (final item in favoriteMeals)
+        if ((item.food.imageUrl ?? '').trim().isEmpty) item.food.name.trim(),
+    }..removeWhere((name) => name.isEmpty);
+    if (missing.isEmpty) return;
+
+    await Future.wait(missing.map(_lookupCatalogPhoto));
+
+    var changed = false;
+    for (var i = 0; i < favoriteMeals.length; i++) {
+      final item = favoriteMeals[i];
+      if ((item.food.imageUrl ?? '').trim().isNotEmpty) continue;
+      final url = _imageUrlForFoodName(item.food.name);
+      if (url == null) continue;
+      favoriteMeals[i] = item.copyWith(food: item.food.copyWith(imageUrl: url));
+      changed = true;
+    }
+    if (changed) favoriteMeals.refresh();
+  }
+
+  String? _imageUrlForFoodName(String name) {
+    final key = name.trim().toLowerCase();
+    if (key.isEmpty) return null;
+
+    final cached = _catalogPhotoByName[key];
+    if (cached != null && cached.isNotEmpty) return cached;
+
+    String? fromFood(FoodItem food) {
+      if (food.name.trim().toLowerCase() != key) return null;
+      final url = food.imageUrl?.trim();
+      return (url != null && url.isNotEmpty) ? url : null;
+    }
+
+    for (final preset in customFoodPresets) {
+      final url = fromFood(preset.food);
+      if (url != null) return url;
+    }
+    for (final fav in favoriteMeals) {
+      final url = fromFood(fav.food);
+      if (url != null) return url;
+    }
+    for (final entry in apiMeals) {
+      final url = fromFood(entry.food);
+      if (url != null) return url;
+    }
+    for (final food in searchResults) {
+      final url = fromFood(food);
+      if (url != null) return url;
+    }
+    return null;
+  }
+
+  void _rememberFoodPhotos(Iterable<FoodItem> foods) {
+    for (final food in foods) {
+      _rememberCatalogFood(food);
+    }
+  }
+
+  void _rememberCatalogFood(FoodItem food) {
+    final key = food.name.trim().toLowerCase();
+    if (key.isEmpty) return;
+
+    final url = food.imageUrl?.trim() ?? '';
+    if (url.isNotEmpty) {
+      _catalogPhotoByName[key] = url;
+      _catalogPhotoMisses.remove(key);
+    }
+
+    if (!food.hasDisplayServing && url.isEmpty) return;
+
+    final existing = _catalogFoodByName[key];
+    if (existing == null) {
+      _catalogFoodByName[key] = food;
       return;
     }
 
-    favoriteMeals.insert(0, item);
-    unawaited(_syncAddFavourite(item));
+    final keepServing = existing.hasDisplayServing || !food.hasDisplayServing;
+    _catalogFoodByName[key] = existing.copyWith(
+      imageUrl: MediaUrl.preferLoadable([existing.imageUrl, food.imageUrl]),
+      category: existing.category ?? food.category,
+      servingQuantity:
+          keepServing ? existing.servingQuantity : food.servingQuantity,
+      servingUnit: keepServing ? existing.servingUnit : food.servingUnit,
+      gramsPerServing:
+          keepServing ? existing.gramsPerServing : food.gramsPerServing,
+      catalogId: existing.catalogId ?? food.catalogId,
+    );
   }
 
-  Future<void> toggleFavoriteFood({
+  void _rememberKnownFoodPhotos() {
+    _rememberFoodPhotos(customFoodPresets.map((preset) => preset.food));
+    _rememberFoodPhotos(favoriteMeals.map((item) => item.food));
+    _rememberFoodPhotos(apiMeals.map((entry) => entry.food));
+    _rememberFoodPhotos(searchResults);
+    for (final meal in customMealPresets) {
+      _rememberFoodPhotos(meal.items.map((item) => item.food));
+    }
+  }
+
+  Future<void> _lookupCatalogPhoto(String name) => _lookupCatalogFood(name);
+
+  Future<void> _lookupCatalogFood(String name) async {
+    final key = name.trim().toLowerCase();
+    if (key.isEmpty) return;
+
+    final cached = _catalogFoodByName[key];
+    final hasServing = cached?.hasDisplayServing == true;
+    final hasImage =
+        ((cached?.imageUrl ?? _catalogPhotoByName[key]) ?? '').isNotEmpty;
+    if (hasServing && hasImage) return;
+    if (_catalogPhotoMisses.contains(key) && hasServing) return;
+
+    try {
+      final results = await searchFoodsEphemeral(name);
+      final match = _catalogFoodMatch(name, results);
+      if (match != null) {
+        _rememberCatalogFood(match);
+        debugPrint(
+          'FoodController: catalog food for "$name" → '
+          'unit=${match.servingUnit} image=${match.imageUrl}',
+        );
+      } else if (!hasImage) {
+        _catalogPhotoMisses.add(key);
+      }
+    } catch (error) {
+      debugPrint(
+        'FoodController: catalog lookup failed for $name: $error',
+      );
+    }
+  }
+
+  FoodItem? _catalogFoodMatch(String name, List<FoodItem> results) {
+    final key = name.trim().toLowerCase();
+    FoodItem? loose;
+    for (final food in results) {
+      final foodKey = food.name.trim().toLowerCase();
+      if (foodKey == key) return food;
+      if (loose == null &&
+          (foodKey.contains(key) || key.contains(foodKey))) {
+        loose = food;
+      }
+    }
+    return loose;
+  }
+
+  FoodItem _foodWithCatalog(FoodItem food, {int? grams}) {
+    final catalog = _catalogFoodByName[food.name.trim().toLowerCase()];
+    final cachedImage = _imageUrlForFoodName(food.name);
+    if (catalog == null && cachedImage == null) return food;
+    final source = catalog ?? food.copyWith(imageUrl: cachedImage);
+    return food.withServingFrom(source, loggedGrams: grams);
+  }
+
+  /// Restores catalog serving (bowl/glass/ml) and photo for a logged food.
+  Future<FoodItem> hydrateLoggedFood(FoodItem food, {int? grams}) async {
+    var next = _foodWithCatalog(food, grams: grams);
+    final needsServing = !next.hasDisplayServing;
+    final needsImage = (next.imageUrl ?? '').trim().isEmpty;
+    if (needsServing || needsImage) {
+      await _lookupCatalogFood(food.name);
+      next = _foodWithCatalog(next, grams: grams);
+    }
+    return next;
+  }
+
+  void _storeHydratedMeal(CustomMealPreset meal) {
+    final index = customMealPresets.indexWhere((item) => item.id == meal.id);
+    if (index < 0) return;
+    customMealPresets[index] = meal;
+  }
+
+  void _suppressDroppedQuickItemNames(Set<String> previousNames) {
+    final live = _liveCatalogNames;
+    var changed = false;
+    for (final name in previousNames) {
+      if (name.isEmpty || live.contains(name)) continue;
+      if (_suppressedQuickItemNames.add(name)) changed = true;
+    }
+    if (changed) entriesRevision.value++;
+  }
+
+  void _forgetRemoteMyFood(String id) {
+    _lastRemoteMyFoods = [
+      for (final food in _lastRemoteMyFoods)
+        if (food.id != id) food,
+    ];
+  }
+
+  void _forgetRemoteCustomMeal(String id) {
+    _lastRemoteCustomMeals = [
+      for (final meal in _lastRemoteCustomMeals)
+        if (meal.id != id) meal,
+    ];
+  }
+
+  bool isFavorite(SavedMealItem item) {
+    return favoriteMeals.any(
+      (favorite) => favorite.food.isSameFavoriteFood(item.food),
+    );
+  }
+
+  bool isFavoriteFood(FoodItem food, [String? meal]) {
+    return favoriteMeals.any((item) => item.food.isSameFavoriteFood(food));
+  }
+
+  String _favoriteFoodKey(FoodItem food) {
+    final id = food.catalogId?.trim();
+    if (id != null && id.isNotEmpty) return 'id|$id';
+    return 'name|${food.name.trim().toLowerCase()}';
+  }
+
+  List<SavedMealItem> _favoritesForFood(FoodItem food) {
+    return [
+      for (final item in favoriteMeals)
+        if (item.food.isSameFavoriteFood(food)) item,
+    ];
+  }
+
+  List<SavedMealItem> _uniqueFavorites(Iterable<SavedMealItem> items) {
+    final seen = <String>{};
+    final unique = <SavedMealItem>[];
+    for (final item in items) {
+      if (seen.add(_favoriteFoodKey(item.food))) unique.add(item);
+    }
+    return unique;
+  }
+
+  /// Star toggle: one favourite per food. Second tap removes it.
+  Future<bool?> toggleFavorite(SavedMealItem item) async {
+    final key = _favoriteFoodKey(item.food);
+    if (key == 'name|' || !_favoriteToggleKeys.add(key)) return null;
+
+    try {
+      final existing = _favoritesForFood(item.food);
+      if (existing.isNotEmpty) {
+        favoriteMeals.removeWhere(
+          (favorite) => favorite.food.isSameFavoriteFood(item.food),
+        );
+        for (final favorite in existing) {
+          unawaited(_syncDeleteFavourite(favorite));
+        }
+        return false;
+      }
+
+      favoriteMeals.insert(0, item);
+      unawaited(_syncAddFavourite(item));
+      return true;
+    } finally {
+      _favoriteToggleKeys.remove(key);
+    }
+  }
+
+  Future<bool?> toggleFavoriteFood({
     required FoodItem food,
     required int grams,
     required String meal,
   }) async {
-    await toggleFavorite(SavedMealItem(food: food, grams: grams, meal: meal));
+    return toggleFavorite(
+      SavedMealItem(
+        food: food,
+        grams: grams,
+        meal: meal,
+        servingQuantity: food.servingCountForGrams(grams),
+        servingUnit: food.servingUnit,
+      ),
+    );
   }
 
   Future<void> removeFavorite(SavedMealItem item) async {
-    SavedMealItem existing = item;
-    for (final favorite in favoriteMeals) {
-      if (favorite.matchesFavorite(item)) {
-        existing = favorite;
-        break;
-      }
+    final existing = _favoritesForFood(item.food);
+    if (existing.isEmpty) return;
+    favoriteMeals.removeWhere(
+      (favorite) => favorite.food.isSameFavoriteFood(item.food),
+    );
+    for (final favorite in existing) {
+      unawaited(_syncDeleteFavourite(favorite));
     }
-    favoriteMeals.removeWhere((favorite) => favorite.matchesFavorite(item));
-    unawaited(_syncDeleteFavourite(existing));
   }
 
   Future<void> _syncAddFavourite(SavedMealItem item) async {
@@ -649,17 +1087,24 @@ class FoodController extends GetxController {
       final synced = await _favouriteMealsRepository.addFavourite(
         accessToken: accessToken,
         item: item,
+        imageUrl: item.food.imageUrl,
       );
 
-      final index = favoriteMeals.indexWhere(
-        (favorite) =>
-            favorite.matchesFavorite(item) || favorite.matchesFavorite(synced),
+      final merged = synced.copyWith(
+        food: synced.food.copyWith(
+          imageUrl: MediaUrl.preferLoadable([
+            synced.food.imageUrl,
+            item.food.imageUrl,
+          ]),
+          catalogId: synced.food.catalogId ?? item.food.catalogId,
+        ),
       );
-      if (index >= 0) {
-        favoriteMeals[index] = synced;
-      } else {
-        favoriteMeals.insert(0, synced);
-      }
+      favoriteMeals.removeWhere(
+        (favorite) =>
+            favorite.food.isSameFavoriteFood(item.food) ||
+            favorite.food.isSameFavoriteFood(merged.food),
+      );
+      favoriteMeals.insert(0, merged);
       _lastFavouritesFetchAt = DateTime.now();
     } on FavouriteMealsApiException catch (error) {
       debugPrint('FoodController: favourite-meals POST failed: $error');
@@ -708,7 +1153,8 @@ class FoodController extends GetxController {
     SavedMealItem? matchIn(Iterable<SavedMealItem> items) {
       for (final candidate in items) {
         if (!candidate.hasServerId) continue;
-        if (candidate.matchesFavorite(item) ||
+        if (candidate.food.isSameFavoriteFood(item.food) ||
+            candidate.matchesFavorite(item) ||
             (candidate.food.name.trim().toLowerCase() ==
                     item.food.name.trim().toLowerCase() &&
                 candidate.meal == item.meal)) {
@@ -737,11 +1183,7 @@ class FoodController extends GetxController {
   }
 
   /// Logs a favourite locally and via `POST .../favourite-meals/:id/log`.
-  void logFavouriteMeal(
-    SavedMealItem item, {
-    String? meal,
-    DateTime? date,
-  }) {
+  void logFavouriteMeal(SavedMealItem item, {String? meal, DateTime? date}) {
     final mealSlot = meal ?? item.meal;
     final day = MealEntry.normalizeDate(date ?? selectedLogDate.value);
     final entry = item.copyWith(meal: mealSlot).toMealEntry(date: day);
@@ -796,13 +1238,6 @@ class FoodController extends GetxController {
       customMealPresets.insert(0, preset);
     }
 
-    for (final item in preset.items) {
-      if (!isFavorite(item)) {
-        favoriteMeals.insert(0, item);
-      }
-    }
-
-
     if (awaitSync) {
       return _syncCustomMealPreset(
         preset,
@@ -812,11 +1247,7 @@ class FoodController extends GetxController {
     }
 
     unawaited(
-      _syncCustomMealPreset(
-        preset,
-        previous: previous,
-        isUpdate: updating,
-      ),
+      _syncCustomMealPreset(preset, previous: previous, isUpdate: updating),
     );
     return preset;
   }
@@ -869,10 +1300,7 @@ class FoodController extends GetxController {
 
     customFoodPresets.removeWhere((food) => food.id == id);
 
-    final synced = await _syncDeleteMyFood(
-      id,
-      name: removed?.food.name,
-    );
+    final synced = await _syncDeleteMyFood(id, name: removed?.food.name);
     if (!synced) {
       if (removed != null &&
           customFoodPresets.every((food) => food.id != removed!.id)) {
@@ -882,6 +1310,12 @@ class FoodController extends GetxController {
         'Could not delete "${removed?.food.name ?? 'food'}" on the server.',
       );
     }
+
+    _forgetRemoteMyFood(id);
+    if (removed != null) {
+      _forgetRemoteMyFood(removed.id);
+      _suppressDroppedQuickItemNames(_quickItemNamesForFoods([removed]));
+    }
   }
 
   /// Logs a My Food item locally and via `POST /api/v1/my-foods/:id/log`.
@@ -889,14 +1323,16 @@ class FoodController extends GetxController {
     CustomFoodPreset preset, {
     String? meal,
     DateTime? date,
+    int? grams,
+    double? servingQuantity,
   }) {
     final mealSlot = meal ?? selectedMeal.value;
     final day = MealEntry.normalizeDate(date ?? selectedLogDate.value);
     final entry = SavedMealItem(
       food: preset.food,
-      grams: preset.defaultGrams,
+      grams: grams ?? preset.defaultGrams,
       meal: mealSlot,
-      servingQuantity: preset.servingQuantity,
+      servingQuantity: servingQuantity ?? preset.servingQuantity,
       servingUnit: preset.servingUnit,
       nutritionBasisQuantity: preset.nutritionBasisQuantity,
       basisCarbs: preset.food.carbs,
@@ -934,21 +1370,8 @@ class FoodController extends GetxController {
         preset: preset,
         previous: previous,
       );
-      late final CustomFoodPreset synced;
 
-      if (serverId != null) {
-        debugPrint(
-          'FoodController: calling PATCH my-foods API at '
-          '${ApiEndpoints.myFoodByIdUrl(serverId)} '
-          '(isUpdate=$isUpdate localId=${preset.id})',
-        );
-        synced = await _myFoodsRepository.updateMyFood(
-          accessToken: accessToken,
-          myFoodId: serverId,
-          preset: preset.copyWith(id: serverId),
-          mealtime: mealtime,
-        );
-      } else if (isUpdate) {
+      if (serverId == null && isUpdate) {
         debugPrint(
           'FoodController: edit sync skipped POST for "${preset.food.name}" '
           '(no server my-food id resolved for localId=${preset.id})',
@@ -958,15 +1381,48 @@ class FoodController extends GetxController {
           title: 'Save failed',
         );
         return preset;
+      }
+
+      final uploaded = await _imageForSync(
+        accessToken: accessToken,
+        imageBytes: preset.imageBytes,
+        existingUrl: preset.food.imageUrl,
+      );
+      late final CustomFoodPreset synced;
+
+      if (serverId != null) {
+        debugPrint(
+          'FoodController: calling PATCH my-foods API at '
+          '${ApiEndpoints.myFoodByIdUrl(serverId)} '
+          '(isUpdate=$isUpdate localId=${preset.id})',
+        );
+        final toSync = _foodPresetWithImage(
+          preset.copyWith(id: serverId),
+          imageKey: uploaded?.key,
+          displayUrl: uploaded?.displayUrl,
+        );
+        synced = await _myFoodsRepository.updateMyFood(
+          accessToken: accessToken,
+          myFoodId: serverId,
+          preset: toSync,
+          mealtime: mealtime,
+          imageUrl: uploaded?.key,
+        );
       } else {
         debugPrint(
           'FoodController: calling POST my-foods API at '
           '${ApiEndpoints.myFoodsUrl}',
         );
+        final toSync = _foodPresetWithImage(
+          preset,
+          imageKey: uploaded?.key,
+          displayUrl: uploaded?.displayUrl,
+        );
         synced = await _myFoodsRepository.saveMyFood(
           accessToken: accessToken,
-          preset: preset,
+          preset: toSync,
           mealtime: mealtime,
+          imageUrl: uploaded?.key,
         );
       }
 
@@ -985,6 +1441,15 @@ class FoodController extends GetxController {
         synced,
       ];
       return synced;
+    } on UploadsApiException catch (error) {
+      debugPrint('FoodController: my-foods image upload failed: $error');
+      AppSnackbar.error(
+        error.message.isNotEmpty
+            ? error.message
+            : 'Could not upload the photo for ${preset.food.name}.',
+        title: 'Photo upload failed',
+      );
+      return preset;
     } on MyFoodsApiException catch (error) {
       debugPrint('FoodController: my-foods API failed: $error');
       AppSnackbar.error(
@@ -1089,10 +1554,7 @@ class FoodController extends GetxController {
   }
 
   /// Returns `true` when the server delete succeeded (or food was already gone).
-  Future<bool> _syncDeleteMyFood(
-    String myFoodId, {
-    String? name,
-  }) async {
+  Future<bool> _syncDeleteMyFood(String myFoodId, {String? name}) async {
     final accessToken = await _mealAccessToken();
     if (accessToken == null) {
       debugPrint(
@@ -1208,11 +1670,53 @@ class FoodController extends GetxController {
       _lastMyFoodsFetchAt = DateTime.now();
       return matchIn(remote);
     } catch (error) {
-      debugPrint(
-        'FoodController: failed resolving server my-food id: $error',
-      );
+      debugPrint('FoodController: failed resolving server my-food id: $error');
     }
     return null;
+  }
+
+  /// Uploads a new photo and returns the object key plus a loadable URL.
+  Future<({String key, String? displayUrl})?> _imageForSync({
+    required String accessToken,
+    Uint8List? imageBytes,
+    String? existingUrl,
+  }) async {
+    final existingKey = MediaUrl.apiImageKey(existingUrl);
+    if (existingKey != null) {
+      return (key: existingKey, displayUrl: MediaUrl.resolve(existingUrl));
+    }
+    if (imageBytes == null || imageBytes.isEmpty) return null;
+
+    final scaled = await downscaleImageBytes(imageBytes);
+    final result = await _uploadsRepository.uploadImage(
+      accessToken: accessToken,
+      imageBytes: scaled,
+      filename: uploadImageFilename(scaled),
+    );
+    return (
+      key: result.key,
+      displayUrl: result.url ?? MediaUrl.resolve(result.key),
+    );
+  }
+
+  CustomFoodPreset _foodPresetWithImage(
+    CustomFoodPreset preset, {
+    String? imageKey,
+    String? displayUrl,
+  }) {
+    final url = displayUrl ?? MediaUrl.resolve(imageKey);
+    if (url == null || url.isEmpty) return preset;
+    return preset.copyWith(food: preset.food.copyWith(imageUrl: url));
+  }
+
+  CustomMealPreset _mealPresetWithImage(
+    CustomMealPreset preset, {
+    String? imageKey,
+    String? displayUrl,
+  }) {
+    final url = displayUrl ?? MediaUrl.resolve(imageKey);
+    if (url == null || url.isEmpty) return preset;
+    return preset.copyWith(imageUrl: url);
   }
 
   Future<CustomMealPreset> _syncCustomMealPreset(
@@ -1239,6 +1743,30 @@ class FoodController extends GetxController {
         preset: preset,
         previous: previous,
       );
+
+      if (serverId == null && isUpdate) {
+        // Editing an existing meal — never POST a duplicate.
+        debugPrint(
+          'FoodController: edit sync skipped POST for "${preset.name}" '
+          '(no server my-meal id resolved for localId=${preset.id})',
+        );
+        AppSnackbar.error(
+          'Could not update ${preset.name} on the server.',
+          title: 'Save failed',
+        );
+        return preset;
+      }
+
+      final uploaded = await _imageForSync(
+        accessToken: accessToken,
+        imageBytes: preset.imageBytes,
+        existingUrl: preset.imageUrl,
+      );
+      final toSync = _mealPresetWithImage(
+        serverId != null ? preset.copyWith(id: serverId) : preset,
+        imageKey: uploaded?.key,
+        displayUrl: uploaded?.displayUrl,
+      );
       late final CustomMealPreset synced;
 
       if (serverId != null) {
@@ -1250,19 +1778,9 @@ class FoodController extends GetxController {
         synced = await _customMealsRepository.updateCustomMeal(
           accessToken: accessToken,
           myMealId: serverId,
-          preset: preset.copyWith(id: serverId),
+          preset: toSync,
+          imageUrl: uploaded?.key,
         );
-      } else if (isUpdate) {
-        // Editing an existing meal — never POST a duplicate.
-        debugPrint(
-          'FoodController: edit sync skipped POST for "${preset.name}" '
-          '(no server my-meal id resolved for localId=${preset.id})',
-        );
-        AppSnackbar.error(
-          'Could not update ${preset.name} on the server.',
-          title: 'Save failed',
-        );
-        return preset;
       } else {
         debugPrint(
           'FoodController: calling POST my-meals API at '
@@ -1271,7 +1789,7 @@ class FoodController extends GetxController {
         );
         synced = await _customMealsRepository.createCustomMeal(
           accessToken: accessToken,
-          preset: preset,
+          preset: toSync,
         );
       }
 
@@ -1287,6 +1805,15 @@ class FoodController extends GetxController {
       _lastCustomMealsFetchAt = DateTime.now();
       _rememberRemoteCustomMeal(synced);
       return synced;
+    } on UploadsApiException catch (error) {
+      debugPrint('FoodController: my-meals image upload failed: $error');
+      AppSnackbar.error(
+        error.message.isNotEmpty
+            ? error.message
+            : 'Could not upload the photo for ${preset.name}.',
+        title: 'Photo upload failed',
+      );
+      return preset;
     } on CustomMealsApiException catch (error) {
       debugPrint('FoodController: custom meal API failed: $error');
       AppSnackbar.error(
@@ -1389,6 +1916,12 @@ class FoodController extends GetxController {
         'Could not delete "${removed?.name ?? 'meal'}" on the server.',
       );
     }
+
+    _forgetRemoteCustomMeal(id);
+    if (removed != null) {
+      _forgetRemoteCustomMeal(removed.id);
+      _suppressDroppedQuickItemNames(_quickItemNamesForMeals([removed]));
+    }
   }
 
   /// Returns `true` when the server delete succeeded (or meal was already gone).
@@ -1471,7 +2004,8 @@ class FoodController extends GetxController {
       for (final meal in meals) {
         if (_looksLikeLocalMealId(meal.id)) continue;
         final sameName = meal.name.trim().toLowerCase() == nameKey;
-        final sameMeal = mealKey == null ||
+        final sameMeal =
+            mealKey == null ||
             mealKey.isEmpty ||
             meal.meal.trim().toLowerCase() == mealKey;
         if (sameName && sameMeal) return meal.id;
@@ -1491,9 +2025,7 @@ class FoodController extends GetxController {
       _lastCustomMealsFetchAt = DateTime.now();
       return matchIn(remote);
     } catch (error) {
-      debugPrint(
-        'FoodController: failed resolving server my-meal id: $error',
-      );
+      debugPrint('FoodController: failed resolving server my-meal id: $error');
     }
     return null;
   }
@@ -1567,14 +2099,15 @@ class FoodController extends GetxController {
       );
     }
 
-    _refreshMealsFuture = _refreshMealsFromApi(
-      date: date,
-      period: period,
-      fromDate: fromDate,
-      toDate: toDate,
-    ).whenComplete(() {
-      _refreshMealsFuture = null;
-    });
+    _refreshMealsFuture =
+        _refreshMealsFromApi(
+          date: date,
+          period: period,
+          fromDate: fromDate,
+          toDate: toDate,
+        ).whenComplete(() {
+          _refreshMealsFuture = null;
+        });
 
     return _refreshMealsFuture!;
   }
@@ -1589,11 +2122,7 @@ class FoodController extends GetxController {
       to = swap;
     }
 
-    await refreshMealsFromApi(
-      period: 'custom',
-      fromDate: from,
-      toDate: to,
-    );
+    await refreshMealsFromApi(period: 'custom', fromDate: from, toDate: to);
   }
 
   Future<void> _refreshMealsFromApi({
@@ -1642,27 +2171,31 @@ class FoodController extends GetxController {
         debugPrint(
           'FoodController:   id=${meal.id} '
           'local=${_looksLikeLocalMealId(meal.id)} '
-          'name=${meal.food.name} meal=${meal.meal} g=${meal.grams}',
+          'name=${meal.food.name} meal=${meal.meal} g=${meal.grams} '
+          'image=${meal.food.imageUrl}',
         );
       }
 
-      apiMeals.assignAll(fetched);
+      final preserved = _hydrateMealsFromCatalog(fetched);
+
+      apiMeals.assignAll(preserved);
 
       if (date != null) {
         final normalized = MealEntry.normalizeDate(date);
         // API is source of truth for that day — do not keep local-only ghosts.
         entries.assignAll([
           ...entries.where((e) => e.date != normalized),
-          ...fetched,
+          ...preserved,
         ]);
         _markEntriesDirty();
-      } else if (fetched.isNotEmpty) {
+      } else if (preserved.isNotEmpty) {
         // Full meals payload replaces in-memory diary (API source of truth).
-        entries.assignAll(fetched);
+        entries.assignAll(preserved);
         _markEntriesDirty();
       }
 
       _notifyStreakController();
+      unawaited(_hydrateMissingMealCatalog(preserved));
     } on MealsApiException catch (error) {
       debugPrint('FoodController: meals API failed: $error');
       mealsApiErrorMessage.value = error.message;
@@ -1675,6 +2208,93 @@ class FoodController extends GetxController {
       pruneDeletingAnimations();
       entriesRevision.value++;
     }
+  }
+
+  List<MealEntry> _hydrateMealsFromCatalog(List<MealEntry> fetched) {
+    final preserved = _preserveHouseholdServings(fetched);
+    return [
+      for (final entry in preserved)
+        entry.copyWith(food: _foodWithCatalog(entry.food, grams: entry.grams)),
+    ];
+  }
+
+  Future<void> _hydrateMissingMealCatalog(List<MealEntry> meals) async {
+    final missing = <String>{
+      for (final meal in meals)
+        if (!meal.food.hasDisplayServing ||
+            (meal.food.imageUrl ?? '').trim().isEmpty)
+          meal.food.name.trim(),
+    }..removeWhere((name) => name.isEmpty);
+    if (missing.isEmpty) return;
+
+    await Future.wait(missing.map(_lookupCatalogFood));
+    _applyCatalogToLoadedMeals();
+  }
+
+  void _applyCatalogToLoadedMeals() {
+    var changed = false;
+
+    FoodItem apply(MealEntry entry) {
+      final food = entry.food;
+      final next = _foodWithCatalog(food, grams: entry.grams);
+      if (next.imageUrl != food.imageUrl ||
+          next.servingUnit != food.servingUnit ||
+          next.gramsPerServing != food.gramsPerServing) {
+        changed = true;
+      }
+      return next;
+    }
+
+    for (var i = 0; i < entries.length; i++) {
+      final food = apply(entries[i]);
+      if (!identical(food, entries[i].food)) {
+        entries[i] = entries[i].copyWith(food: food);
+      }
+    }
+    for (var i = 0; i < apiMeals.length; i++) {
+      final food = apply(apiMeals[i]);
+      if (!identical(food, apiMeals[i].food)) {
+        apiMeals[i] = apiMeals[i].copyWith(food: food);
+      }
+    }
+    if (changed) {
+      _markEntriesDirty();
+      entriesRevision.value++;
+    }
+  }
+
+  List<MealEntry> _preserveHouseholdServings(List<MealEntry> fetched) {
+    if (fetched.isEmpty) return fetched;
+    final previous = [...entries, ...apiMeals];
+    if (previous.isEmpty) return fetched;
+
+    final byId = <String, MealEntry>{};
+    for (final entry in previous) {
+      if (entry.food.usesHouseholdServing) {
+        byId[entry.id] = entry;
+      }
+    }
+
+    return fetched.map((remote) {
+      if (remote.food.usesHouseholdServing) return remote;
+
+      final byServerId = byId[remote.id];
+      if (byServerId != null) {
+        return remote.copyWith(
+          food: remote.food.withServingFrom(byServerId.food),
+        );
+      }
+
+      for (final local in previous) {
+        if (!local.food.usesHouseholdServing) continue;
+        if (local.food.name.toLowerCase() != remote.food.name.toLowerCase()) {
+          continue;
+        }
+        if (local.meal != remote.meal || local.date != remote.date) continue;
+        return remote.copyWith(food: remote.food.withServingFrom(local.food));
+      }
+      return remote;
+    }).toList();
   }
 
   List<MealEntry> get todayMeals =>
@@ -1702,8 +2322,7 @@ class FoodController extends GetxController {
     final yesterday = today.subtract(const Duration(days: 1));
 
     // Prefer the previous calendar day when it has any meals.
-    final yesterdayMeals =
-        entries.where((e) => e.date == yesterday).toList();
+    final yesterdayMeals = entries.where((e) => e.date == yesterday).toList();
     if (yesterdayMeals.isNotEmpty) return yesterdayMeals;
 
     final previousDays = entries
@@ -1741,12 +2360,13 @@ class FoodController extends GetxController {
     yesterdayMeals = entries.where((e) => e.date == yesterday).toList();
     if (yesterdayMeals.isNotEmpty) return yesterdayMeals;
 
-    final previousDays = entries
-        .where((e) => e.date.isBefore(today))
-        .map((e) => e.date)
-        .toSet()
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
+    final previousDays =
+        entries
+            .where((e) => e.date.isBefore(today))
+            .map((e) => e.date)
+            .toSet()
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
 
     if (previousDays.isEmpty) return [];
 
@@ -1830,8 +2450,6 @@ class FoodController extends GetxController {
   }
 
   Future<void> searchFoods(String query) async {
-     
-
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
       searchResults.clear();
@@ -1842,15 +2460,8 @@ class FoodController extends GetxController {
     isSearching.value = true;
     searchErrorMessage.value = null;
     try {
-
       await AnalyticsService.logFoodSearch(trimmed);
       searchResults.value = await searchFoodsEphemeral(trimmed);
-      
-    
-      
-      
-      
-
     } on FoodApiException catch (error) {
       searchResults.clear();
       searchErrorMessage.value = error.message;
@@ -1872,12 +2483,14 @@ class FoodController extends GetxController {
     if (accessToken == null || accessToken.isEmpty) {
       throw const FoodApiException('Sign in to search foods.');
     }
-    return _api.searchFoods(
+    final foods = await _api.searchFoods(
       trimmed,
       accessToken: accessToken,
       page: 1,
       limit: 20,
     );
+    _rememberFoodPhotos(foods);
+    return foods;
   }
 
   void onSearchChanged(String value) {
@@ -1998,19 +2611,17 @@ class FoodController extends GetxController {
 
   double get totalFat => todayMeals.fold(0.0, (sum, e) => sum + e.fat);
 
-void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
+  void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
+    final selectedMealType = meal ?? selectedMeal.value;
 
-  final selectedMealType = meal ?? selectedMeal.value;
-
-  _insertEntry(
-    MealEntry(
-      food: food,
-      grams: grams ?? selectedGrams.value,
-      meal: selectedMealType,
-      date: MealEntry.normalizeDate(date ?? selectedLogDate.value),
-    ),
-  );
-
+    _insertEntry(
+      MealEntry(
+        food: food,
+        grams: grams ?? food.defaultGrams,
+        meal: selectedMealType,
+        date: MealEntry.normalizeDate(date ?? selectedLogDate.value),
+      ),
+    );
 
     selectedGrams.value = 100;
   }
@@ -2061,9 +2672,12 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
         accessToken: accessToken,
         entry: entry,
       );
+      final synced = created.copyWith(
+        food: created.food.withServingFrom(entry.food),
+      );
 
       final index = entries.indexWhere((e) => e.id == entry.id);
-      if (_looksLikeLocalMealId(created.id)) {
+      if (_looksLikeLocalMealId(synced.id)) {
         // Response missing server id — drop draft and reload from API.
         if (index >= 0) entries.removeAt(index);
         await refreshMealsFromApi(date: entry.date);
@@ -2071,20 +2685,17 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
       }
 
       if (index >= 0) {
-        entries[index] = created;
+        entries[index] = synced;
       } else {
-        entries.add(created);
+        entries.add(synced);
       }
- await AnalyticsService.logMealAdded(created.meal);
+      await AnalyticsService.logMealAdded(synced.meal);
 
-      apiMeals.removeWhere(
-        (e) => e.id == entry.id || e.id == created.id,
-      );
-      apiMeals.add(created);
+      apiMeals.removeWhere((e) => e.id == entry.id || e.id == synced.id);
+      apiMeals.add(synced);
 
-      _dropDuplicateEntriesById(created.id);
-      _markEntriesDirty(celebrationDay: created.date);
-      
+      _dropDuplicateEntriesById(synced.id);
+      _markEntriesDirty(celebrationDay: synced.date);
     } on MealsApiException catch (error) {
       debugPrint('FoodController: create meal API failed: $error');
       mealsApiErrorMessage.value = error.message;
@@ -2228,11 +2839,16 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
 
   /// Updates a diary meal on the server (`PATCH /meals/:id`).
   /// Falls back to delete + create if PATCH is unsupported.
-  Future<bool> updateEntry(MealEntry entry, {int? grams, String? meal}) async {
+  Future<bool> updateEntry(
+    MealEntry entry, {
+    int? grams,
+    String? meal,
+    FoodItem? food,
+  }) async {
     final index = entries.indexWhere((e) => e.id == entry.id);
     if (index < 0) return false;
 
-    final updated = entry.copyWith(grams: grams, meal: meal);
+    final updated = entry.copyWith(grams: grams, meal: meal, food: food);
     final previous = entries[index];
 
     // Optimistic UI — roll back if API fails.
@@ -2263,13 +2879,20 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
         accessToken: accessToken,
         entry: updated,
       );
-      final i = entries.indexWhere((e) => e.id == entry.id || e.id == saved.id);
+      final synced = saved.copyWith(
+        food: saved.food.withServingFrom(updated.food),
+        grams: grams ?? saved.grams,
+        meal: meal ?? saved.meal,
+      );
+      final i = entries.indexWhere(
+        (e) => e.id == entry.id || e.id == synced.id,
+      );
       if (i >= 0) {
-        entries[i] = saved;
+        entries[i] = synced;
       }
-      apiMeals.removeWhere((e) => e.id == entry.id || e.id == saved.id);
-      apiMeals.add(saved);
-      _markEntriesDirty(celebrationDay: saved.date);
+      apiMeals.removeWhere((e) => e.id == entry.id || e.id == synced.id);
+      apiMeals.add(synced);
+      _markEntriesDirty(celebrationDay: synced.date);
       return true;
     } on MealsApiException catch (error) {
       // Backend may not support PATCH — replace via delete + create.
@@ -2297,9 +2920,7 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
           } else {
             entries.add(created);
           }
-          apiMeals.removeWhere(
-            (e) => e.id == entry.id || e.id == created.id,
-          );
+          apiMeals.removeWhere((e) => e.id == entry.id || e.id == created.id);
           apiMeals.add(created);
           _markEntriesDirty(celebrationDay: created.date);
           return true;
@@ -2389,8 +3010,9 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
           if (_refreshMealsFuture != null) {
             await _refreshMealsFuture!.timeout(const Duration(seconds: 6));
           }
-          await refreshMealsFromApi(date: entry.date)
-              .timeout(const Duration(seconds: 6));
+          await refreshMealsFromApi(
+            date: entry.date,
+          ).timeout(const Duration(seconds: 6));
         } on TimeoutException {
           debugPrint(
             'FoodController: meals refresh timed out during local delete',
@@ -2473,8 +3095,9 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
       if (_refreshMealsFuture != null) {
         await _refreshMealsFuture!.timeout(const Duration(seconds: 6));
       }
-      await refreshMealsFromApi(date: entry.date)
-          .timeout(const Duration(seconds: 6));
+      await refreshMealsFromApi(
+        date: entry.date,
+      ).timeout(const Duration(seconds: 6));
     } on TimeoutException {
       debugPrint('FoodController: post-delete meals refresh timed out');
     }
@@ -2577,9 +3200,7 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
         }
       }
     } catch (error, stack) {
-      debugPrint(
-        'FoodController: commitDeletingGroup failed: $error\n$stack',
-      );
+      debugPrint('FoodController: commitDeletingGroup failed: $error\n$stack');
       allOk = false;
       AppSnackbar.error(
         'Could not delete “${group.representative.food.name}”.',
@@ -2605,9 +3226,7 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
     // Safety net for abandoned deletes.
     Future<void>.delayed(const Duration(seconds: 12), () {
       if (!deletingMealIds.contains(id)) return;
-      debugPrint(
-        'FoodController: force-clear stuck delete animation id=$id',
-      );
+      debugPrint('FoodController: force-clear stuck delete animation id=$id');
       _deleteCommitInFlight.remove(id);
       finishDeletingGroup(group);
     });
@@ -2629,10 +3248,7 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
     finishDeletingGroup(group);
 
     if (allOk) {
-      AppSnackbar.success(
-        'Removed from your diary.',
-        title: 'Deleted',
-      );
+      AppSnackbar.success('Removed from your diary.', title: 'Deleted');
     }
     return allOk;
   }
@@ -2661,9 +3277,7 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
   void pruneDeletingAnimations() {}
 
   List<MealLogGroup> deletingGroupsForMeal(String meal) {
-    return _deletingGroups
-        .where((g) => g.representative.meal == meal)
-        .toList();
+    return _deletingGroups.where((g) => g.representative.meal == meal).toList();
   }
 
   Future<void> cancelRepeatedYesterdayMeals() async {
@@ -2755,10 +3369,7 @@ void addToLog(FoodItem food, {String? meal, DateTime? date, int? grams}) {
   }
 
   void showReadOnlyMessage() {
-    AppSnackbar.info(
-      "Past meals can't be edited.",
-      title: 'Read only',
-    );
+    AppSnackbar.info("Past meals can't be edited.", title: 'Read only');
   }
 
   @override

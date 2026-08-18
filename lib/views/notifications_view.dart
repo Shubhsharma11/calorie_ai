@@ -356,16 +356,11 @@ class _NotificationCard extends StatelessWidget {
 ),
           
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: visual.accent.withValues(alpha: isUnread ? 0.13 : 0.09),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(visual.icon, color: visual.accent, size: 20),
+              _NotificationLeading(
+                visual: visual,
+                isUnread: isUnread,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -511,6 +506,29 @@ class _EmptyNotifications extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _NotificationLeading extends StatelessWidget {
+  const _NotificationLeading({
+    required this.visual,
+    required this.isUnread,
+  });
+
+  final _NotificationVisual visual;
+  final bool isUnread;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: visual.accent.withValues(alpha: isUnread ? 0.13 : 0.09),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(visual.icon, color: visual.accent, size: 20),
     );
   }
 }

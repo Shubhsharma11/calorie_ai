@@ -3,8 +3,12 @@ abstract final class ApiEndpoints {
   
     static const String baseUrl = 'https://fitbuddyai.srhsoftwares.com';
 
+  /// Public S3 host for uploaded avatars (`avatars/<file>`).
+  static const String s3PublicBaseUrl =
+      'https://fitbuddyai.s3.ap-south-1.amazonaws.com';
 
-// static const String baseUrl = 'https://collectibles-healing-assumptions-thumbzilla.trycloudflare.com';
+
+// static const String baseUrl = 'https://conventional-plate-fitness-cole.trycloudflare.com';
 
 
 
@@ -13,6 +17,8 @@ abstract final class ApiEndpoints {
   static const String appleAuth = '$apiVersion/auth/apple';
   static const String phoneAuth = '$apiVersion/auth/phone';
   static const String logout = '$apiVersion/auth/logout';
+  static const String authMe = '$apiVersion/auth/me';
+  static const String authMeAvatar = '$apiVersion/auth/me/avatar';
   static const String deleteAccount = '$apiVersion/auth/account';
   static const String fcmToken = '$apiVersion/auth/fcm-token';
   static const String notifications = '$apiVersion/notifications';
@@ -32,6 +38,7 @@ abstract final class ApiEndpoints {
   static const String favouriteMeals = '$apiVersion/favourite-meals';
   static const String searchFoods = '$apiVersion/search/foods';
   static const String supportReports = '$apiVersion/support/reports';
+  static const String uploadsImage = '$apiVersion/uploads/image';
 
 
 
@@ -167,6 +174,8 @@ abstract final class ApiEndpoints {
   static String get appleAuthUrl => url(appleAuth);
   static String get phoneAuthUrl => url(phoneAuth);
   static String get logoutUrl => url(logout);
+  static String get authMeUrl => url(authMe);
+  static String get authMeAvatarUrl => url(authMeAvatar);
   static String get deleteAccountUrl => url(deleteAccount);
   static String get fcmTokenUrl => url(fcmToken);
   static String get notificationsUrl => url(notifications);
@@ -225,6 +234,7 @@ abstract final class ApiEndpoints {
   static String myMealByIdUrl(String myMealId) => url(myMealById(myMealId));
   static String get searchFoodsUrl => url(searchFoods);
   static String get supportReportsUrl => url(supportReports);
+  static String get uploadsImageUrl => url(uploadsImage);
 
   static const String openFoodFactsBaseUrl = 'https://world.openfoodfacts.org';
 

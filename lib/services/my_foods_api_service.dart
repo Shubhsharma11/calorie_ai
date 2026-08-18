@@ -91,11 +91,13 @@ class MyFoodsApiService {
     required String myFoodId,
     required CustomFoodPreset preset,
     required String mealtime,
+    String? imageUrl,
   }) async {
     final endpoint = ApiEndpoints.myFoodById(myFoodId);
     final body = ApiMyFoodMapper.toPatchRequestBody(
       preset: preset,
       mealtime: mealtime,
+      imageUrl: imageUrl,
     );
 
     debugPrint(

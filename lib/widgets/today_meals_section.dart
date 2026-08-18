@@ -8,6 +8,7 @@ import '../models/meal_type.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import 'food_emoji_avatar.dart';
+import 'media_viewer.dart';
 
 /// Reactive today's meals breakdown — rebuilds on any entry change.
 class TodayMealsSection extends StatelessWidget {
@@ -160,9 +161,14 @@ class _MealEntryRow extends StatelessWidget {
           child: Row(
             children: [
               FoodEmojiAvatar(
-                emoji: entry.food.emoji,
+                emoji: entry.food.displayEmoji,
                 imageUrl: entry.food.imageUrl,
                 size: r.scale(compact ? 36 : 40),
+                onTap: mediaViewerOpener(
+                  context: context,
+                  imageUrl: entry.food.imageUrl,
+                  title: entry.food.name,
+                ),
               ),
               SizedBox(width: r.scale(10)),
               Expanded(
@@ -176,7 +182,7 @@ class _MealEntryRow extends StatelessWidget {
                       style: TextStyle(fontWeight: FontWeight.w500),
                     ),
                     Text(
-                      '${entry.grams}g',
+                      entry.quantityLabel,
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,

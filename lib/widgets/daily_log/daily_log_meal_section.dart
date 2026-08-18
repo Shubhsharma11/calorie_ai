@@ -309,8 +309,8 @@ class _MealItemDeleteCardState extends State<_MealItemDeleteCard> {
                                   ),
                                   SizedBox(height: r.scale(3)),
                                   Text(
-                                    '${group.totalCalories} kcal'
-                                    ' · ${entry.grams}g$countLabel',
+                                    '${entry.quantityLabel}'
+                                    ' · ${group.totalCalories} kcal$countLabel',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(

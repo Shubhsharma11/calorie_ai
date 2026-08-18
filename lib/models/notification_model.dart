@@ -25,25 +25,57 @@ class NotificationModel {
 
   factory NotificationModel.fromRemoteMessage(RemoteMessage message) {
     final notification = message.notification;
+    final data = Map<String, dynamic>.from(message.data);
+    final title = notification?.title ?? _jsonString(data, const ['title']);
+    final body = notification?.body ?? _jsonString(data, const ['body']);
     return NotificationModel(
       id: message.messageId,
-      type: NotificationType.fromData(message.data),
-      title: notification?.title ?? message.data['title'] as String?,
-      body: notification?.body ?? message.data['body'] as String?,
-      data: Map<String, dynamic>.from(message.data),
+      type: NotificationType.resolve(
+        type: _jsonString(data, const [
+          'type',
+          'notification_type',
+          'notificationType',
+          'category',
+        ]),
+        title: title,
+        body: body,
+        data: data,
+      ),
+      title: title,
+      body: body,
+      data: data,
       messageId: message.messageId,
     );
   }
 
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
+    final data = json['data'] is Map
+        ? Map<String, dynamic>.from(json['data'] as Map)
+        : const <String, dynamic>{};
+    final title = _jsonString(json, const ['title']);
+    final body = _jsonString(json, const ['body']);
     return NotificationModel(
       id: json['id'] as String? ?? json['messageId'] as String?,
-      type: NotificationType.fromValue(json['type'] as String?),
-      title: json['title'] as String?,
-      body: json['body'] as String?,
-      data: json['data'] is Map
-          ? Map<String, dynamic>.from(json['data'] as Map)
-          : const {},
+      type: NotificationType.resolve(
+        type: _jsonString(json, const [
+              'type',
+              'notification_type',
+              'notificationType',
+              'category',
+            ]) ??
+            _jsonString(data, const [
+              'type',
+              'notification_type',
+              'notificationType',
+              'category',
+            ]),
+        title: title,
+        body: body,
+        data: data,
+      ),
+      title: title,
+      body: body,
+      data: data,
       messageId: json['messageId'] as String?,
       isRead: json['isRead'] == true,
       createdAt: _parseDateTime(json['createdAt']),
@@ -93,6 +125,14 @@ class NotificationModel {
   static DateTime? _parseDateTime(Object? raw) {
     if (raw is! String || raw.isEmpty) return null;
     return DateTime.tryParse(raw)?.toLocal();
+  }
+
+  static String? _jsonString(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
   }
 }
 

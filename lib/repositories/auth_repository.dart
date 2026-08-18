@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../models/avatar_upload_result.dart';
 import '../models/logout_result.dart';
 import '../services/auth_api_service.dart';
 import '../services/local_storage_service.dart';
@@ -27,6 +30,8 @@ class AuthRepository {
     String? refreshToken,
     required Map<String, dynamic> backendResponse,
     bool setupComplete = false,
+    String? avatarUrl,
+    String? avatarExpiresAt,
   }) {
     // Prefer explicit refresh; fall back to nested fields in backend payload.
     final resolvedRefresh = (refreshToken != null && refreshToken.isNotEmpty)
@@ -42,7 +47,25 @@ class AuthRepository {
       refreshToken: resolvedRefresh,
       backendResponse: backendResponse,
       setupComplete: setupComplete,
+      avatarUrl: avatarUrl,
+      avatarExpiresAt: avatarExpiresAt,
     );
+  }
+
+  Future<AvatarUploadResult> uploadAvatar({
+    required String accessToken,
+    required List<int> imageBytes,
+    String filename = 'avatar.jpg',
+  }) {
+    return _authApi.uploadAvatar(
+      accessToken: accessToken,
+      imageBytes: imageBytes,
+      filename: filename,
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchMe({required String accessToken}) {
+    return _authApi.fetchMe(accessToken: accessToken);
   }
 
   Future<String?> resolveRefreshToken({String? inMemoryToken}) async {
@@ -65,7 +88,15 @@ class AuthRepository {
 
   Future<void> deleteAccount({required String accessToken}) async {
     debugPrint('AuthRepository: calling delete account API');
-    await _authApi.deleteAccount(accessToken: accessToken);
+    try {
+      await _authApi
+          .deleteAccount(accessToken: accessToken)
+          .timeout(const Duration(seconds: 8));
+    } on TimeoutException {
+      throw const AuthApiException(
+        'The server took too long. Please try again.',
+      );
+    }
     await clearLocalAuthData();
     await _signOutFromGoogle();
   }
@@ -87,7 +118,9 @@ class AuthRepository {
           '(refresh=${refresh != null && refresh.isNotEmpty}, '
           'access=${access != null && access.isNotEmpty})',
         );
-        await _authApi.logout(refreshToken: refresh, accessToken: access);
+        await _authApi
+            .logout(refreshToken: refresh, accessToken: access)
+            .timeout(const Duration(seconds: 8));
         backendRevoked = true;
       } on AuthApiException catch (e, stackTrace) {
         backendError = e.message;

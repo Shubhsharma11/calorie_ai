@@ -1,3 +1,4 @@
+import '../core/media_url.dart';
 import 'custom_meal_preset.dart';
 import 'food_item.dart';
 import 'meal_type.dart';
@@ -6,12 +7,15 @@ import 'saved_meal_item.dart';
 /// Maps custom meal templates to/from `/api/v1/my-meals`.
 abstract final class ApiCustomMealMapper {
   static Map<String, dynamic> toCreateRequestBody(CustomMealPreset preset) {
-    return {
+    final body = <String, dynamic>{
       'name': preset.name,
       'mealTime': _mealTimeToApi(preset.meal),
       'visibility': _visibilityToApi(preset.visibility),
       'items': preset.items.map(_itemToApiJson).toList(),
     };
+    final image = MediaUrl.apiImageKey(preset.imageUrl);
+    if (image != null) body['image'] = image;
+    return body;
   }
 
   /// Body for `PATCH /api/v1/my-meals/:myMealId`.
@@ -29,8 +33,9 @@ abstract final class ApiCustomMealMapper {
       'fat': _roundMacro(preset.totalFat),
     };
 
-    final image = imageUrl?.trim() ?? '';
-    if (image.isNotEmpty) {
+    final image =
+        MediaUrl.apiImageKey(imageUrl) ?? MediaUrl.apiImageKey(preset.imageUrl);
+    if (image != null) {
       body['image'] = image;
     }
 
@@ -53,6 +58,8 @@ abstract final class ApiCustomMealMapper {
           : source.items,
       visibility: parsed.visibility,
       createdAt: parsed.createdAt,
+      imageUrl: parsed.imageUrl ?? source.imageUrl,
+      imageBytes: source.imageBytes,
     );
   }
 
@@ -70,7 +77,19 @@ abstract final class ApiCustomMealMapper {
         }
       }
       if (matchingSource == null) return item;
+      final imageUrl = MediaUrl.preferLoadable([
+        item.food.imageUrl,
+        matchingSource.food.imageUrl,
+      ]);
+      final parsedEmoji = item.food.emoji.trim();
+      final keepParsedEmoji = parsedEmoji.isNotEmpty &&
+          parsedEmoji != '🍽️' &&
+          !MediaUrl.looksLikeImageRef(parsedEmoji);
       return item.copyWith(
+        food: item.food.copyWith(
+          imageUrl: imageUrl,
+          emoji: keepParsedEmoji ? parsedEmoji : matchingSource.food.emoji,
+        ),
         servingQuantity: matchingSource.servingQuantity,
         servingUnit: matchingSource.servingUnit,
         nutritionBasisQuantity: matchingSource.nutritionBasisQuantity,
@@ -115,31 +134,33 @@ abstract final class ApiCustomMealMapper {
   }
 
   static CustomMealPreset? presetFromApiJson(Map<String, dynamic> json) {
-    final name = _readString(json, const ['name', 'title', 'mealName']);
+    final mealJson = _unwrapData(json);
+    final name = _readString(mealJson, const ['name', 'title', 'mealName']);
     if (name == null || name.isEmpty) return null;
 
-    final id = _readId(json);
+    final id = _readId(mealJson);
     if (id == null || id.isEmpty) return null;
 
     final meal = _mealTimeFromApi(
-          json['mealTime'] ?? json['mealtime'] ?? json['meal'],
+          mealJson['mealTime'] ?? mealJson['mealtime'] ?? mealJson['meal'],
         ) ??
         MealType.breakfast;
     final items = _itemsFromApi(
-      json['items'] ?? json['foods'] ?? json['mealItems'],
+      mealJson['items'] ?? mealJson['foods'] ?? mealJson['mealItems'],
       fallbackMeal: meal,
     );
 
     return CustomMealPreset(
       id: id,
       name: name.trim(),
-      createdAt:
-          _readDate(json['createdAt'] ?? json['created_at']) ?? DateTime.now(),
+      createdAt: _readDate(mealJson['createdAt'] ?? mealJson['created_at']) ??
+          DateTime.now(),
       meal: meal,
       items: items,
       visibility: _visibilityFromApi(
-        _readString(json, const ['visibility']),
+        _readString(mealJson, const ['visibility']),
       ),
+      imageUrl: MediaUrl.fromJson(mealJson),
     );
   }
 
@@ -149,14 +170,26 @@ abstract final class ApiCustomMealMapper {
       'meals',
       'customMeals',
       'templates',
-      'items',
       'results',
       'docs',
     ]) {
       final value = map[key];
       if (value is List) return value;
     }
+    // `items` is a food list on a meal object — only treat it as meals when
+    // this map is not itself a meal.
+    if (!_looksLikeMeal(map)) {
+      final items = map['items'];
+      if (items is List) return items;
+    }
     return null;
+  }
+
+  static bool _looksLikeMeal(Map<String, dynamic> map) {
+    if (map['mealTime'] != null || map['mealtime'] != null) return true;
+    if (map['name'] != null && map['items'] is List) return true;
+    if (map['myMeal'] is Map || map['meal'] is Map) return true;
+    return false;
   }
 
   static List<CustomMealPreset> _presetsFromMaps(Iterable<dynamic> raw) {
@@ -181,14 +214,29 @@ abstract final class ApiCustomMealMapper {
         ? (item.servingUnit.trim().isEmpty ? 'g' : item.servingUnit.trim())
         : 'g';
 
-    return {
+    final body = <String, dynamic>{
       'name': item.food.name,
       'quantity': quantity is int ? quantity : _roundMacro(quantity.toDouble()),
       'unit': unit == 'gm' ? 'g' : unit,
     };
+    final image = _itemImageForApi(item.food.imageUrl);
+    if (image != null) body['image'] = image;
+    return body;
   }
 
-  static List<SavedMealItem> _itemsFromApi(
+  static String? _itemImageForApi(String? imageUrl) {
+    final key = MediaUrl.apiImageKey(imageUrl);
+    if (key != null) return key;
+    final resolved = MediaUrl.resolve(imageUrl);
+    if (resolved == null || resolved.isEmpty) return null;
+    final lower = resolved.toLowerCase();
+    if (lower.contains('x-amz-signature=') || lower.contains('signature=')) {
+      return null;
+    }
+    return resolved;
+  }
+
+  static List<SavedMealItem> savedItemsFromApi(
     dynamic rawItems, {
     required String fallbackMeal,
   }) {
@@ -203,6 +251,12 @@ abstract final class ApiCustomMealMapper {
         .whereType<SavedMealItem>()
         .toList();
   }
+
+  static List<SavedMealItem> _itemsFromApi(
+    dynamic rawItems, {
+    required String fallbackMeal,
+  }) =>
+      savedItemsFromApi(rawItems, fallbackMeal: fallbackMeal);
 
   static SavedMealItem? _itemFromApiJson(
     Map<String, dynamic> json, {
@@ -226,6 +280,10 @@ abstract final class ApiCustomMealMapper {
     final fat = _readDouble(json, const ['fat']) ?? 0;
 
     final per100Factor = 100 / quantity;
+    final imageUrl = MediaUrl.preferLoadable([
+      MediaUrl.fromJson(json),
+      if (foodMap.isNotEmpty) MediaUrl.fromJson(foodMap),
+    ]);
     final food = FoodItem(
       name: name.trim(),
       caloriesPer100g: calories > 0
@@ -234,6 +292,8 @@ abstract final class ApiCustomMealMapper {
       protein: protein * per100Factor,
       carbs: carbs * per100Factor,
       fat: fat * per100Factor,
+      emoji: _emojiFromItem(json, foodMap),
+      imageUrl: imageUrl,
     );
 
     return SavedMealItem(
@@ -322,6 +382,22 @@ abstract final class ApiCustomMealMapper {
   static DateTime? _readDate(dynamic raw) {
     if (raw is! String || raw.trim().isEmpty) return null;
     return DateTime.tryParse(raw.trim());
+  }
+
+  static String _emojiFromItem(
+    Map<String, dynamic> json,
+    Map<String, dynamic> foodMap,
+  ) {
+    for (final map in [json, foodMap]) {
+      for (final key in const ['emoji', 'icon']) {
+        final value = map[key];
+        if (value is! String) continue;
+        final trimmed = value.trim();
+        if (trimmed.isEmpty || MediaUrl.looksLikeImageRef(trimmed)) continue;
+        return trimmed;
+      }
+    }
+    return '🍽️';
   }
 
   static String? _readString(Map<String, dynamic> map, List<String> keys) {

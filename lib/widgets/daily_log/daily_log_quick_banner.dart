@@ -35,7 +35,7 @@ class DailyLogQuickBanner extends GetView<FoodController> {
       child: Row(
         children: [
           FoodEmojiAvatar(
-            emoji: suggestion.items.first.food.emoji,
+            emoji: suggestion.items.first.food.displayEmoji,
             imageUrl: suggestion.items.first.food.imageUrl,
             size: 40,
           ),

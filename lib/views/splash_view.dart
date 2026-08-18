@@ -3,8 +3,8 @@ import 'package:get/get.dart';
 
 import '../controllers/theme_controller.dart';
 import '../controllers/user_controller.dart';
+import '../core/startup_route.dart';
 import '../routes/app_routes.dart';
-import '../services/local_storage_service.dart';
 import '../theme/app_colors.dart';
 
 /// Fallback only — startup normally resolves the route in [main] so the
@@ -28,29 +28,9 @@ class _SplashViewState extends State<SplashView> {
 
     late final String next;
     try {
-      final user = Get.find<UserController>();
-      final storage = LocalStorageService();
-      await user.loadAuthSession();
-
-      if (user.isLoggedIn && user.accessToken.isNotEmpty) {
-        await storage.saveWelcomeIntroSeen(seen: true);
-        next = await user.resolveSetupResumeRoute();
-      } else if (await storage.isWelcomeIntroSeen()) {
-        next = AppRoutes.login;
-      } else {
-        next = AppRoutes.onboarding;
-      }
+      next = await resolveStartupRoute(user: Get.find<UserController>());
     } catch (_) {
-      final user = Get.isRegistered<UserController>()
-          ? Get.find<UserController>()
-          : null;
-      if (user != null &&
-          user.isLoggedIn &&
-          user.accessToken.isNotEmpty) {
-        next = await user.resolveSetupResumeRoute();
-      } else {
-        next = AppRoutes.login;
-      }
+      next = AppRoutes.login;
     }
 
     if (!mounted) return;

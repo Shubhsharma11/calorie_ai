@@ -1,3 +1,5 @@
+import '../core/food_serving.dart';
+import '../core/media_url.dart';
 import 'custom_food_preset.dart';
 import 'food_item.dart';
 import 'meal_type.dart';
@@ -9,7 +11,9 @@ abstract final class ApiMyFoodMapper {
     required String mealtime,
     String? imageUrl,
   }) {
-    final image = imageUrl?.trim() ?? '';
+    final image = MediaUrl.apiImageKey(imageUrl) ??
+        MediaUrl.apiImageKey(preset.food.imageUrl) ??
+        '';
     return {
       'name': preset.food.name,
       'image': image,
@@ -27,13 +31,14 @@ abstract final class ApiMyFoodMapper {
   static Map<String, dynamic> toPatchRequestBody({
     required CustomFoodPreset preset,
     required String mealtime,
+    String? imageUrl,
   }) {
     final quantity = preset.displayedServingQuantity;
     final quantityValue = quantity == quantity.roundToDouble()
         ? quantity.round()
         : _roundMacro(quantity);
 
-    return {
+    final body = <String, dynamic>{
       'name': preset.food.name.trim(),
       'quantity': quantityValue,
       'unit': preset.servingUnit.trim().isEmpty ? 'g' : preset.servingUnit.trim(),
@@ -43,6 +48,14 @@ abstract final class ApiMyFoodMapper {
       'fat': _roundMacro(preset.food.fat),
       'mealtime': mealtimeForApi(mealtime),
     };
+
+    final image = MediaUrl.apiImageKey(imageUrl) ??
+        MediaUrl.apiImageKey(preset.food.imageUrl);
+    if (image != null) {
+      body['image'] = image;
+    }
+
+    return body;
   }
 
   /// Body for `POST /api/v1/my-foods/:id/log`.
@@ -150,7 +163,10 @@ abstract final class ApiMyFoodMapper {
       carbs: hasCarbs ? parsed.food.carbs : source.food.carbs,
       fat: hasFat ? parsed.food.fat : source.food.fat,
       emoji: source.food.emoji,
-      imageUrl: parsed.food.imageUrl ?? source.food.imageUrl,
+      imageUrl: MediaUrl.preferLoadable([
+        parsed.food.imageUrl,
+        source.food.imageUrl,
+      ]),
     );
 
     return source.copyWith(
@@ -182,9 +198,11 @@ abstract final class ApiMyFoodMapper {
         (json['quantity'] as num?)?.toDouble() ??
         (json['servingQuantity'] as num?)?.toDouble() ??
         100;
-    final unit = (json['unit'] as String?)?.trim().isNotEmpty == true
-        ? (json['unit'] as String).trim()
-        : 'g';
+    final unit = FoodServing.normalizeUnit(
+      (json['unit'] as String?)?.trim().isNotEmpty == true
+          ? (json['unit'] as String).trim()
+          : 'g',
+    );
     final carbs = (json['carbs'] as num?)?.toDouble() ?? 0;
     final protein = (json['protein'] as num?)?.toDouble() ?? 0;
     final fat = (json['fat'] as num?)?.toDouble() ?? 0;
@@ -192,7 +210,10 @@ abstract final class ApiMyFoodMapper {
         (json['calories'] as num?)?.round() ??
         (carbs * 4 + protein * 4 + fat * 9).round();
 
-    final defaultGrams = unit == 'g' ? quantity.round().clamp(1, 5000) : 100;
+    final household = FoodServing.isHouseholdUnit(unit);
+    final defaultGrams = unit == 'g' || unit == 'ml'
+        ? quantity.round().clamp(1, 5000)
+        : 100;
 
     return CustomFoodPreset(
       id: id,
@@ -202,12 +223,11 @@ abstract final class ApiMyFoodMapper {
         protein: protein,
         carbs: carbs,
         fat: fat,
-        emoji: '🥣',
-        imageUrl: (json['image'] as String?)?.trim().isNotEmpty == true
-            ? (json['image'] as String).trim()
-            : (json['imageUrl'] as String?)?.trim().isNotEmpty == true
-                ? (json['imageUrl'] as String).trim()
-                : null,
+        emoji: _emojiFromApi(json),
+        imageUrl: MediaUrl.fromJson(json),
+        servingQuantity: household ? 1 : quantity,
+        servingUnit: unit,
+        gramsPerServing: 1,
       ),
       defaultGrams: defaultGrams,
       createdAt:
@@ -229,10 +249,54 @@ abstract final class ApiMyFoodMapper {
   }
 
   static Map<String, dynamic> _unwrapData(Map<String, dynamic> json) {
+    Map<String, dynamic> map = json;
     final data = json['data'];
-    if (data is Map<String, dynamic>) return data;
-    if (data is Map) return Map<String, dynamic>.from(data);
-    return json;
+    if (data is Map) {
+      map = Map<String, dynamic>.from(data);
+    }
+    final nested = map['food'] ?? map['myFood'] ?? map['item'];
+    if (nested is Map) {
+      final nestedMap = Map<String, dynamic>.from(nested);
+      // Nested `food` is sometimes only macros; keep the parent if it has id+name.
+      if (nestedMap['name'] != null || nestedMap['id'] != null) {
+        nestedMap['id'] ??= map['id'] ?? map['_id'] ?? map['myFoodId'];
+        nestedMap['_id'] ??= map['_id'] ?? map['id'];
+        nestedMap['name'] ??= map['name'];
+        for (final key in const [
+          'image',
+          'imageUrl',
+          'image_url',
+          'photo',
+          'thumbnail',
+          'icon',
+        ]) {
+          if (!_hasImageValue(nestedMap[key]) && _hasImageValue(map[key])) {
+            nestedMap[key] = map[key];
+          }
+        }
+        return nestedMap;
+      }
+    }
+    return map;
+  }
+
+  static bool _hasImageValue(Object? value) {
+    if (value == null) return false;
+    if (value is String) return value.trim().isNotEmpty;
+    if (value is Map) return value.isNotEmpty;
+    if (value is List) return value.isNotEmpty;
+    return false;
+  }
+
+  static String _emojiFromApi(Map<String, dynamic> json) {
+    for (final key in const ['emoji']) {
+      final value = json[key];
+      if (value is! String) continue;
+      final trimmed = value.trim();
+      if (trimmed.isEmpty || MediaUrl.looksLikeImageRef(trimmed)) continue;
+      return trimmed;
+    }
+    return '🍽️';
   }
 
   /// Public unwrap used by update parsing (id-only).

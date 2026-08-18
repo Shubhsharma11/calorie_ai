@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../controllers/food_controller.dart';
 import '../core/app_snackbar.dart';
+import '../core/media_url.dart';
 import '../core/pick_cropped_image.dart';
 import '../core/responsive.dart';
 import '../models/custom_meal_preset.dart';
@@ -17,8 +18,11 @@ import '../models/meal_type.dart';
 import '../models/saved_meal_item.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/app_bottom_sheet.dart';
+import '../widgets/app_network_image.dart';
 import '../widgets/food_emoji_avatar.dart';
 import '../widgets/meal_type_chip_row.dart';
+import '../widgets/media_viewer.dart';
 import '../widgets/no_results_illustration.dart';
 import '../widgets/responsive_page.dart';
 import 'create_custom_food_view.dart';
@@ -41,11 +45,12 @@ class _CreateMealViewState extends State<CreateMealView> {
   bool _isSaving = false;
   bool _isSearching = false;
   String? _searchError;
-  MealShareVisibility _visibility = MealShareVisibility.public;
+  MealShareVisibility _visibility = MealShareVisibility.onlyMe;
   CustomMealPreset? _editingPreset;
   Timer? _searchDebounce;
   int _searchRequestId = 0;
   Uint8List? _mealImageBytes;
+  String? _mealImageUrl;
 
   bool get _isEditing => _editingPreset != null;
 
@@ -62,12 +67,14 @@ class _CreateMealViewState extends State<CreateMealView> {
       _visibility = args.visibility;
       _items.addAll(args.items);
       _mealImageBytes = args.imageBytes;
+      _mealImageUrl = MediaUrl.resolve(args.imageUrl);
     } else {
       final initial = args is String && MealType.all.contains(args)
           ? args
           : _food.selectedMeal.value;
-      _selectedMeal =
-          MealType.all.contains(initial) ? initial : MealType.breakfast;
+      _selectedMeal = MealType.all.contains(initial)
+          ? initial
+          : MealType.breakfast;
     }
     _searchController.addListener(_onSearchChanged);
   }
@@ -128,23 +135,14 @@ class _CreateMealViewState extends State<CreateMealView> {
     });
   }
 
-  int get _totalCalories =>
-      _items.fold(0, (sum, item) => sum + item.calories);
+  int get _totalCalories => _items.fold(0, (sum, item) => sum + item.calories);
 
-  double get _totalCarbs => _items.fold(
-        0.0,
-        (sum, item) => sum + item.carbs,
-      );
+  double get _totalCarbs => _items.fold(0.0, (sum, item) => sum + item.carbs);
 
-  double get _totalProtein => _items.fold(
-        0.0,
-        (sum, item) => sum + item.protein,
-      );
+  double get _totalProtein =>
+      _items.fold(0.0, (sum, item) => sum + item.protein);
 
-  double get _totalFat => _items.fold(
-        0.0,
-        (sum, item) => sum + item.fat,
-      );
+  double get _totalFat => _items.fold(0.0, (sum, item) => sum + item.fat);
 
   double get _macroCalories =>
       _totalCarbs * 4 + _totalProtein * 4 + _totalFat * 9;
@@ -157,7 +155,13 @@ class _CreateMealViewState extends State<CreateMealView> {
   void _addFood(FoodItem food) {
     setState(() {
       _items.add(
-        SavedMealItem(food: food, grams: 100, meal: _selectedMeal),
+        SavedMealItem(
+          food: food,
+          grams: food.defaultGrams,
+          meal: _selectedMeal,
+          servingQuantity: food.servingQuantity,
+          servingUnit: food.servingUnit,
+        ),
       );
       _searchController.clear();
       _searchResults = [];
@@ -172,25 +176,26 @@ class _CreateMealViewState extends State<CreateMealView> {
 
   Future<void> _customizeItem(int index) async {
     final item = _items[index];
-    final customized = await showModalBottomSheet<_CustomizedFoodInput>(
+    final customized = await showAppBottomSheet<_CustomizedFoodInput>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => _CustomizeNutritionSheet(item: item),
     );
     if (customized == null || !mounted || index >= _items.length) return;
 
     final customizedFood = FoodItem(
       name: customized.name,
-      caloriesPer100g: (customized.carbs * 4 +
-              customized.protein * 4 +
-              customized.fat * 9)
-          .round(),
+      caloriesPer100g:
+          (customized.carbs * 4 + customized.protein * 4 + customized.fat * 9)
+              .round(),
       protein: customized.protein,
       carbs: customized.carbs,
       fat: customized.fat,
-      emoji: item.food.emoji,
+      emoji: item.food.displayEmoji,
       imageUrl: item.food.imageUrl,
+      category: item.food.category,
+      servingQuantity: item.food.servingQuantity,
+      servingUnit: item.food.servingUnit,
+      gramsPerServing: item.food.gramsPerServing,
     );
 
     setState(() {
@@ -208,31 +213,33 @@ class _CreateMealViewState extends State<CreateMealView> {
     });
   }
 
-  Future<void> _showMealImageOptions() async {
-    final source = await showModalBottomSheet<ImageSource>(
+  void _removeMealPhoto() {
+    if (_isSaving) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _mealImageBytes = null;
+      _mealImageUrl = null;
+    });
+  }
+
+  Future<void> _viewMealPhoto() async {
+    if (_isSaving) return;
+    HapticFeedback.selectionClick();
+    await showMediaViewer(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choose from gallery'),
-              onTap: () =>
-                  Navigator.pop(sheetContext, ImageSource.gallery),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Take a photo'),
-              onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
-            ),
-          ],
-        ),
-      ),
+      imageBytes: _mealImageBytes,
+      imageUrl: _mealImageUrl,
+      title: _nameController.text.trim().isEmpty
+          ? 'Meal photo'
+          : _nameController.text.trim(),
+      onDelete: _removeMealPhoto,
     );
+  }
+
+  Future<void> _showMealImageOptions() async {
+    if (_isSaving) return;
+
+    final source = await showImageSourceSheet(context);
     if (source == null || !mounted) return;
 
     // Wait for the sheet route to finish disposing before opening native UI.
@@ -242,6 +249,10 @@ class _CreateMealViewState extends State<CreateMealView> {
     await Future<void>.delayed(const Duration(milliseconds: 280));
     if (!mounted) return;
 
+    await _pickMealPhoto(source);
+  }
+
+  Future<void> _pickMealPhoto(ImageSource source) async {
     try {
       final bytes = await pickAndCropPhoto(
         picker: _imagePicker,
@@ -252,7 +263,10 @@ class _CreateMealViewState extends State<CreateMealView> {
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        setState(() => _mealImageBytes = bytes);
+        setState(() {
+          _mealImageBytes = bytes;
+          _mealImageUrl = null;
+        });
       });
     } catch (_) {
       if (!mounted) return;
@@ -284,7 +298,8 @@ class _CreateMealViewState extends State<CreateMealView> {
 
     try {
       final preset = CustomMealPreset(
-        id: _editingPreset?.id ??
+        id:
+            _editingPreset?.id ??
             DateTime.now().millisecondsSinceEpoch.toString(),
         name: name,
         createdAt: _editingPreset?.createdAt ?? DateTime.now(),
@@ -294,6 +309,7 @@ class _CreateMealViewState extends State<CreateMealView> {
             .toList(),
         visibility: _visibility,
         imageBytes: _mealImageBytes,
+        imageUrl: _mealImageUrl,
       );
 
       final savedPreset = await _food.saveCustomMealPreset(
@@ -312,8 +328,8 @@ class _CreateMealViewState extends State<CreateMealView> {
         logAfterSave
             ? '$name saved and logged to $_selectedMeal.'
             : _isEditing
-                ? '$name updated in My Meals.'
-                : '$name saved to My Meals.',
+            ? '$name updated in My Meals.'
+            : '$name saved to My Meals.',
         title: logAfterSave ? 'Saved & logged' : 'Saved',
       );
       // Keep _isSaving true after success so a late tap cannot log again
@@ -348,9 +364,11 @@ class _CreateMealViewState extends State<CreateMealView> {
                       children: [
                         _MealImagePicker(
                           imageBytes: _mealImageBytes,
-                          onPick: _isSaving ? () {} : _showMealImageOptions,
-                          onRemove: () =>
-                              setState(() => _mealImageBytes = null),
+                          imageUrl: _mealImageUrl,
+                          onAdd: _showMealImageOptions,
+                          onView: _viewMealPhoto,
+                          onChange: _showMealImageOptions,
+                          onRemove: _removeMealPhoto,
                         ),
                         SizedBox(height: r.scale(14)),
                         TextField(
@@ -490,62 +508,69 @@ class _CreateMealViewState extends State<CreateMealView> {
                             borderRadius: BorderRadius.circular(14),
                             clipBehavior: Clip.antiAlias,
                             child: Column(
-                              children: List.generate(
-                                _searchResults.length,
-                                (index) {
-                                  final food = _searchResults[index];
-                                  final isLast =
-                                      index == _searchResults.length - 1;
-                                  return Column(
-                                    children: [
-                                      ListTile(
-                                        onTap: () => _addFood(food),
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                        ),
-                                        leading: FoodEmojiAvatar(
-                                          emoji: food.emoji,
+                              children: List.generate(_searchResults.length, (
+                                index,
+                              ) {
+                                final food = _searchResults[index];
+                                final isLast =
+                                    index == _searchResults.length - 1;
+                                return Column(
+                                  children: [
+                                    ListTile(
+                                      onTap: () => _addFood(food),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                      leading: FoodEmojiAvatar(
+                                        emoji: food.displayEmoji,
+                                        imageUrl: food.imageUrl,
+                                        size: r.scale(42),
+                                        onTap: mediaViewerOpener(
+                                          context: context,
                                           imageUrl: food.imageUrl,
-                                          size: r.scale(42),
-                                        ),
-                                        title: Text(
-                                          food.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        subtitle: Text(
-                                          '${food.caloriesPer100g} kcal / 100g',
-                                          style: TextStyle(
-                                            fontSize: r.scale(12),
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                        trailing: Container(
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.primary
-                                                .withValues(alpha: 0.12),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.add_rounded,
-                                            size: 18,
-                                            color: AppColors.primary,
-                                          ),
+                                          title: food.name,
                                         ),
                                       ),
-                                      if (!isLast)
-                                        Divider(
-                                          height: 1,
-                                          indent: 60,
-                                          color: AppColors.border,
+                                      title: Text(
+                                        food.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
                                         ),
-                                    ],
-                                  );
-                                },
-                              ),
+                                      ),
+                                      subtitle: Text(
+                                        food.usesHouseholdServing
+                                            ? '${food.searchSubtitle} · ${food.caloriesForDefaultServing} kcal'
+                                            : '${food.caloriesPer100g} kcal / 100g',
+                                        style: TextStyle(
+                                          fontSize: r.scale(12),
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                      trailing: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withValues(
+                                            alpha: 0.12,
+                                          ),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.add_rounded,
+                                          size: 18,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    if (!isLast)
+                                      Divider(
+                                        height: 1,
+                                        indent: 60,
+                                        color: AppColors.border,
+                                      ),
+                                  ],
+                                );
+                              }),
                             ),
                           ),
                         ] else if (_searchController.text.trim().isNotEmpty &&
@@ -681,11 +706,11 @@ class _CustomizeNutritionSheetState extends State<_CustomizeNutritionSheet> {
   }
 
   String get _selectedUnitLabel => switch (_servingUnit) {
-        'tbsp' => 'tbsp',
-        'g' => 'g',
-        'ml' => 'ml',
-        _ => _servingUnits[_servingUnit] ?? _servingUnit,
-      };
+    'tbsp' => 'tbsp',
+    'g' => 'g',
+    'ml' => 'ml',
+    _ => _servingUnits[_servingUnit] ?? _servingUnit,
+  };
 
   @override
   void initState() {
@@ -747,86 +772,19 @@ class _CustomizeNutritionSheetState extends State<_CustomizeNutritionSheet> {
   }
 
   Future<void> _selectServingUnit() async {
-    final selected = await showModalBottomSheet<String>(
+    final selected = await showServingUnitSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        final r = sheetContext.responsive;
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              r.scale(20),
-              r.scale(16),
-              r.scale(20),
-              r.scale(20),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Select serving unit',
-                  style: TextStyle(
-                    fontSize: r.scale(18),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                SizedBox(height: r.scale(14)),
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 3,
-                  mainAxisSpacing: r.scale(8),
-                  crossAxisSpacing: r.scale(8),
-                  childAspectRatio: 2.4,
-                  children: _servingUnits.entries.map((entry) {
-                    final selected = entry.key == _servingUnit;
-                    return InkWell(
-                      onTap: () => Navigator.pop(sheetContext, entry.key),
-                      borderRadius: BorderRadius.circular(r.scale(10)),
-                      child: Container(
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? AppColors.primary.withValues(alpha: 0.12)
-                              : AppColors.surface,
-                          borderRadius: BorderRadius.circular(r.scale(10)),
-                          border: Border.all(
-                            color: selected
-                                ? AppColors.primary
-                                : AppColors.border,
-                          ),
-                        ),
-                        child: Text(
-                          entry.value,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: r.scale(10.5),
-                            fontWeight: FontWeight.w700,
-                            color: selected
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      units: _servingUnits,
+      selected: _servingUnit,
     );
     if (selected == null || selected == _servingUnit || !mounted) return;
 
     setState(() {
       _servingUnit = selected;
       _errorText = null;
-      _servingController.text =
-          selected == 'g' || selected == 'ml' ? '100' : '1';
+      _servingController.text = selected == 'g' || selected == 'ml'
+          ? '100'
+          : '1';
       _carbsController.clear();
       _proteinController.clear();
       _fatController.clear();
@@ -837,8 +795,7 @@ class _CustomizeNutritionSheetState extends State<_CustomizeNutritionSheet> {
     final name = _nameController.text.trim();
     final servingQuantity =
         double.tryParse(_servingController.text.trim()) ?? 0;
-    final canonicalGrams =
-        _servingUnit == 'g' ? servingQuantity.round() : 100;
+    final canonicalGrams = _servingUnit == 'g' ? servingQuantity.round() : 100;
     final carbs = double.tryParse(_carbsController.text.trim()) ?? 0;
     final protein = double.tryParse(_proteinController.text.trim()) ?? 0;
     final fat = double.tryParse(_fatController.text.trim()) ?? 0;
@@ -879,200 +836,168 @@ class _CustomizeNutritionSheetState extends State<_CustomizeNutritionSheet> {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 180),
-      padding: EdgeInsets.only(bottom: bottomInset),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              r.scale(20),
-              r.scale(12),
-              r.scale(20),
-              r.scale(20),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    return AppSheetScaffold(
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
               children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(20),
+                Expanded(
+                  child: Text(
+                    'Customize nutrition',
+                    style: TextStyle(
+                      fontSize: r.scale(20),
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                SizedBox(height: r.scale(14)),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Customize nutrition',
-                        style: TextStyle(
-                          fontSize: r.scale(20),
-                          fontWeight: FontWeight.w800,
-                        ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+            Text(
+              'A private copy will be added to this meal. The original food remains unchanged.',
+              style: TextStyle(
+                fontSize: r.scale(12),
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            SizedBox(height: r.scale(16)),
+            TextField(
+              controller: _nameController,
+              textCapitalization: TextCapitalization.words,
+              onChanged: (_) => _clearError(),
+              decoration: const InputDecoration(
+                labelText: 'Food name',
+                prefixIcon: Icon(Icons.restaurant_rounded),
+              ),
+            ),
+            SizedBox(height: r.scale(12)),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _servingController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d{0,4}([.]\d?)?'),
                       ),
+                    ],
+                    onChanged: (_) => _clearError(),
+                    decoration: const InputDecoration(
+                      labelText: 'Quantity',
+                      prefixIcon: Icon(Icons.scale_rounded),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  ],
-                ),
-                Text(
-                  'A private copy will be added to this meal. The original food remains unchanged.',
-                  style: TextStyle(
-                    fontSize: r.scale(12),
-                    color: AppColors.textSecondary,
-                    height: 1.4,
                   ),
                 ),
-                SizedBox(height: r.scale(16)),
-                TextField(
-                  controller: _nameController,
-                  textCapitalization: TextCapitalization.words,
-                  onChanged: (_) => _clearError(),
-                  decoration: const InputDecoration(
-                    labelText: 'Food name',
-                    prefixIcon: Icon(Icons.restaurant_rounded),
-                  ),
-                ),
-                SizedBox(height: r.scale(12)),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: TextField(
-                        controller: _servingController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d{0,4}([.]\d?)?'),
+                SizedBox(width: r.scale(10)),
+                Expanded(
+                  flex: 2,
+                  child: InkWell(
+                    onTap: _selectServingUnit,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Unit'),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedUnitLabel,
+                              style: TextStyle(
+                                fontSize: r.scale(12),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: r.scale(20),
+                            color: AppColors.textSecondary,
                           ),
                         ],
-                        onChanged: (_) => _clearError(),
-                        decoration: const InputDecoration(
-                          labelText: 'Quantity',
-                          prefixIcon: Icon(Icons.scale_rounded),
-                        ),
                       ),
                     ),
-                    SizedBox(width: r.scale(10)),
-                    Expanded(
-                      flex: 2,
-                      child: InkWell(
-                        onTap: _selectServingUnit,
-                        borderRadius: BorderRadius.circular(12),
-                        child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'Unit'),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  _selectedUnitLabel,
-                                  style: TextStyle(
-                                    fontSize: r.scale(12),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                size: r.scale(20),
-                                color: AppColors.textSecondary,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: r.scale(16)),
-                Text(
-                  _nutritionBasisLabel,
-                  style: TextStyle(
-                    fontSize: r.scale(11),
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                SizedBox(height: r.scale(3)),
-                Text(
-                  'Enter values for this amount. Nutrition scales '
-                  'automatically with quantity.',
-                  style: TextStyle(
-                    fontSize: r.scale(11),
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                SizedBox(height: r.scale(10)),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _NutrientInput(
-                        label: 'Carbs',
-                        controller: _carbsController,
-                        color: _MealMacroColors.carbs,
-                        onChanged: _clearError,
-                      ),
-                    ),
-                    SizedBox(width: r.scale(8)),
-                    Expanded(
-                      child: _NutrientInput(
-                        label: 'Protein',
-                        controller: _proteinController,
-                        color: _MealMacroColors.protein,
-                        onChanged: _clearError,
-                      ),
-                    ),
-                    SizedBox(width: r.scale(8)),
-                    Expanded(
-                      child: _NutrientInput(
-                        label: 'Fat',
-                        controller: _fatController,
-                        color: _MealMacroColors.fat,
-                        onChanged: _clearError,
-                      ),
-                    ),
-                  ],
-                ),
-                if (_errorText != null) ...[
-                  SizedBox(height: r.scale(10)),
-                  Text(
-                    _errorText!,
-                    style: TextStyle(
-                      color: AppColors.error,
-                      fontSize: r.scale(12),
-                    ),
-                  ),
-                ],
-                SizedBox(height: r.scale(18)),
-                SizedBox(
-                  height: 50,
-                  child: FilledButton.icon(
-                    onPressed: _save,
-                    icon: const Icon(Icons.check_rounded),
-                    label: const Text('Save custom copy'),
                   ),
                 ),
               ],
             ),
-          ),
+            SizedBox(height: r.scale(16)),
+            Text(
+              _nutritionBasisLabel,
+              style: TextStyle(
+                fontSize: r.scale(11),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SizedBox(height: r.scale(3)),
+            Text(
+              'Enter values for this amount. Nutrition scales '
+              'automatically with quantity.',
+              style: TextStyle(
+                fontSize: r.scale(11),
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SizedBox(height: r.scale(10)),
+            Row(
+              children: [
+                Expanded(
+                  child: _NutrientInput(
+                    label: 'Carbs',
+                    controller: _carbsController,
+                    color: _MealMacroColors.carbs,
+                    onChanged: _clearError,
+                  ),
+                ),
+                SizedBox(width: r.scale(8)),
+                Expanded(
+                  child: _NutrientInput(
+                    label: 'Protein',
+                    controller: _proteinController,
+                    color: _MealMacroColors.protein,
+                    onChanged: _clearError,
+                  ),
+                ),
+                SizedBox(width: r.scale(8)),
+                Expanded(
+                  child: _NutrientInput(
+                    label: 'Fat',
+                    controller: _fatController,
+                    color: _MealMacroColors.fat,
+                    onChanged: _clearError,
+                  ),
+                ),
+              ],
+            ),
+            if (_errorText != null) ...[
+              SizedBox(height: r.scale(10)),
+              Text(
+                _errorText!,
+                style: TextStyle(color: AppColors.error, fontSize: r.scale(12)),
+              ),
+            ],
+            SizedBox(height: r.scale(18)),
+            SizedBox(
+              height: 50,
+              child: FilledButton.icon(
+                onPressed: _save,
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Save custom copy'),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1107,15 +1032,15 @@ class _NutrientInput extends StatelessWidget {
         suffixText: 'g',
         labelStyle: TextStyle(color: color),
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 12,
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: color, width: 1.5),
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -1196,9 +1121,7 @@ class _MacroRingPanel extends StatelessWidget {
                     Icon(
                       Icons.pie_chart_outline_rounded,
                       size: r.scale(22),
-                      color: AppColors.textSecondary.withValues(
-                        alpha: 0.5,
-                      ),
+                      color: AppColors.textSecondary.withValues(alpha: 0.5),
                     ),
                     SizedBox(height: r.scale(4)),
                     Text(
@@ -1383,29 +1306,74 @@ class _MacroLegendRow extends StatelessWidget {
 class _MealImagePicker extends StatelessWidget {
   const _MealImagePicker({
     required this.imageBytes,
-    required this.onPick,
+    this.imageUrl,
+    required this.onAdd,
+    required this.onView,
+    required this.onChange,
     required this.onRemove,
   });
 
   final Uint8List? imageBytes;
-  final VoidCallback onPick;
+  final String? imageUrl;
+  final VoidCallback onAdd;
+  final VoidCallback onView;
+  final VoidCallback onChange;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
     final image = imageBytes;
+    final url = imageUrl?.trim();
+    final hasNetwork = image == null && url != null && url.isNotEmpty;
+    final hasImage = image != null || hasNetwork;
+    final radius = BorderRadius.circular(r.scale(16));
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(r.scale(16)),
+      borderRadius: radius,
       child: Material(
         color: AppColors.surface,
         child: InkWell(
-          onTap: onPick,
+          onTap: hasImage ? onView : onAdd,
           child: SizedBox(
             height: r.scale(150),
-            child: image == null
-                ? Column(
+            width: double.infinity,
+            child: hasImage
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (image != null)
+                        CappedMemoryImage(bytes: image)
+                      else
+                        AppNetworkImage(
+                          url!,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                          errorBuilder: (context, error, _) =>
+                              const SizedBox.shrink(),
+                        ),
+                      Positioned(
+                        right: r.scale(8),
+                        bottom: r.scale(8),
+                        child: Row(
+                          children: [
+                            _MealImageAction(
+                              icon: Icons.photo_camera_outlined,
+                              tooltip: 'Change meal photo',
+                              onTap: onChange,
+                            ),
+                            SizedBox(width: r.scale(6)),
+                            _MealImageAction(
+                              icon: Icons.delete_outline_rounded,
+                              tooltip: 'Remove meal photo',
+                              onTap: onRemove,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Container(
@@ -1438,31 +1406,6 @@ class _MealImagePicker extends StatelessWidget {
                         ),
                       ),
                     ],
-                  )
-                : Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CappedMemoryImage(bytes: image),
-                      Positioned(
-                        right: r.scale(8),
-                        bottom: r.scale(8),
-                        child: Row(
-                          children: [
-                            _MealImageAction(
-                              icon: Icons.photo_camera_outlined,
-                              tooltip: 'Change meal photo',
-                              onTap: onPick,
-                            ),
-                            SizedBox(width: r.scale(6)),
-                            _MealImageAction(
-                              icon: Icons.delete_outline_rounded,
-                              tooltip: 'Remove meal photo',
-                              onTap: onRemove,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                   ),
           ),
         ),
@@ -1491,17 +1434,16 @@ class _MealImageAction extends StatelessWidget {
         onPressed: onTap,
         tooltip: tooltip,
         icon: Icon(icon, color: Colors.white),
+        iconSize: 18,
         visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
       ),
     );
   }
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.child,
-    this.title,
-  });
+  const _SectionCard({required this.child, this.title});
 
   final String? title;
   final Widget child;
@@ -1688,9 +1630,14 @@ class _IngredientRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 FoodEmojiAvatar(
-                  emoji: item.food.emoji,
+                  emoji: item.food.displayEmoji,
                   imageUrl: item.food.imageUrl,
                   size: r.scale(42),
+                  onTap: mediaViewerOpener(
+                    context: context,
+                    imageUrl: item.food.imageUrl,
+                    title: item.food.name,
+                  ),
                 ),
                 SizedBox(width: r.scale(10)),
                 Expanded(
@@ -1735,10 +1682,7 @@ class _IngredientRow extends StatelessWidget {
                 IconButton(
                   onPressed: onRemove,
                   tooltip: 'Remove food',
-                  icon: Icon(
-                    Icons.delete_outline_rounded,
-                    size: r.scale(20),
-                  ),
+                  icon: Icon(Icons.delete_outline_rounded, size: r.scale(20)),
                   color: AppColors.textSecondary,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.all(r.scale(6)),
@@ -1867,19 +1811,12 @@ class _IngredientNutritionDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    return Container(
-      width: 1,
-      height: r.scale(28),
-      color: AppColors.border,
-    );
+    return Container(width: 1, height: r.scale(28), color: AppColors.border);
   }
 }
 
 class _ShareInlineToggle extends StatelessWidget {
-  const _ShareInlineToggle({
-    required this.visibility,
-    required this.onChanged,
-  });
+  const _ShareInlineToggle({required this.visibility, required this.onChanged});
 
   final MealShareVisibility visibility;
   final ValueChanged<MealShareVisibility> onChanged;

@@ -15,6 +15,7 @@ import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/app_bottom_sheet.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
@@ -65,6 +66,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
   final Set<String> _selectedCategories = {};
   final Map<String, _ConcernFormData> _forms = {};
   final Set<String> _expandedCategories = {};
+
   /// null = not chosen yet, true = has concerns, false = none
   bool? _hasConcerns;
   late ProfileSyncSnapshot _baseline;
@@ -321,8 +323,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
     final r = context.responsive;
     final compact = r.height < 760;
     final showingConcerns = _hasConcerns == true;
-    final hasHealthConcerns =
-        showingConcerns && _selectedCategories.isNotEmpty;
+    final hasHealthConcerns = showingConcerns && _selectedCategories.isNotEmpty;
     final sortedCategories = _selectedCategories.toList()..sort();
     final actionLabel = _fromProfile ? 'Save' : 'Continue';
 
@@ -345,105 +346,21 @@ class _HealthProblemViewState extends State<HealthProblemView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                SizedBox(height: r.scale(compact ? 4 : 8)),
-                _HeroSection(r: r, compact: compact),
-                SizedBox(height: r.scale(compact ? 14 : 18)),
-                Text(
-                  'Do you have any health concerns?',
-                  style: TextStyle(
-                    fontSize: r.scale(17, tablet: 18),
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                SizedBox(height: r.scale(4)),
-
-
-                Text(
-                  'Start with Yes or No — easy to change anytime.',
-                  style: TextStyle(
-                    fontSize: r.scale(13, tablet: 14),
-                    color: AppColors.textSecondary,
-                    height: 1.35,
-                  ),
-                ),
-                SizedBox(height: r.scale(12)),
-                _PathChoiceRow(
-                  hasConcerns: _hasConcerns,
-                  onSelect: _selectHasConcerns,
-                ),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 280),
-                  curve: Curves.easeOutCubic,
-                  alignment: Alignment.topCenter,
-                  child: _noneSelected
-                      ? Padding(
-                          padding: EdgeInsets.only(top: r.scale(14)),
-                          child: _NoneConfirmedCard(actionLabel: actionLabel),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 280),
-                  curve: Curves.easeOutCubic,
-                  alignment: Alignment.topCenter,
-                  child: showingConcerns
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            SizedBox(height: r.scale(compact ? 18 : 22)),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Which ones apply?',
-                                    style: TextStyle(
-                                      fontSize: r.scale(17, tablet: 18),
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                ),
-                                if (hasHealthConcerns)
-                                  _CountBadge(
-                                    count: _selectedCategories.length,
-                                  ),
-                              ],
-                            ),
-                            SizedBox(height: r.scale(4)),
-                            Text(
-                              'Select all that apply. Tap again to remove.',
-                              style: TextStyle(
-                                fontSize: r.scale(13, tablet: 14),
-                                color: AppColors.textSecondary,
-                                height: 1.35,
-                              ),
-                            ),
-                            SizedBox(height: r.scale(12)),
-                            _CategoryGrid(
-                              categories: _categories,
-                              selectedCategories: _selectedCategories,
-                              onChanged: _toggleCategory,
-                            ),
-                            if (_selectedCategories.isEmpty) ...[
-                              SizedBox(height: r.scale(14)),
-                              const _GuidanceCard(
-                                iconAsset: 'assets/image/point.svg',
-                                title: 'Select your concerns',
-                                message:
-                                    'Choose one or more categories, then add details for each.',
-                              ),
-                            ],
-                          ],
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                if (hasHealthConcerns) ...[
-                  SizedBox(height: r.scale(compact ? 18 : 22)),
-                  _SectionTitle(text: 'Details for Each Concern', r: r),
-                  SizedBox(height: r.scale(6)),
+                  SizedBox(height: r.scale(compact ? 4 : 8)),
+                  _HeroSection(r: r, compact: compact),
+                  SizedBox(height: r.scale(compact ? 14 : 18)),
                   Text(
-                    'Expand each concern and add its own description and details.',
+                    'Do you have any health concerns?',
+                    style: TextStyle(
+                      fontSize: r.scale(17, tablet: 18),
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  SizedBox(height: r.scale(4)),
+
+                  Text(
+                    'Start with Yes or No — easy to change anytime.',
                     style: TextStyle(
                       fontSize: r.scale(13, tablet: 14),
                       color: AppColors.textSecondary,
@@ -451,37 +368,120 @@ class _HealthProblemViewState extends State<HealthProblemView> {
                     ),
                   ),
                   SizedBox(height: r.scale(12)),
-                  ...sortedCategories.map((category) {
-                    final form = _forms[category]!;
-                    final asset = _categories
-                        .firstWhere((item) => item.label == category)
-                        .asset;
-                    return Padding(
-                      padding: EdgeInsets.only(bottom: r.scale(12)),
-                      child: _ConcernDetailCard(
-                        category: category,
-                        asset: asset,
-                        form: form,
-                        expanded: _expandedCategories.contains(category),
-                        onExpansionChanged: (expanded) {
-                          setState(() {
-                            if (expanded) {
-                              _expandedCategories.add(category);
-                            } else {
-                              _expandedCategories.remove(category);
-                            }
-                          });
-                        },
-                        onChanged: () {
-                          setState(() {});
-                          _persistPartialHealth();
-                        },
+                  _PathChoiceRow(
+                    hasConcerns: _hasConcerns,
+                    onSelect: _selectHasConcerns,
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: _noneSelected
+                        ? Padding(
+                            padding: EdgeInsets.only(top: r.scale(14)),
+                            child: _NoneConfirmedCard(actionLabel: actionLabel),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: showingConcerns
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(height: r.scale(compact ? 18 : 22)),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Which ones apply?',
+                                      style: TextStyle(
+                                        fontSize: r.scale(17, tablet: 18),
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                  if (hasHealthConcerns)
+                                    _CountBadge(
+                                      count: _selectedCategories.length,
+                                    ),
+                                ],
+                              ),
+                              SizedBox(height: r.scale(4)),
+                              Text(
+                                'Select all that apply. Tap again to remove.',
+                                style: TextStyle(
+                                  fontSize: r.scale(13, tablet: 14),
+                                  color: AppColors.textSecondary,
+                                  height: 1.35,
+                                ),
+                              ),
+                              SizedBox(height: r.scale(12)),
+                              _CategoryGrid(
+                                categories: _categories,
+                                selectedCategories: _selectedCategories,
+                                onChanged: _toggleCategory,
+                              ),
+                              if (_selectedCategories.isEmpty) ...[
+                                SizedBox(height: r.scale(14)),
+                                const _GuidanceCard(
+                                  iconAsset: 'assets/image/point.svg',
+                                  title: 'Select your concerns',
+                                  message:
+                                      'Choose one or more categories, then add details for each.',
+                                ),
+                              ],
+                            ],
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  if (hasHealthConcerns) ...[
+                    SizedBox(height: r.scale(compact ? 18 : 22)),
+                    _SectionTitle(text: 'Details for Each Concern', r: r),
+                    SizedBox(height: r.scale(6)),
+                    Text(
+                      'Expand each concern and add its own description and details.',
+                      style: TextStyle(
+                        fontSize: r.scale(13, tablet: 14),
+                        color: AppColors.textSecondary,
+                        height: 1.35,
                       ),
-                    );
-                  }),
+                    ),
+                    SizedBox(height: r.scale(12)),
+                    ...sortedCategories.map((category) {
+                      final form = _forms[category]!;
+                      final asset = _categories
+                          .firstWhere((item) => item.label == category)
+                          .asset;
+                      return Padding(
+                        padding: EdgeInsets.only(bottom: r.scale(12)),
+                        child: _ConcernDetailCard(
+                          category: category,
+                          asset: asset,
+                          form: form,
+                          expanded: _expandedCategories.contains(category),
+                          onExpansionChanged: (expanded) {
+                            setState(() {
+                              if (expanded) {
+                                _expandedCategories.add(category);
+                              } else {
+                                _expandedCategories.remove(category);
+                              }
+                            });
+                          },
+                          onChanged: () {
+                            setState(() {});
+                            _persistPartialHealth();
+                          },
+                        ),
+                      );
+                    }),
+                  ],
                 ],
-              ],
-            ),
+              ),
             ),
             action: PrimaryButton(
               label: actionLabel,
@@ -496,10 +496,7 @@ class _HealthProblemViewState extends State<HealthProblemView> {
 }
 
 class _ProblemCategory {
-  const _ProblemCategory({
-    required this.label,
-    required this.asset,
-  });
+  const _ProblemCategory({required this.label, required this.asset});
 
   final String label;
   final String asset;
@@ -799,10 +796,7 @@ abstract final class _SetupCard {
 }
 
 class _PathChoiceRow extends StatelessWidget {
-  const _PathChoiceRow({
-    required this.hasConcerns,
-    required this.onSelect,
-  });
+  const _PathChoiceRow({required this.hasConcerns, required this.onSelect});
 
   final bool? hasConcerns;
   final ValueChanged<bool> onSelect;
@@ -896,10 +890,7 @@ class _PathChoiceCard extends StatelessWidget {
                   SizedBox(
                     width: r.scale(40),
                     height: r.scale(40),
-                    child: SvgPicture.asset(
-                      imageAsset,
-                      fit: BoxFit.contain,
-                    ),
+                    child: SvgPicture.asset(imageAsset, fit: BoxFit.contain),
                   ),
                   const Spacer(),
                   _SelectionIndicator(selected: selected),
@@ -1249,10 +1240,7 @@ class _CategoryCard extends StatelessWidget {
               SizedBox(
                 width: r.scale(34, tablet: 36),
                 height: r.scale(34, tablet: 36),
-                child: SvgPicture.asset(
-                  category.asset,
-                  fit: BoxFit.contain,
-                ),
+                child: SvgPicture.asset(category.asset, fit: BoxFit.contain),
               ),
               SizedBox(width: r.scale(8)),
               Expanded(
@@ -1263,9 +1251,7 @@ class _CategoryCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: r.scale(12, tablet: 13),
                     fontWeight: FontWeight.w700,
-                    color: selected
-                        ? AppColors.primary
-                        : AppColors.textPrimary,
+                    color: selected ? AppColors.primary : AppColors.textPrimary,
                     height: 1.15,
                   ),
                 ),
@@ -1387,69 +1373,14 @@ class _DetailDropdown extends StatelessWidget {
 
   Future<void> _showOptions(BuildContext context) async {
     FocusScope.of(context).unfocus();
-    final selected = await showModalBottomSheet<String>(
+    final selected = await showAppOptionsSheet<String>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (context) {
-        final r = context.responsive;       
-
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: r.height * 0.62),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  r.scale(18),
-                  r.scale(14),
-                  r.scale(18),
-                  r.scale(12),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 42,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppColors.border,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: r.scale(16)),
-                    Text(
-                      hint,
-                      style: TextStyle(
-                        fontSize: r.scale(17, tablet: 18),
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                        height: 1.25,
-                      ),
-                    ),
-                    SizedBox(height: r.scale(14)),
-                    ...options.map(
-                      (option) => Padding(
-                        padding: EdgeInsets.only(bottom: r.scale(8)),
-                        child: _OptionTile(
-                          label: option,
-                          selected: option == value,
-                          onTap: () => Navigator.of(context).pop(option),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+      title: hint,
+      selected: value,
+      options: [
+        for (final option in options)
+          AppSheetOption(value: option, label: option),
+      ],
     );
 
     if (selected != null) onChanged(selected);
@@ -1584,70 +1515,3 @@ class _SelectedValueLabel extends StatelessWidget {
     );
   }
 }
-
-class _OptionTile extends StatelessWidget {
-  const _OptionTile({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Material(
-      color: selected
-          ? AppColors.primary.withValues(alpha: 0.1)
-          : AppColors.surface,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: r.scale(14),
-            vertical: r.scale(13),
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: selected ? AppColors.primary : AppColors.border,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: r.scale(14, tablet: 15),
-                    fontWeight: FontWeight.w700,
-                    color: selected ? AppColors.primary : AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              if (selected)
-                Icon(
-                  Icons.check_circle_rounded,
-                  color: AppColors.primary,
-                  size: r.scale(20),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-
-    
-    
-    
-  

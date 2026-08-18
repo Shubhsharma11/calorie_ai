@@ -28,8 +28,8 @@ class _OnboardingViewState extends State<OnboardingView> {
 
   static const List<_OnboardPage> _pages = [
     _OnboardPage(
-      image: 'assets/image/sp1.png',
-      darkImage: 'assets/image/sp1_dark.png',
+      image: 'assets/image/onboarding1.png',
+      darkImage: 'assets/image/onbording1_dark.png',
       title: 'Eat Healthy',
       titleAccent: 'Live Healthy',
       body: 'Track meals and build better eating habits every day.',
@@ -38,67 +38,64 @@ class _OnboardingViewState extends State<OnboardingView> {
           asset: 'assets/image/profile_heart.png',
           darkAsset: 'assets/image/profile_heart_dark.png',
           title: 'Personalized',
-
         ),
         _FeatureItem(
           asset: 'assets/image/run.png',
           darkAsset: 'assets/image/run_dark.png',
           title: 'Activity Tracking',
-         
         ),
         _FeatureItem(
           asset: 'assets/image/drop_water.png',
           darkAsset: 'assets/image/drop_water_dark.png',
           title: 'Hydration',
-      
         ),
       ],
     ),
     _OnboardPage(
-      image: 'assets/image/sp2.png',
-      darkImage: 'assets/image/sp2_dark.png',
+      image: 'assets/image/onboarding2.png',
+      darkImage: 'assets/image/onboarding2_dark.png',
       title: 'AI-Powered',
       titleAccent: 'Tracking',
       body: 'Scan a barcode or search — FitBuddy fills in calories for you.',
       features: [
         _FeatureItem(
           asset: 'assets/image/barcode.png',
+          darkAsset: 'assets/image/barcode_dark.png',
           title: 'Scan & Log',
-      
         ),
         _FeatureItem(
-            asset: 'assets/image/search.png',
+          asset: 'assets/image/search.png',
+          darkAsset: 'assets/image/search_dark.png',
           title: 'Smart Search',
- 
         ),
         _FeatureItem(
-        asset: 'assets/image/progress.png',
+          asset: 'assets/image/progress.png',
+          darkAsset: 'assets/image/progress_dark.png',
           title: 'Track Progress',
-         
         ),
       ],
     ),
     _OnboardPage(
-      image: 'assets/image/sp3.png',
-      darkImage: 'assets/image/sp3_dark.png',
+      image: 'assets/image/onboarding3.png',
+      darkImage: 'assets/image/onboarding3_dark.png',
       title: 'Personalized',
       titleAccent: 'For You',
       body: 'Goals, macros, and reminders tailored to your lifestyle.',
       features: [
         _FeatureItem(
-           asset: 'assets/image/nutrition.png',
+          asset: 'assets/image/nutrition.png',
+          darkAsset: 'assets/image/nutrition_dark.png',
           title: 'Nutrition Measure',
-  
         ),
         _FeatureItem(
-           asset: 'assets/image/Weight_progress.png',
+          asset: 'assets/image/Weight_progress.png',
+          darkAsset: 'assets/image/Weight_progress_dark.png',
           title: 'Weight Progress',
-       
         ),
         _FeatureItem(
-                  asset: 'assets/image/drop_water.png',
+          asset: 'assets/image/drop_water.png',
+          darkAsset: 'assets/image/drop_water_dark.png',
           title: 'Water Reminder',
-   
         ),
       ],
     ),
@@ -133,7 +130,7 @@ class _OnboardingViewState extends State<OnboardingView> {
     AppColors.syncFromContext(context);
     final r = context.responsive;
     final isDark = AppColors.isDark(context);
-    final bg = isDark ? AppColors.backgroundOf(context) : Colors.white;
+    final bg = isDark ? const Color(0xFF080B0E) : Colors.white;
     final horizontal = r.scale(22, tablet: 40, desktop: 48);
     final buttonHeight = r.scale(54, tablet: 56, desktop: 58);
     final short = r.height < 720;
@@ -152,142 +149,139 @@ class _OnboardingViewState extends State<OnboardingView> {
             ),
       child: Scaffold(
         backgroundColor: bg,
-        body: Stack(
-          children: [
-            if (isDark)
-              Positioned(
-                top: r.scale(-40),
-                left: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: Container(
-                    height: r.scale(280),
-                    decoration: BoxDecoration(
-                      gradient: RadialGradient(
-                        center: const Alignment(0, -0.2),
-                        radius: 0.95,
-                        colors: [
-                          AppColors.primary.withValues(alpha: 0.14),
-                          AppColors.darkHeaderWash.withValues(alpha: 0.55),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
+        body: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: horizontal),
+            child: Column(
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Obx(() {
+                    final isLast =
+                        _controller.pageIndex.value == _pages.length - 1;
+                    if (isLast) return SizedBox(height: r.scale(40));
+                    return _SkipButton(onPressed: _finish);
+                  }),
+                ),
+                Expanded(
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: _pages.length,
+                    onPageChanged: _controller.goToPage,
+                    itemBuilder: (_, index) {
+                      return _OnboardSlide(
+                        page: _pages[index],
+                        responsive: r,
+                        short: short,
+                      );
+                    },
                   ),
                 ),
-              ),
-            SafeArea(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: horizontal),
-                child: Column(
-                  children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Obx(() {
-                        final isLast =
-                            _controller.pageIndex.value == _pages.length - 1;
-                        if (isLast) return SizedBox(height: r.scale(40));
-                        return TextButton(
-                          onPressed: _finish,
-                          style: TextButton.styleFrom(
-                            foregroundColor:
-                                AppColors.textSecondaryOf(context),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: r.scale(8),
-                              vertical: r.scale(8),
-                            ),
-                          ),
-                          child: Text(
-                            'Skip',
-                            style: TextStyle(
-                              fontSize: r.scale(15, tablet: 16),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                    Expanded(
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: _pages.length,
-                        onPageChanged: _controller.goToPage,
-                        itemBuilder: (_, index) {
-                          return _OnboardSlide(
-                            page: _pages[index],
-                            responsive: r,
-                            short: short,
-                          );
-                        },
+                SizedBox(height: r.scale(short ? 10 : 14)),
+                Obx(() {
+                  final current = _controller.pageIndex.value;
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                      _pages.length,
+                      (i) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        margin: EdgeInsets.symmetric(horizontal: r.scale(4)),
+                        width: current == i
+                            ? r.scale(28, tablet: 32)
+                            : r.scale(8),
+                        height: r.scale(8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          color: current == i
+                              ? AppColors.primary
+                              : (isDark
+                                    ? Colors.white.withValues(alpha: 0.22)
+                                    : const Color(0xFFD8E0D8)),
+                        ),
                       ),
                     ),
-                    SizedBox(height: r.scale(short ? 10 : 14)),
-                    Obx(() {
-                      final current = _controller.pageIndex.value;
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(
-                          _pages.length,
-                          (i) => AnimatedContainer(
-                            duration: const Duration(milliseconds: 280),
-                            curve: Curves.easeOutCubic,
-                            margin:
-                                EdgeInsets.symmetric(horizontal: r.scale(4)),
-                            width: current == i
-                                ? r.scale(28, tablet: 32)
-                                : r.scale(8),
-                            height: r.scale(8),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              color: current == i
-                                  ? AppColors.primary
-                                  : (isDark
-                                      ? AppColors.darkBorder
-                                          .withValues(alpha: 0.9)
-                                      : const Color(0xFFD8E0D8)),
+                  );
+                }),
+                SizedBox(height: r.scale(short ? 16 : 22)),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: r.formMaxWidth),
+                  child: Obx(() {
+                    final isLast =
+                        _controller.pageIndex.value == _pages.length - 1;
+                    return SizedBox(
+                      height: buttonHeight,
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _handleNext,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: AppColors.onPrimary,
+                          elevation: 0,
+                          shadowColor: Colors.transparent,
+                          textStyle: TextStyle(
+                            fontSize: r.scale(16, tablet: 17),
+                            fontWeight: FontWeight.w700,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              r.scale(16, tablet: 18),
                             ),
                           ),
                         ),
-                      );
-                    }),
-                    SizedBox(height: r.scale(short ? 16 : 22)),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: r.formMaxWidth),
-                      child: Obx(() {
-                        final isLast =
-                            _controller.pageIndex.value == _pages.length - 1;
-                        return SizedBox(
-                          height: buttonHeight,
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _handleNext,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: AppColors.onPrimary,
-                              elevation: 0,
-                              shadowColor: Colors.transparent,
-                              textStyle: TextStyle(
-                                fontSize: r.scale(16, tablet: 17),
-                                fontWeight: FontWeight.w700,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                  r.scale(16, tablet: 18),
-                                ),
-                              ),
-                            ),
-                            child:
-                                Text(isLast ? 'Get Started →' : 'Next →'),
-                          ),
-                        );
-                      }),
-                    ),
-                    SizedBox(height: r.scale(short ? 12 : 18)),
-                  ],
+                        child: Text(isLast ? 'Get Started →' : 'Next →'),
+                      ),
+                    );
+                  }),
                 ),
+                SizedBox(height: r.scale(short ? 12 : 18)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SkipButton extends StatelessWidget {
+  const _SkipButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    final isDark = AppColors.isDark(context);
+
+    return Padding(
+      padding: EdgeInsets.only(top: r.scale(4), bottom: r.scale(4)),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(20),
+          child: Ink(
+            padding: EdgeInsets.symmetric(
+              horizontal: r.scale(14),
+              vertical: r.scale(7),
+            ),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : const Color(0xFFF2F2F7),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              'Skip',
+              style: TextStyle(
+                fontSize: r.scale(14, tablet: 15),
+                fontWeight: FontWeight.w600,
+                color: isDark
+                    ? const Color(0xFFE8E8ED)
+                    : AppColors.textSecondaryOf(context),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -310,8 +304,9 @@ class _OnboardSlide extends StatelessWidget {
     AppColors.syncFromContext(context);
     final r = responsive;
     final isDark = AppColors.isDark(context);
-    final titleSize = r.scale(short ? 30 : 34, tablet: 38, desktop: 42);
-    final bodySize = r.scale(short ? 14.5 : 15.5, tablet: 16.5, desktop: 17);
+    final titleSize = r.scale(short ? 28 : 32, tablet: 36, desktop: 40);
+    final bodySize = r.scale(short ? 14 : 15, tablet: 16, desktop: 17);
+    final heroFit = isDark ? BoxFit.fitWidth : BoxFit.contain;
 
     return Center(
       child: ConstrainedBox(
@@ -321,21 +316,18 @@ class _OnboardSlide extends StatelessWidget {
         child: Column(
           children: [
             Expanded(
-              flex: short ? 5 : 6,
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: r.scale(4, tablet: 12),
-                ),
+              flex: short ? 6 : 7,
+              child: Align(
+                alignment: Alignment.topCenter,
                 child: _OnboardImage(
-                  assetPath:
-                      isDark ? (page.darkImage ?? page.image) : page.image,
-                  fit: BoxFit.contain,
+                  assetPath: isDark
+                      ? (page.darkImage ?? page.image)
+                      : page.image,
+                  fit: heroFit,
                 ),
               ),
             ),
-            SizedBox(height: r.scale(short ? 8 : 12)),
-           
-            SizedBox(height: r.scale(short ? 12 : 16)),
+            SizedBox(height: r.scale(short ? 4 : 8)),
             Text.rich(
               TextSpan(
                 style: TextStyle(
@@ -357,26 +349,28 @@ class _OnboardSlide extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: r.scale(10, tablet: 12)),
+            SizedBox(height: r.scale(8, tablet: 10)),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: r.scale(18)),
+              padding: EdgeInsets.symmetric(horizontal: r.scale(12)),
               child: Text(
                 page.body,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: bodySize,
                   fontWeight: FontWeight.w400,
-                  height: 1.45,
-                  color: AppColors.textSecondaryOf(context),
+                  height: 1.4,
+                  color: isDark
+                      ? AppColors.darkTextSecondary
+                      : AppColors.textSecondaryOf(context),
                 ),
               ),
             ),
-            SizedBox(height: r.scale(short ? 16 : 22)),
+            SizedBox(height: r.scale(short ? 14 : 18)),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (var i = 0; i < page.features.length; i++) ...[
-                  if (i > 0) SizedBox(width: r.scale(8)),
+                  if (i > 0) SizedBox(width: r.scale(10)),
                   Expanded(
                     child: _FeatureColumn(
                       item: page.features[i],
@@ -386,7 +380,7 @@ class _OnboardSlide extends StatelessWidget {
                 ],
               ],
             ),
-            SizedBox(height: r.scale(short ? 6 : 10)),
+            SizedBox(height: r.scale(short ? 4 : 8)),
           ],
         ),
       ),
@@ -394,35 +388,24 @@ class _OnboardSlide extends StatelessWidget {
   }
 }
 
-
-  
-
-
-
-
 class _FeatureColumn extends StatelessWidget {
-  const _FeatureColumn({
-    required this.item,
-    required this.compact,
-  });
+  const _FeatureColumn({required this.item, required this.compact});
 
   final _FeatureItem item;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    AppColors.syncFromContext(context);
-    final isDark = AppColors.isDark(context);
     final r = context.responsive;
-    final iconBox = r.scale(compact ? 42 : 46, tablet: 50);
-    final asset = isDark
-        ? (item.darkAsset ?? item.asset)
-        : item.asset;
+    final isDark = AppColors.isDark(context);
+    final iconBox = r.scale(compact ? 48 : 52, tablet: 56);
+    final asset = isDark ? (item.darkAsset ?? item.asset) : item.asset;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        if (asset != null)
-          SizedBox(
+        Center(
+          child: SizedBox(
             width: iconBox,
             height: iconBox,
             child: Image.asset(
@@ -431,77 +414,25 @@ class _FeatureColumn extends StatelessWidget {
               height: iconBox,
               fit: BoxFit.contain,
               filterQuality: FilterQuality.high,
-              errorBuilder: (_, error, stackTrace) => _FeatureIconChip(
-                icon: item.icon ?? Icons.circle,
-                size: iconBox,
-                isDark: isDark,
-              ),
             ),
-          )
-        else
-          _FeatureIconChip(
-            icon: item.icon ?? Icons.circle,
-            size: iconBox,
-            isDark: isDark,
           ),
+        ),
         SizedBox(height: r.scale(compact ? 8 : 10)),
         Text(
           item.title,
           textAlign: TextAlign.center,
-         maxLines: 1,
-softWrap: false,
-overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
-           fontSize: r.scale(compact ? 10 : 12, tablet: 13),
-            fontWeight: FontWeight.w700,
-            height: 1.2,
-            color: AppColors.textPrimaryOf(context),
+            fontSize: r.scale(compact ? 11 : 12, tablet: 13),
+            fontWeight: FontWeight.w600,
+            height: 1.25,
+            color: isDark
+                ? AppColors.darkTextPrimary
+                : AppColors.textPrimaryOf(context),
           ),
         ),
-        SizedBox(height: r.scale(4)),
-        SizedBox(
-  height: r.scale(32, tablet: 36),
-  
-    ),
-
-
       ],
-    );
-  }
-}
-
-class _FeatureIconChip extends StatelessWidget {
-  const _FeatureIconChip({
-    required this.icon,
-    required this.size,
-    required this.isDark,
-  });
-
-  final IconData icon;
-  final double size;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: isDark
-            ? AppColors.primary.withValues(alpha: 0.14)
-            : const Color(0xFFE8F8EE),
-        borderRadius: BorderRadius.circular(size * 0.28),
-        border: isDark
-            ? Border.all(
-                color: AppColors.primary.withValues(alpha: 0.28),
-              )
-            : null,
-      ),
-      child: Icon(
-        icon,
-        size: size * 0.5,
-        color: isDark ? AppColors.primary : const Color(0xFF2E9B4E),
-      ),
     );
   }
 }
@@ -509,17 +440,13 @@ class _FeatureIconChip extends StatelessWidget {
 class _FeatureItem {
   const _FeatureItem({
     required this.title,
-    
-    this.icon,
-    this.asset,
+    required this.asset,
     this.darkAsset,
-  }) : assert(icon != null || asset != null);
+  });
 
-  final IconData? icon;
-  final String? asset;
+  final String asset;
   final String? darkAsset;
   final String title;
- 
 }
 
 class _OnboardPage {
@@ -580,7 +507,12 @@ class _OnboardImageState extends State<_OnboardImage> {
   @override
   Widget build(BuildContext context) {
     if (!widget.assetPath.toLowerCase().endsWith('.svg')) {
-      return Image.asset(widget.assetPath, fit: widget.fit);
+      return Image.asset(
+        widget.assetPath,
+        fit: widget.fit,
+        width: widget.fit == BoxFit.fitWidth ? double.infinity : null,
+        alignment: Alignment.topCenter,
+      );
     }
 
     return FutureBuilder<Widget>(

@@ -2,32 +2,39 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/food_controller.dart';
+import '../core/responsive.dart';
 import '../models/food_item.dart';
 import '../models/meal_entry.dart';
 import '../models/meal_type.dart';
+import '../models/saved_meal_item.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/confirm_delete_sheet.dart';
 import '../widgets/delete_lottie.dart';
 import '../widgets/food_emoji_avatar.dart';
+import '../widgets/meal_ingredients_section.dart';
+import '../widgets/meal_type_chip_row.dart';
+import '../widgets/media_viewer.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
+import '../widgets/serving_quantity_stepper.dart';
 
 class EditMealView extends StatefulWidget {
   const EditMealView({super.key});
-
-  static const meals = MealType.all;
 
   @override
   State<EditMealView> createState() => _EditMealViewState();
 }
 
 class _EditMealViewState extends State<EditMealView> {
-  late final FoodController _food = Get.find<FoodController>();
+  late final FoodController _controller = Get.find<FoodController>();
   late MealEntry _entry;
+  late FoodItem _food;
   late int _grams;
+  late double _servingCount;
   late String _meal;
   bool _deleting = false;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -46,29 +53,62 @@ class _EditMealViewState extends State<EditMealView> {
         grams: 100,
         meal: MealType.breakfast,
       );
+      _food = _entry.food;
       _grams = 100;
+      _servingCount = 100;
       _meal = MealType.breakfast;
       return;
     }
     _entry = args;
+    _food = args.food;
     _grams = _entry.grams;
+    _servingCount = _food.servingCountForGrams(_entry.grams);
     _meal = MealType.all.contains(_entry.meal)
         ? _entry.meal
         : MealType.breakfast;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _hydrateFromCatalog();
+    });
+  }
+
+  List<SavedMealItem> get _displayIngredients =>
+      _food.ingredientsForPortions(_servingCount);
+
+  Future<void> _hydrateFromCatalog() async {
+    final hydrated = await _controller.hydrateLoggedFood(_food, grams: _grams);
+    if (!mounted) return;
+    if (hydrated.imageUrl == _food.imageUrl &&
+        hydrated.servingUnit == _food.servingUnit &&
+        hydrated.gramsPerServing == _food.gramsPerServing &&
+        hydrated.category == _food.category) {
+      return;
+    }
+    setState(() {
+      _food = hydrated;
+      _servingCount = _food.servingCountForGrams(_grams);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final calories = _entry.food.caloriesForGrams(_grams);
+    AppColors.syncFromContext(context);
+    final r = context.responsive;
+    final calories = _food.caloriesForGrams(_grams);
+    final category = _food.category?.trim();
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppAppBar(
         title: 'Edit Food',
         actions: [
           if (!_deleting)
             IconButton(
               onPressed: _startDelete,
-              icon: Icon(Icons.delete_outline, color: AppColors.error),
+              tooltip: 'Remove from diary',
+              icon: Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.error,
+              ),
             ),
         ],
       ),
@@ -90,70 +130,104 @@ class _EditMealViewState extends State<EditMealView> {
                 children: [
                   Center(
                     child: FoodEmojiAvatar(
-                      emoji: _entry.food.emoji,
-                      imageUrl: _entry.food.imageUrl,
-                      size: 96,
-                      fontSize: 52,
+                      emoji: _food.displayEmoji,
+                      imageUrl: _food.imageUrl,
+                      size: r.scale(120),
+                      fontSize: r.scale(64),
+                      onTap: mediaViewerOpener(
+                        context: context,
+                        imageUrl: _food.imageUrl,
+                        title: _food.name,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: r.scale(16)),
                   Text(
-                    _entry.food.name,
+                    _food.name,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
+                      fontSize: r.scale(22),
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  if (category != null && category.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.only(top: r.scale(6)),
+                      child: Text(
+                        category,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  SizedBox(height: r.scale(8)),
                   Text(
                     '$calories kcal',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 28,
+                      fontSize: r.scale(32),
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary,
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  DropdownButtonFormField<String>(
-                    initialValue: _meal,
-                    decoration: const InputDecoration(labelText: 'Meal'),
-                    items: EditMealView.meals
-                        .map(
-                          (m) => DropdownMenuItem(value: m, child: Text(m)),
-                        )
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) setState(() => _meal = v);
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  const Text('Quantity (grams)'),
+                  SizedBox(height: r.scale(24)),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      IconButton(
-                        onPressed: _grams > 50
-                            ? () => setState(() => _grams -= 50)
-                            : null,
-                        icon: Icon(Icons.remove_circle_outline),
+                      _MacroChip(
+                        label: 'Protein',
+                        value:
+                            '${_food.macroForGrams(_food.protein, _grams).toStringAsFixed(1)}g',
                       ),
-                      Text(
-                        '${_grams}g',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      _MacroChip(
+                        label: 'Carbs',
+                        value:
+                            '${_food.macroForGrams(_food.carbs, _grams).toStringAsFixed(1)}g',
                       ),
-                      IconButton(
-                        onPressed: () => setState(() => _grams += 50),
-                        icon: Icon(Icons.add_circle_outline),
+                      _MacroChip(
+                        label: 'Fat',
+                        value:
+                            '${_food.macroForGrams(_food.fat, _grams).toStringAsFixed(1)}g',
                       ),
                     ],
                   ),
-                  const SizedBox(height: 32),
-                  PrimaryButton(label: 'Save Changes', onPressed: _save),
+                  if (_food.isCompositeMeal) ...[
+                    SizedBox(height: r.scale(32)),
+                    MealIngredientsSection(items: _displayIngredients),
+                  ],
+                  SizedBox(height: r.scale(32)),
+                  Text(
+                    'Meal',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  SizedBox(height: r.scale(8)),
+                  MealTypeChipRow(
+                    selectedMeal: _meal,
+                    onSelected: (meal) => setState(() => _meal = meal),
+                  ),
+                  SizedBox(height: r.scale(24)),
+                  ServingQuantityStepper(
+                    food: _food,
+                    quantity: _servingCount,
+                    onChanged: (value) {
+                      setState(() {
+                        _servingCount = value;
+                        _grams = _food.gramsForServings(value);
+                      });
+                    },
+                  ),
+                  SizedBox(height: r.scale(32)),
+                  PrimaryButton(
+                    label: 'Save Changes',
+                    isLoading: _saving,
+                    onPressed: _save,
+                  ),
                   SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
                 ],
               ),
@@ -162,8 +236,16 @@ class _EditMealViewState extends State<EditMealView> {
   }
 
   Future<void> _save() async {
-    final ok = await _food.updateEntry(_entry, grams: _grams, meal: _meal);
+    if (_saving) return;
+    setState(() => _saving = true);
+    final ok = await _controller.updateEntry(
+      _entry,
+      grams: _grams,
+      meal: _meal,
+      food: _food,
+    );
     if (!mounted) return;
+    setState(() => _saving = false);
     if (ok) Get.back();
   }
 
@@ -174,7 +256,7 @@ class _EditMealViewState extends State<EditMealView> {
       context: context,
       title: 'Remove from diary?',
       message:
-          '“${_entry.food.name}” will be permanently deleted from your daily log.',
+          '“${_food.name}” will be permanently deleted from your daily log.',
       cancelLabel: 'Keep',
       confirmLabel: 'Remove',
     );
@@ -182,7 +264,7 @@ class _EditMealViewState extends State<EditMealView> {
 
     setState(() => _deleting = true);
 
-    final ok = await _food.deleteMealEntry(_entry);
+    final ok = await _controller.deleteMealEntry(_entry);
     if (!mounted) return;
 
     if (ok) {
@@ -191,5 +273,26 @@ class _EditMealViewState extends State<EditMealView> {
     }
 
     setState(() => _deleting = false);
+  }
+}
+
+class _MacroChip extends StatelessWidget {
+  const _MacroChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(label, style: TextStyle(color: AppColors.textSecondary)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+        ),
+      ],
+    );
   }
 }

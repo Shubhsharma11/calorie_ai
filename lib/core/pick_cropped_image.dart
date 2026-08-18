@@ -5,6 +5,8 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
+import 'app_snackbar.dart';
+import 'photo_permission.dart';
 
 const _maxEdge = 1280;
 
@@ -16,6 +18,15 @@ Future<Uint8List?> pickAndCropPhoto({
   required ImageSource source,
   required String cropTitle,
 }) async {
+  final allowed = await ensureImageSourcePermission(source);
+  if (!allowed) {
+    AppSnackbar.error(
+      photoPermissionDeniedMessage(source),
+      title: 'Permission needed',
+    );
+    return null;
+  }
+
   final image = await picker.pickImage(
     source: source,
     maxWidth: _maxEdge.toDouble(),
@@ -26,43 +37,68 @@ Future<Uint8List?> pickAndCropPhoto({
   if (image == null) return null;
 
   try {
-    final cropped = await ImageCropper().cropImage(
+    final cropped = await cropPhotoAtPath(
       sourcePath: image.path,
-      compressFormat: ImageCompressFormat.jpg,
-      compressQuality: 80,
-      maxWidth: _maxEdge,
-      maxHeight: _maxEdge,
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: cropTitle,
-          toolbarColor: AppColors.primary,
-          toolbarWidgetColor: Colors.white,
-          statusBarLight: false,
-          activeControlsWidgetColor: AppColors.primary,
-          backgroundColor: Colors.black,
-          initAspectRatio: CropAspectRatioPreset.original,
-          lockAspectRatio: false,
-          aspectRatioPresets: const [
-            CropAspectRatioPreset.original,
-            CropAspectRatioPreset.square,
-            CropAspectRatioPreset.ratio4x3,
-          ],
-        ),
-        IOSUiSettings(
-          title: cropTitle,
-          aspectRatioPresets: const [
-            CropAspectRatioPreset.original,
-            CropAspectRatioPreset.square,
-            CropAspectRatioPreset.ratio4x3,
-          ],
-        ),
-      ],
+      cropTitle: cropTitle,
     );
     if (cropped == null) return null;
-    return cropped.readAsBytes();
+    return cropped;
   } catch (_) {
     return image.readAsBytes();
   }
+}
+
+/// Crops an already-picked file. Returns `null` if the user cancels.
+Future<Uint8List?> cropPhotoAtPath({
+  required String sourcePath,
+  required String cropTitle,
+  CropAspectRatio? aspectRatio,
+  bool lockAspectRatio = false,
+  int maxEdge = _maxEdge,
+}) async {
+  final cropped = await ImageCropper().cropImage(
+    sourcePath: sourcePath,
+    compressFormat: ImageCompressFormat.jpg,
+    compressQuality: 85,
+    maxWidth: maxEdge,
+    maxHeight: maxEdge,
+    aspectRatio: aspectRatio,
+    uiSettings: [
+      AndroidUiSettings(
+        toolbarTitle: cropTitle,
+        toolbarColor: AppColors.primary,
+        toolbarWidgetColor: Colors.white,
+        statusBarLight: false,
+        activeControlsWidgetColor: AppColors.primary,
+        backgroundColor: Colors.black,
+        initAspectRatio: lockAspectRatio
+            ? CropAspectRatioPreset.square
+            : CropAspectRatioPreset.original,
+        lockAspectRatio: lockAspectRatio,
+        aspectRatioPresets: lockAspectRatio
+            ? const [CropAspectRatioPreset.square]
+            : const [
+                CropAspectRatioPreset.original,
+                CropAspectRatioPreset.square,
+                CropAspectRatioPreset.ratio4x3,
+              ],
+      ),
+      IOSUiSettings(
+        title: cropTitle,
+        aspectRatioLockEnabled: lockAspectRatio,
+        resetAspectRatioEnabled: !lockAspectRatio,
+        aspectRatioPresets: lockAspectRatio
+            ? const [CropAspectRatioPreset.square]
+            : const [
+                CropAspectRatioPreset.original,
+                CropAspectRatioPreset.square,
+                CropAspectRatioPreset.ratio4x3,
+              ],
+      ),
+    ],
+  );
+  if (cropped == null) return null;
+  return cropped.readAsBytes();
 }
 
 /// Decodes [bytes] at display size so meal/food photos don't freeze the UI.

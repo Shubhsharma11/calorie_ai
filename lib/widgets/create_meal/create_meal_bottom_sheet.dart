@@ -1,21 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 
 import '../../controllers/food_controller.dart';
 import '../../core/app_snackbar.dart';
-import '../../core/responsive.dart';
 import '../../models/custom_meal_preset.dart';
 import '../../models/meal_type.dart';
 import '../../routes/app_routes.dart';
-import '../../theme/app_colors.dart';
-import '../food_emoji_avatar.dart';
-import '../meal_type_chip_row.dart';
+import '../app_bottom_sheet.dart';
+import '../log_preview_sheet.dart';
 
-void showCreateMealSheet(
-  BuildContext context, {
-  String? initialMeal,
-}) {
+void showCreateMealSheet(BuildContext context, {String? initialMeal}) {
   Get.toNamed(
     AppRoutes.createMeal,
     arguments: initialMeal ?? Get.find<FoodController>().selectedMeal.value,
@@ -26,163 +22,78 @@ Future<void> showCustomMealLogSheet(
   BuildContext context, {
   required CustomMealPreset preset,
 }) {
-  final controller = Get.find<FoodController>();
   var selectedMeal = preset.meal;
   if (!MealType.all.contains(selectedMeal)) {
     selectedMeal = MealType.breakfast;
   }
 
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (sheetContext) {
-      final r = sheetContext.responsive;
-      final createdLabel = DateFormat('MMM d, yyyy').format(preset.createdAt);
+  final resolved = Get.isRegistered<FoodController>()
+      ? Get.find<FoodController>().withItemPhotos(preset)
+      : preset;
 
-      return DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.55,
-        minChildSize: 0.4,
-        maxChildSize: 0.85,
-        builder: (context, scrollController) {
-          return StatefulBuilder(
-            builder: (context, setState) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                child: ListView(
-                  controller: scrollController,
-                  padding: EdgeInsets.fromLTRB(
-                    r.scale(20),
-                    r.scale(12),
-                    r.scale(20),
-                    r.scale(24),
-                  ),
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppColors.border,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: r.scale(16)),
-                    Text(
-                      preset.name,
-                      style: TextStyle(
-                        fontSize: r.scale(20),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    SizedBox(height: r.scale(4)),
-                    Text(
-                      '${preset.items.length} foods · ${preset.totalCalories} kcal · ${preset.visibility.label}',
-                      style: TextStyle(
-                        fontSize: r.scale(13),
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      'Created $createdLabel',
-                      style: TextStyle(
-                        fontSize: r.scale(12),
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    SizedBox(height: r.scale(16)),
-                    Container(
-                      padding: EdgeInsets.all(r.scale(12)),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Column(
-                        children: preset.items.map((item) {
-                          return Padding(
-                            padding: EdgeInsets.only(bottom: r.scale(8)),
-                            child: Row(
-                              children: [
-                                FoodEmojiAvatar(
-                                  emoji: item.food.emoji,
-                                  imageUrl: item.food.imageUrl,
-                                  size: 38,
-                                ),
-                                SizedBox(width: r.scale(10)),
-                                Expanded(
-                                  child: Text(
-                                    item.food.name,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: r.scale(14),
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  '${item.servingDescription} · '
-                                  '${item.calories} kcal',
-                                  style: TextStyle(
-                                    fontSize: r.scale(12),
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    SizedBox(height: r.scale(16)),
-                    Text(
-                      'Log to',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: r.scale(14),
-                      ),
-                    ),
-                    SizedBox(height: r.scale(8)),
-                    MealTypeChipRow(
-                      selectedMeal: selectedMeal,
-                      onSelected: (meal) =>
-                          setState(() => selectedMeal = meal),
-                    ),
-                    SizedBox(height: r.scale(20)),
-                    SizedBox(
-                      height: 50,
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: () {
-                          controller.logCustomMealPreset(
-                            preset,
-                            meal: selectedMeal,
-                          );
-                          Navigator.pop(sheetContext);
-                          AppSnackbar.success(
-                            '${preset.name} added to $selectedMeal.',
-                            title: 'Logged',
-                          );
-                        },
-                        child: Text('Log to $selectedMeal'),
-                      ),
-                    ),
-                    SizedBox(height: r.scale(8)),
-                    TextButton(
-                      onPressed: () => Navigator.pop(sheetContext),
-                      child: const Text('Cancel'),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      );
+  return showAppBottomSheet<void>(
+    context: context,
+    builder: (sheetContext) {
+      return _CustomMealLogSheet(preset: resolved, initialMeal: selectedMeal);
     },
   );
+}
+
+class _CustomMealLogSheet extends StatefulWidget {
+  const _CustomMealLogSheet({required this.preset, required this.initialMeal});
+
+  final CustomMealPreset preset;
+  final String initialMeal;
+
+  @override
+  State<_CustomMealLogSheet> createState() => _CustomMealLogSheetState();
+}
+
+class _CustomMealLogSheetState extends State<_CustomMealLogSheet> {
+  late String _selectedMeal = widget.initialMeal;
+  late CustomMealPreset _preset = widget.preset;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_hydratePhotos());
+  }
+
+  Future<void> _hydratePhotos() async {
+    if (!Get.isRegistered<FoodController>()) return;
+    final updated = await Get.find<FoodController>().hydrateCustomMealPhotos(
+      _preset,
+    );
+    if (!mounted) return;
+    setState(() => _preset = updated);
+  }
+
+  void _log() {
+    Get.find<FoodController>().logCustomMealPreset(
+      _preset,
+      meal: _selectedMeal,
+    );
+    Navigator.pop(context);
+    AppSnackbar.success(
+      '${_preset.name} added to $_selectedMeal.',
+      title: 'Logged',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foodCount = _preset.items.length;
+    return LogPreviewBody(
+      title: _preset.name,
+      subtitle: foodCount == 1 ? '1 food' : '$foodCount foods',
+      visibility: _preset.visibility,
+      calories: _preset.totalCalories,
+      items: _preset.items,
+      selectedMeal: _selectedMeal,
+      imageBytes: _preset.imageBytes,
+      imageUrl: _preset.imageUrl,
+      onMealSelected: (meal) => setState(() => _selectedMeal = meal),
+      onLog: _log,
+    );
+  }
 }

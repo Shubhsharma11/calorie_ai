@@ -173,6 +173,9 @@ void main() {
         'fat': 10,
         'mealTime': 'breakfast',
         'quantity': 150,
+        'unit': 'g',
+        'grams': 150,
+        'emoji': '🥣',
         'date': '2026-06-23',
       },
     );
@@ -219,5 +222,230 @@ void main() {
 
     expect(entry, isNotNull);
     expect(entry!.id, 'mongo-meal-1');
+  });
+
+  test('ApiMealMapper keeps bowl serving on logged meals', () {
+    final entry = ApiMealMapper.entryFromApiJson({
+      'id': 'meal-bowl',
+      'name': 'Bharwa Bhindi',
+      'category': 'Indian Main Course',
+      'calories': 180,
+      'protein': 6.6,
+      'carbs': 18,
+      'fat': 9,
+      'mealTime': 'lunch',
+      'quantity': 220,
+      'unit': 'bowl',
+      'gramsPerServing': 220,
+    });
+
+    expect(entry, isNotNull);
+    expect(entry!.grams, 220);
+    expect(entry.food.servingUnit, 'bowl');
+    expect(entry.food.usesHouseholdServing, isTrue);
+    expect(entry.quantityLabel, '1 Bowl (220 g)');
+  });
+
+  test('ApiMealMapper.toCreateRequestBody sends household unit', () {
+    final entry = MealEntry(
+      food: const FoodItem(
+        name: 'Bharwa Bhindi',
+        caloriesPer100g: 82,
+        protein: 3,
+        carbs: 8,
+        fat: 4,
+        servingQuantity: 1,
+        servingUnit: 'bowl',
+        gramsPerServing: 220,
+      ),
+      grams: 220,
+      meal: MealType.lunch,
+      date: DateTime(2026, 6, 23),
+    );
+
+    final body = ApiMealMapper.toCreateRequestBody(entry);
+    expect(body['quantity'], 220);
+    expect(body['unit'], 'bowl');
+    expect(body['grams'], 220);
+    expect(body['gramsPerServing'], 220);
+  });
+
+  test('ApiMealMapper.toCreateRequestBody sends food image', () {
+    final entry = MealEntry(
+      food: const FoodItem(
+        name: 'Oats',
+        caloriesPer100g: 389,
+        protein: 16.9,
+        carbs: 66.3,
+        fat: 6.9,
+        emoji: '🥣',
+        imageUrl: 'https://example.com/oats.png',
+      ),
+      grams: 150,
+      meal: MealType.breakfast,
+      date: DateTime(2026, 6, 23),
+    );
+
+    final body = ApiMealMapper.toCreateRequestBody(entry);
+    expect(body['image'], 'https://example.com/oats.png');
+    expect(body['imageUrl'], 'https://example.com/oats.png');
+    expect(body['emoji'], '🥣');
+  });
+
+  test('ApiMealMapper reads nested and relative meal images', () {
+    final nested = ApiMealMapper.entryFromApiJson({
+      'id': 'meal-img-1',
+      'mealTime': 'lunch',
+      'quantity': 240,
+      'name': 'Ajwain Paratha',
+      'calories': 590,
+      'protein': 12,
+      'carbs': 70,
+      'fat': 20,
+      'food': {
+        'name': 'Ajwain Paratha',
+        'caloriesPer100g': 246,
+        'protein': 5,
+        'carbs': 29,
+        'fat': 8,
+      },
+      'image': {'url': 'https://cdn.example.com/paratha.png'},
+    });
+
+    expect(nested, isNotNull);
+    expect(nested!.food.imageUrl, 'https://cdn.example.com/paratha.png');
+
+    final relative = ApiMealMapper.entryFromApiJson({
+      'id': 'meal-img-2',
+      'mealTime': 'breakfast',
+      'quantity': 100,
+      'name': 'Aam Panna',
+      'calories': 110,
+      'protein': 1,
+      'carbs': 26,
+      'fat': 0,
+      'image': '/uploads/aam-panna.png',
+    });
+
+    expect(relative, isNotNull);
+    expect(
+      relative!.food.imageUrl,
+      'https://fitbuddyai.srhsoftwares.com/uploads/aam-panna.png',
+    );
+  });
+
+  test('ApiMealMapper.mergeCreateResponse keeps source image', () {
+    final source = MealEntry(
+      id: 'local-1',
+      food: const FoodItem(
+        name: 'Oats',
+        caloriesPer100g: 389,
+        protein: 16.9,
+        carbs: 66.3,
+        fat: 6.9,
+        emoji: '🥣',
+        imageUrl: 'https://example.com/oats.png',
+      ),
+      grams: 150,
+      meal: MealType.breakfast,
+    );
+
+    final merged = ApiMealMapper.mergeCreateResponse(
+      {
+        'success': true,
+        'data': {
+          'id': 'server-99',
+          'name': 'Oats',
+          'calories': 584,
+          'protein': 25,
+          'carbs': 99,
+          'fat': 10,
+          'mealTime': 'breakfast',
+          'quantity': 150,
+        },
+      },
+      source: source,
+    );
+
+    expect(merged.id, 'server-99');
+    expect(merged.food.imageUrl, 'https://example.com/oats.png');
+    expect(merged.food.emoji, '🥣');
+  });
+
+  test('ApiMealMapper.mergeCreateResponse keeps bowl serving', () {
+    final source = MealEntry(
+      id: 'local-1',
+      food: const FoodItem(
+        name: 'Bharwa Bhindi',
+        caloriesPer100g: 82,
+        protein: 3,
+        carbs: 8,
+        fat: 4,
+        servingQuantity: 1,
+        servingUnit: 'bowl',
+        gramsPerServing: 220,
+      ),
+      grams: 220,
+      meal: MealType.lunch,
+    );
+
+    final merged = ApiMealMapper.mergeCreateResponse(
+      {
+        'success': true,
+        'data': {
+          'id': 'server-99',
+          'name': 'Bharwa Bhindi',
+          'calories': 180,
+          'protein': 6.6,
+          'carbs': 18,
+          'fat': 9,
+          'mealTime': 'lunch',
+          'quantity': 220,
+        },
+      },
+      source: source,
+    );
+
+    expect(merged.id, 'server-99');
+    expect(merged.food.servingUnit, 'bowl');
+    expect(merged.quantityLabel, '1 Bowl (220 g)');
+  });
+
+  test('ApiMealMapper reads household quantity as serving count', () {
+    final entry = ApiMealMapper.entryFromApiJson({
+      'id': 'meal-bowl-count',
+      'name': 'Dal',
+      'calories': 210,
+      'protein': 12,
+      'carbs': 28,
+      'fat': 5,
+      'mealTime': 'lunch',
+      'quantity': 1,
+      'unit': 'bowl',
+    });
+
+    expect(entry, isNotNull);
+    expect(entry!.grams, 220);
+    expect(entry.food.servingUnit, 'bowl');
+    expect(entry.quantityLabel, '1 Bowl (220 g)');
+  });
+
+  test('ApiMealMapper keeps milliliter quantity', () {
+    final entry = ApiMealMapper.entryFromApiJson({
+      'id': 'meal-ml',
+      'name': 'Buttermilk',
+      'calories': 80,
+      'protein': 4,
+      'carbs': 10,
+      'fat': 2,
+      'mealTime': 'breakfast',
+      'quantity': 250,
+      'unit': 'ml',
+    });
+
+    expect(entry, isNotNull);
+    expect(entry!.grams, 250);
+    expect(entry.food.servingUnit, 'ml');
+    expect(entry.quantityLabel, '250 ml');
   });
 }
