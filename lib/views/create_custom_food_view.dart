@@ -55,6 +55,13 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
   late String _selectedMeal;
 
   bool get _isEditing => _editingPreset != null;
+
+  bool get _hasFoodPhoto {
+    if (_foodImageBytes != null && _foodImageBytes!.isNotEmpty) return true;
+    final url = _foodImageUrl?.trim();
+    return url != null && url.isNotEmpty;
+  }
+
   double get _nutritionBasisQuantity =>
       _servingUnit == 'g' || _servingUnit == 'ml' ? 100 : 1;
 
@@ -108,6 +115,7 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
         setState(() {
           _foodImageBytes = bytes;
           _foodImageUrl = null;
+          if (_errorText == 'Add a food photo.') _errorText = null;
         });
       });
     } catch (_) {
@@ -175,7 +183,9 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
     final fat = double.tryParse(_fatController.text.trim()) ?? 0;
 
     String? error;
-    if (name.isEmpty) {
+    if (!_hasFoodPhoto) {
+      error = 'Add a food photo.';
+    } else if (name.isEmpty) {
       error = 'Enter the food name.';
     } else if (servingQuantity <= 0 || servingQuantity > 5000) {
       error = 'Serving quantity must be greater than zero.';
@@ -267,10 +277,6 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
                           imageBytes: _foodImageBytes,
                           imageUrl: _foodImageUrl,
                           onPick: _isSaving ? () {} : _showFoodImageOptions,
-                          onRemove: () => setState(() {
-                            _foodImageBytes = null;
-                            _foodImageUrl = null;
-                          }),
                         ),
                         SizedBox(height: r.scale(14)),
                         TextField(
@@ -507,13 +513,11 @@ class _FoodImagePicker extends StatelessWidget {
     required this.imageBytes,
     this.imageUrl,
     required this.onPick,
-    required this.onRemove,
   });
 
   final Uint8List? imageBytes;
   final String? imageUrl;
   final VoidCallback onPick;
-  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -557,7 +561,7 @@ class _FoodImagePicker extends StatelessWidget {
                       ),
                       SizedBox(height: r.scale(3)),
                       Text(
-                        'Gallery or camera · optional',
+                        'Required · gallery or camera, then crop',
                         style: TextStyle(
                           fontSize: r.scale(11),
                           color: AppColors.textSecondary,
@@ -581,20 +585,10 @@ class _FoodImagePicker extends StatelessWidget {
                       Positioned(
                         right: r.scale(8),
                         bottom: r.scale(8),
-                        child: Row(
-                          children: [
-                            _FoodImageAction(
-                              icon: Icons.photo_camera_outlined,
-                              tooltip: 'Change food photo',
-                              onTap: onPick,
-                            ),
-                            SizedBox(width: r.scale(6)),
-                            _FoodImageAction(
-                              icon: Icons.delete_outline_rounded,
-                              tooltip: 'Remove food photo',
-                              onTap: onRemove,
-                            ),
-                          ],
+                        child: _FoodImageAction(
+                          icon: Icons.photo_camera_outlined,
+                          tooltip: 'Change food photo',
+                          onTap: onPick,
                         ),
                       ),
                     ],

@@ -134,7 +134,7 @@ class _MyGoalsViewState extends State<MyGoalsView> {
 
     return Scaffold(
       backgroundColor: AppColors.backgroundOf(context),
-      appBar: const AppAppBar(title: 'Goal'),
+      appBar: const AppAppBar(title: 'My Goals'),
       body: GetBuilder<UserController>(
         builder: (_) {
           final user = controller.user;

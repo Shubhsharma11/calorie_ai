@@ -61,9 +61,10 @@ class _AddFoodViewState extends State<AddFoodView> {
   void initState() {
     super.initState();
     _searchFocusNode = FocusNode();
-    // Always open Add Food with a fresh search field.
-    _food.clearSearch();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Clear after first frame so Obx listeners are not dirty mid-build.
+      _food.clearSearch();
       // Quick items from meals; catalog lists load when their tabs are opened.
       _food.refreshQuickItemsFromApi();
     });
@@ -327,7 +328,7 @@ class _FoodBrowseList extends GetView<FoodController> {
                 AppCoachMarks.target(
                   key: AppCoachMarks.addFoodFavouriteKey,
                   child: FilterChipPill(
-                    label: 'Favourite',
+                    label: 'Favourites',
                     selected: catalogTab == _FoodCatalogTab.favourites,
                     onTap: () =>
                         onCatalogTabChanged(_FoodCatalogTab.favourites),
@@ -382,7 +383,7 @@ class _FoodBrowseList extends GetView<FoodController> {
 
     return [
       Text(
-        'Favourite',
+        'Favourites',
         style: TextStyle(
           fontSize: r.scale(18, tablet: 19),
           fontWeight: FontWeight.w700,
@@ -390,7 +391,7 @@ class _FoodBrowseList extends GetView<FoodController> {
       ),
       SizedBox(height: r.scale(4)),
       Text(
-        'Tap the star to remove from favourites',
+        'Tap the star to remove from Favourites',
         style: TextStyle(
           fontSize: r.scale(12, tablet: 13),
           color: AppColors.textSecondary,
@@ -737,13 +738,13 @@ class _CustomFoodCreatorState extends State<_CustomFoodCreator> {
           CreateMealPromoCard(
             onTap: () => Get.to<void>(() => const CreateCustomFoodView()),
             title: 'Create Food',
-            description: 'Create and save food for faster logging.',
+            description: 'Create and save a food for faster logging.',
             actionLabel: 'Create New Food',
             illustrationAsset: 'assets/image/Cooking_imagery.json',
           ),
           SizedBox(height: r.scale(18)),
           Text(
-            'My foods',
+            'My Food',
             style: TextStyle(
               fontSize: r.scale(18, tablet: 19),
               fontWeight: FontWeight.w700,
@@ -1000,7 +1001,7 @@ class _MyMealsEmptyState extends StatelessWidget {
                 ),
                 SizedBox(height: r.scale(10)),
                 Text(
-                  'Combine your favorite foods into a meal and save it '
+                  'Combine your favourite foods into a meal and save it '
                   'for faster logging.',
                   textAlign: TextAlign.center,
                   style: TextStyle(

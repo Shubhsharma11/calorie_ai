@@ -7,17 +7,17 @@
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
-		<string>FitBuddy AI</string>
+		<string>MyCaloriePal</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-		<key>CFBundleInfoDictionaryVersion</key>
-		<string>6.0</string>
 		<key>CFBundleName</key>
-		<string>FitBuddy AI</string>
+		<string>MyCaloriePal</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
+		<key>CFBundleInfoDictionaryVersion</key>
+		<string>6.0</string>
 		<key>CFBundleShortVersionString</key>
 		<string>$(FLUTTER_BUILD_NAME)</string>
 		<key>CFBundleSignature</key>
@@ -27,15 +27,15 @@
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
 		<key>NSCameraUsageDescription</key>
-		<string>FitBuddy AI uses the camera to scan food and barcodes.</string>
+		<string>MyCaloriePal uses the camera to scan food and barcodes.</string>
 		<key>NSHealthShareUsageDescription</key>
-		<string>FitBuddy AI reads your health data, such as steps, calories, and workouts, to provide personalized fitness tracking and insights.</string>
+		<string>MyCaloriePal reads your health data, such as steps, calories, and workouts, to provide personalized fitness tracking and insights.</string>
 		<key>NSHealthUpdateUsageDescription</key>
-		<string>FitBuddy AI writes health and workout data to Apple Health only with your permission.</string>
+		<string>MyCaloriePal writes health and workout data to Apple Health only with your permission.</string>
 		<key>NSMotionUsageDescription</key>
-		<string>FitBuddy AI uses motion data to track your steps and activity progress.</string>
+		<string>MyCaloriePal uses motion data to track your steps and activity progress.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>FitBuddy AI uses your photo library to select food images and attach screenshots to support reports.</string>
+		<string>MyCaloriePal uses your photo library to select food images and attach screenshots to support reports.</string>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
@@ -77,6 +77,15 @@
 		<key>UISupportedInterfaceOrientations~ipad</key>
 		<array>
 			<string>UIInterfaceOrientationPortrait</string>
+			<string>UIInterfaceOrientationPortraitUpsideDown</string>
+			<string>UIInterfaceOrientationLandscapeLeft</string>
+			<string>UIInterfaceOrientationLandscapeRight</string>
+		</array>
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>https</string>
+			<string>http</string>
+			<string>mailto</string>
 		</array>
 		<key>CFBundleURLTypes</key>
 		<array>

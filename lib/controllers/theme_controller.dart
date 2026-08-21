@@ -14,12 +14,13 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
   final Rx<Brightness> platformBrightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness.obs;
 
-  /// Root [Theme] brightness driven by [themeMode] / device brightness.
+  /// Last brightness applied to the shell / Settings local Theme.
   final Rx<Brightness> appliedBrightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness.obs;
 
   /// Settings (etc.) is open — covered tabs stay frozen via [MainView].
   int _localThemeOverlayDepth = 0;
+  bool _publishScheduled = false;
 
   bool get isLocalThemeOverlayActive => _localThemeOverlayDepth > 0;
 
@@ -28,6 +29,13 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
     appliedBrightness.value = effectiveBrightness;
+  }
+
+  @override
+  void onReady() {
+    super.onReady();
+    // GetMaterialApp is mounted — push stored mode into the shell ThemeMode.
+    _syncGetMaterialThemeMode();
   }
 
   @override
@@ -53,6 +61,8 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
       AppColors.setOverlayBrightnessResolver(null);
       _publishAppliedBrightness();
       AppColors.syncWithBrightness(effectiveBrightness);
+      _syncGetMaterialThemeMode();
+      update();
     }
   }
 
@@ -63,6 +73,8 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
     if (themeMode.value != ThemeMode.system) return;
     AppColors.syncWithBrightness(effectiveBrightness);
     _publishAppliedBrightness();
+    _syncGetMaterialThemeMode();
+    update();
   }
 
   Future<void> loadTheme() async {
@@ -71,6 +83,8 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
     if (stored == null) {
       _publishAppliedBrightness();
       AppColors.syncWithBrightness(effectiveBrightness);
+      _syncGetMaterialThemeMode();
+      update();
       return;
     }
 
@@ -93,10 +107,10 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
   void _applyMode(ThemeMode mode, {required bool persist}) {
     themeMode.value = mode;
     AppColors.syncWithBrightness(effectiveBrightness);
-    Get.rootController.themeMode = mode;
-    // Always publish — deferring left Settings on a dark paint while the shell
-    // Theme stayed light, so MainView.syncFromContext wiped Dark Mode back.
     _publishAppliedBrightness();
+    _syncGetMaterialThemeMode();
+    // Rebuild GetBuilder listeners (Settings) without Obx wrapping Theme.
+    update();
 
     if (persist) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -105,11 +119,24 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
     }
   }
 
+  void _syncGetMaterialThemeMode() {
+    if (!Get.isRegistered<GetMaterialController>()) return;
+    Get.changeThemeMode(themeMode.value);
+  }
+
+  /// Publish after the current frame so no Obx/Theme rebuild races DefaultTextStyle.
   void _publishAppliedBrightness() {
-    final brightness = effectiveBrightness;
-    if (appliedBrightness.value != brightness) {
-      appliedBrightness.value = brightness;
-    }
+    if (appliedBrightness.value == effectiveBrightness) return;
+    if (_publishScheduled) return;
+    _publishScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _publishScheduled = false;
+      if (isClosed) return;
+      final brightness = effectiveBrightness;
+      if (appliedBrightness.value != brightness) {
+        appliedBrightness.value = brightness;
+      }
+    });
   }
 
   Future<void> _persistMode(ThemeMode mode) async {

@@ -54,7 +54,7 @@ class CustomMealsApiService {
   /// POST `/api/v1/my-meals` — create a meal template.
   Future<CustomMealPreset> createCustomMeal({
     required String accessToken,
-    required CustomMealPreset preset,
+    required CustomMealPreset preset,s
   }) async {
     final body = ApiCustomMealMapper.toCreateRequestBody(preset);
 
@@ -226,7 +226,7 @@ class CustomMealsApiService {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final message = decoded is Map<String, dynamic>
-          ? decoded['message'] as String? ?? decoded['error'] as String?
+          ? decoded['message'] as String? ?? decoded['error'] as String?                         
           : null;
       final statusHint = response.statusCode == 530 || response.statusCode == 502
           ? ' The backend tunnel may be offline.'
@@ -284,7 +284,6 @@ class CustomMealsApiService {
       statusCode: response.statusCode,
     );
   }
-
   dynamic _tryDecodeJson(String body) {
     if (body.isEmpty) return null;
     try {

@@ -70,7 +70,7 @@ class MealsApiService {
   }) async {
     final mealId = entry.id.trim();
     if (mealId.isEmpty) {
-      throw const MealsApiException('Cannot update a meal without a server id.');
+      throw const MealsApiException('This meal can’t be updated right now.');
     }
 
     final endpoint = ApiEndpoints.mealById(mealId);

@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../controllers/notifications_controller.dart';
+import '../core/notification_navigation.dart';
 import '../core/responsive.dart';
 import '../models/notification_model.dart';
 import '../models/notification_type.dart';
@@ -154,6 +155,7 @@ final achievements = items
     await _controller.openNotification(item);
     final route = item.route;
     if (route.isNotEmpty && route != AppRoutes.notifications) {
+      prepareNotificationNavigation(item);
       Get.toNamed(route);
     }
   }
@@ -501,7 +503,7 @@ class _EmptyNotifications extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'New updates will appear on this page.',
+            'New updates will show up here.',
             style: TextStyle(color: AppColors.textSecondary),
           ),
         ],

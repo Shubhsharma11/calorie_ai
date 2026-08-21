@@ -5,7 +5,6 @@ import '../core/responsive.dart';
 import '../models/user_model.dart';
 import '../theme/app_colors.dart';
 import 'app_bottom_sheet.dart';
-import 'app_network_image.dart';
 import 'media_viewer.dart';
 
 enum ProfilePhotoAction { view, camera, gallery, remove }
@@ -37,14 +36,6 @@ Future<ProfilePhotoAction?> showProfilePhotoSheet({
           children: [
             Row(
               children: [
-                _SheetPhotoThumb(
-                  user: user,
-                  size: r.scale(44),
-                  onTap: hasPhoto
-                      ? () => choose(ProfilePhotoAction.view)
-                      : null,
-                ),
-                SizedBox(width: r.scale(12)),
                 Expanded(
                   child: Text(
                     hasPhoto ? 'Edit profile picture' : 'Add profile picture',
@@ -107,87 +98,6 @@ Future<void> showProfilePhotoViewer({
     imageUrl: user.avatarUrl,
     title: user.name.trim().isEmpty ? 'Profile photo' : user.name,
   );
-}
-
-class _SheetPhotoThumb extends StatelessWidget {
-  const _SheetPhotoThumb({required this.user, required this.size, this.onTap});
-
-  final UserModel user;
-  final double size;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final bytes = user.profilePhotoBytes;
-    final url = user.avatarUrl?.trim() ?? '';
-    final hasBytes = bytes != null && bytes.isNotEmpty;
-    final hasUrl = url.isNotEmpty;
-    final cacheSize = (size * MediaQuery.devicePixelRatioOf(context))
-        .round()
-        .clamp(1, 256);
-    final radius = BorderRadius.circular(size * 0.22);
-
-    final Widget photo;
-    if (hasBytes) {
-      photo = Image(
-        image: ResizeImage(
-          MemoryImage(bytes),
-          width: cacheSize,
-          policy: ResizeImagePolicy.fit,
-        ),
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        filterQuality: FilterQuality.high,
-        errorBuilder: (_, _, _) => _ThumbFallback(size: size),
-      );
-    } else if (hasUrl) {
-      photo = AppNetworkImage(
-        url,
-        width: size,
-        height: size,
-        cacheWidth: cacheSize,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        filterQuality: FilterQuality.high,
-        errorBuilder: (_, _, _) => _ThumbFallback(size: size),
-        placeholder: _ThumbFallback(size: size),
-      );
-    } else {
-      photo = _ThumbFallback(size: size);
-    }
-
-    final thumb = ClipRRect(
-      borderRadius: radius,
-      child: SizedBox(width: size, height: size, child: photo),
-    );
-
-    if (onTap == null) return thumb;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(onTap: onTap, borderRadius: radius, child: thumb),
-    );
-  }
-}
-
-class _ThumbFallback extends StatelessWidget {
-  const _ThumbFallback({required this.size});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppColors.surface,
-      child: Icon(
-        Icons.person_rounded,
-        size: size * 0.62,
-        color: AppColors.textSecondary,
-      ),
-    );
-  }
 }
 
 class _SheetActionRow extends StatelessWidget {

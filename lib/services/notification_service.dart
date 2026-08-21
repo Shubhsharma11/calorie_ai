@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../controllers/user_controller.dart';
 import '../core/android_sdk.dart';
+import '../core/notification_navigation.dart';
 import '../models/notification_model.dart';
 import '../models/notification_type.dart';
 import '../repositories/notification_repository.dart';
@@ -44,13 +45,33 @@ class NotificationService {
   static const _androidLauncherIcon = '@mipmap/ic_launcher';
 
   bool _initialized = false;
+  Future<void>? _initializeInFlight;
+  bool _fcmListenersAttached = false;
+  StreamSubscription<RemoteMessage>? _onMessageSub;
+  StreamSubscription<RemoteMessage>? _onMessageOpenedSub;
+  StreamSubscription<String>? _onTokenRefreshSub;
   String? _currentToken;
   RemoteMessage? _pendingInitialMessage;
   NotificationModel? _pendingTapNotification;
 
+  /// Prevents the same FCM delivery from showing two local banners when
+  /// listeners were attached twice (init race / hot restart) or FCM redelivers.
+  final Set<String> _recentForegroundMessageIds = <String>{};
+  static const int _recentMessageIdCap = 40;
+
   final Map<String, AndroidNotificationChannel> _androidChannels = {};
 
   Future<void> initialize() async {
+    if (_initialized) return;
+    if (_initializeInFlight != null) return _initializeInFlight!;
+
+    _initializeInFlight = _doInitialize().whenComplete(() {
+      _initializeInFlight = null;
+    });
+    return _initializeInFlight!;
+  }
+
+  Future<void> _doInitialize() async {
     if (_initialized) return;
 
     await _initLocalNotifications();
@@ -61,7 +82,7 @@ class NotificationService {
     _currentToken = await _safeGetFcmToken();
     await logFcmToken();
 
-    _messaging.onTokenRefresh.listen(_handleTokenRefresh);
+    _onTokenRefreshSub ??= _messaging.onTokenRefresh.listen(_handleTokenRefresh);
     try {
       _pendingInitialMessage = await _messaging.getInitialMessage();
     } catch (error) {
@@ -287,20 +308,44 @@ class NotificationService {
   }
 
   Future<void> _configureFirebaseMessaging() async {
+    // Data-only pushes have no system banner — we show flutter_local_notifications
+    // ourselves. Keep OS foreground presentation off so a notification+data mix
+    // (or iOS aps alert leftovers) cannot double with our local banner.
     await _messaging.setForegroundNotificationPresentationOptions(
-      alert: true,
+      alert: false,
       badge: true,
-      sound: true,
+      sound: false,
     );
 
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationOpenedApp);
+    if (_fcmListenersAttached) return;
+    _fcmListenersAttached = true;
+
+    await _onMessageSub?.cancel();
+    await _onMessageOpenedSub?.cancel();
+    _onMessageSub = FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    _onMessageOpenedSub =
+        FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationOpenedApp);
   }
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    final messageId = message.messageId;
+    if (messageId != null && messageId.isNotEmpty) {
+      if (!_recentForegroundMessageIds.add(messageId)) {
+        if (kDebugMode) {
+          debugPrint('FCM foreground duplicate ignored: $messageId');
+        }
+        return;
+      }
+      if (_recentForegroundMessageIds.length > _recentMessageIdCap) {
+        _recentForegroundMessageIds.remove(
+          _recentForegroundMessageIds.first,
+        );
+      }
+    }
+
     if (kDebugMode) {
       debugPrint(
-        'FCM foreground message: ${message.messageId} data=${message.data}',
+        'FCM foreground message: $messageId data=${message.data}',
       );
     }
     await _showLocalNotification(NotificationModel.fromRemoteMessage(message));
@@ -388,6 +433,7 @@ class NotificationService {
     if (route.isEmpty) return;
 
     void navigate() {
+      prepareNotificationNavigation(model);
       if (Get.currentRoute != route) {
         Get.toNamed(route, arguments: model.data);
       }
@@ -443,9 +489,9 @@ class NotificationService {
       case NotificationType.aiNutritionTips:
         return 'AI nutrition tip';
       case NotificationType.motivational:
-        return 'FitBuddy AI';
+        return 'MyCaloriePal';
       case NotificationType.unknown:
-        return 'FitBuddy AI';
+        return 'MyCaloriePal';
     }
   }
 
@@ -456,7 +502,7 @@ class NotificationService {
       case NotificationType.breakfastReminder:
         return 'Log your breakfast to stay on track.';
       case NotificationType.lunchReminder:
-        return 'Log your lunch and keep your calories balanced.';
+        return 'Log your lunch to stay on track.';
       case NotificationType.dinnerReminder:
         return 'Log your dinner before the day ends.';
       case NotificationType.waterReminder:
@@ -472,7 +518,7 @@ class NotificationService {
       case NotificationType.weightReminder:
         return 'Update your weight to track progress.';
       case NotificationType.aiNutritionTips:
-        return 'Open your personalized nutrition tip.';
+        return 'Open today’s personalized nutrition tip.';
       case NotificationType.motivational:
         return 'Small steps lead to big results.';
       case NotificationType.unknown:

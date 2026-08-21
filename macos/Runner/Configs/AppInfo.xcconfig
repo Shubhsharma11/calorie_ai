@@ -8,7 +8,7 @@
 PRODUCT_NAME = calorie_ai
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.srhsoftwares.fitbuddyai
+PRODUCT_BUNDLE_IDENTIFIER = com.srhsoftwares.mycaloriepal
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 SRH Softwares. All rights reserved.

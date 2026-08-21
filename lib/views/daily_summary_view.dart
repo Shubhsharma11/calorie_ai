@@ -203,14 +203,14 @@ class _TodayOverviewCard extends GetView<DailySummaryController> {
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text('View Details >'),
+                child: const Text('View details'),
               ),
             ],
           ),
           const SizedBox(height: 12),
           _OverviewRow(
             color: AppColors.primary,
-            label: 'Calories Goal',
+            label: 'Calorie Goal',
             value: '${controller.calorieGoal} kcal',
           ),
           const SizedBox(height: 10),
@@ -287,10 +287,10 @@ class _AchievementsSection extends GetView<DailySummaryController> {
               onPressed: () => Get.snackbar(
                 'Achievements',
                 achievements.isEmpty
-                    ? 'Complete goals to unlock achievements.'
-                    : 'You have ${achievements.length} unlocked!',
+                    ? 'Complete your goals to unlock achievements.'
+                    : 'You have ${achievements.length} achievements unlocked!',
               ),
-              child: const Text('See All >'),
+              child: const Text('See all'),
             ),
           ],
         ),
@@ -302,7 +302,7 @@ class _AchievementsSection extends GetView<DailySummaryController> {
                   icon: Icons.emoji_events_outlined,
                   color: AppColors.textSecondary,
                   title: 'No achievements yet',
-                  subtitle: 'Keep logging to unlock',
+                  subtitle: 'Keep logging to unlock achievements',
                 )
               : ListView.separated(
                   scrollDirection: Axis.horizontal,

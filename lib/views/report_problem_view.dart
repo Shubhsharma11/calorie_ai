@@ -95,7 +95,7 @@ class _ReportProblemViewState extends State<ReportProblemView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Help us improve FitBuddy AI',
+            'Help us improve MyCaloriePal',
             style: TextStyle(
               fontSize: r.scale(22, tablet: 24),
               fontWeight: FontWeight.bold,
@@ -232,7 +232,7 @@ class _ReportProblemViewState extends State<ReportProblemView> {
           SizedBox(height: r.scale(4)),
           Center(
             child: Text(
-              _deviceInfo?.footerLabel ?? 'FitBuddy AI',
+              _deviceInfo?.footerLabel ?? 'MyCaloriePal',
               style: TextStyle(
                 fontSize: r.scale(12),
                 color: AppColors.textSecondaryOf(context),
@@ -654,7 +654,7 @@ class _SuccessBody extends StatelessWidget {
           ),
           SizedBox(height: r.scale(10)),
           Text(
-            'Thanks for helping us improve FitBuddy AI.',
+            'Thanks for helping us improve MyCaloriePal.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: r.scale(15),

@@ -10,7 +10,7 @@ class OnboardingRepository {
 
   Future<OnboardingResponseModel> submitOnboarding({
     required String accessToken,
-    required OnboardingRequestModel request,
+    required OnboardingRequestModel request,  
   }) async {
     try {
       return await _apiService.submitOnboarding(

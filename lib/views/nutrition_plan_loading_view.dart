@@ -461,7 +461,7 @@ class _TipCard extends StatelessWidget {
                   ),
                   TextSpan(
                     text:
-                        'Your personalized plan will help you reach your goals faster and healthier.',
+                        'Your personalized plan will help you reach your goals faster and stay healthier.',
                   ),
                 ],
               ),

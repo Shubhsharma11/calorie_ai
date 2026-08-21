@@ -229,7 +229,7 @@ class DailySummaryController extends GetxController {
           text: 'You were ',
           bold: '$caloriesOver kcal over',
           suffix: isViewingToday
-              ? ' your daily goal. Consider a lighter next meal.'
+              ? ' your daily goal. Consider a lighter meal next.'
               : ' your goal on $dateLabel.',
           openFoodTab: true,
         ),

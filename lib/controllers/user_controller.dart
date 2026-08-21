@@ -77,6 +77,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
   String refreshToken = '';
   Map<String, dynamic> backendLoginResponse = {};
   final calorieGoalRevision = 0.obs;
+  bool _calorieGoalNotifyScheduled = false;
   Completer<void>? _localProfileReady;
   Timer? _onboardingDraftSaveTimer;
   bool hasOnboardingDraft = false;
@@ -321,6 +322,48 @@ class UserController extends GetxController with WidgetsBindingObserver {
     return '';
   }
 
+  static const _displayNameKeys = [
+    'name',
+    'fullName',
+    'displayName',
+    'display_name',
+    'full_name',
+  ];
+
+  /// Reads the user's display name from an auth/login/`/auth/me` payload.
+  /// Empty values are ignored so a later Apple login cannot wipe a saved name.
+  static String readDisplayName(Map<String, dynamic> response) {
+    for (final map in _authResponseMaps(response)) {
+      for (final key in _displayNameKeys) {
+        final value = map[key];
+        if (value is String && value.trim().isNotEmpty) return value.trim();
+        if (value is Map) {
+          final composed = [
+            value['givenName'] ?? value['given_name'],
+            value['familyName'] ?? value['family_name'],
+          ]
+              .whereType<String>()
+              .map((part) => part.trim())
+              .where((part) => part.isNotEmpty)
+              .join(' ');
+          if (composed.isNotEmpty) return composed;
+        }
+      }
+    }
+    return '';
+  }
+
+  /// Prefers a non-empty backend name so Apple's empty follow-up payload
+  /// cannot overwrite a name already stored on the server.
+  static String resolveLoginDisplayName({
+    required Map<String, dynamic> backendResponse,
+    required String providerName,
+  }) {
+    final backendName = readDisplayName(backendResponse);
+    if (backendName.isNotEmpty) return backendName;
+    return providerName.trim();
+  }
+
   bool get isEmailVerified => readEmailVerified(backendLoginResponse);
 
   /// Persisted / in-memory flag that setup finished (survives cold start via session).
@@ -365,12 +408,18 @@ class UserController extends GetxController with WidgetsBindingObserver {
   }
 
   void _notifyCalorieGoalChanged() {
-    // Home calorie/macro Obx listens to calorieGoalRevision — bump it whenever
-    // goals or plan fields change so the UI refreshes without a manual reload.
-    calorieGoalRevision.value++;
-    if (Get.isRegistered<DashboardController>()) {
-      Get.find<DashboardController>().update();
-    }
+    // Defer so home Obx widgets are not marked dirty while Theme/DefaultTextStyle
+    // is still building (e.g. after profile hydrate during a shell rebuild).
+    if (_calorieGoalNotifyScheduled) return;
+    _calorieGoalNotifyScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _calorieGoalNotifyScheduled = false;
+      if (isClosed) return;
+      calorieGoalRevision.value++;
+      if (Get.isRegistered<DashboardController>()) {
+        Get.find<DashboardController>().update();
+      }
+    });
   }
 
   Future<void> pickProfilePhoto(ImageSource source) async {
@@ -577,6 +626,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     try {
       final me = await _authRepository.fetchMe(accessToken: token);
       _applyAvatarFromResponse(me);
+      _applyNameFromAuthResponse(me);
       await _persistCurrentAuthSession();
     } catch (error, stackTrace) {
       debugPrint('UserController: avatar refresh failed: $error\n$stackTrace');
@@ -591,6 +641,13 @@ class UserController extends GetxController with WidgetsBindingObserver {
       url,
       expiresIn: AvatarUploadResult.expiresInFromResponse(response),
     );
+  }
+
+  void _applyNameFromAuthResponse(Map<String, dynamic>? response) {
+    if (response == null) return;
+    final name = readDisplayName(response);
+    if (name.isEmpty || user.name == name) return;
+    user.name = name;
   }
 
   void _applyAvatarUrl(String url, {int? expiresIn}) {
@@ -654,6 +711,38 @@ class UserController extends GetxController with WidgetsBindingObserver {
       return;
     }
     _avatarUiDirty = true;
+  }
+
+  Future<String?> updateDisplayName(
+    String name, {
+    bool force = false,
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 'Enter your name.';
+    if (!force && trimmed == user.name.trim()) return null;
+
+    final token = await resolveAccessToken();
+    if (token == null || token.isEmpty) {
+      return 'Please sign in to save changes.';
+    }
+
+    try {
+      final response = await _authRepository.updateMe(
+        accessToken: token,
+        name: trimmed,
+      );
+      user.name = trimmed;
+      _applyNameFromAuthResponse(response);
+      if (user.name.trim().isEmpty) user.name = trimmed;
+      await _persistCurrentAuthSession();
+      if (!isClosed) update();
+      return null;
+    } on AuthApiException catch (error) {
+      return error.message;
+    } catch (error, stackTrace) {
+      debugPrint('UserController: update name failed: $error\n$stackTrace');
+      return 'Could not update your name. Please try again.';
+    }
   }
 
   Future<void> showProfilePhotoOptions(BuildContext context) async {
@@ -2195,8 +2284,12 @@ class UserController extends GetxController with WidgetsBindingObserver {
     this.refreshToken = refreshToken ?? '';
     backendLoginResponse = backendResponse;
     user.email = email;
-    user.name = name.trim().isNotEmpty ? name.trim() : '';
+    user.name = resolveLoginDisplayName(
+      backendResponse: backendResponse,
+      providerName: name,
+    );
     _applyAvatarFromResponse(backendResponse);
+    _applyNameFromAuthResponse(backendResponse);
     update();
 
     // Persist tokens first. Defer FCM until after profile — parallel bursts
@@ -2402,13 +2495,13 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
       if (result.backendRevoked) {
         AppSnackbar.success(
-          'You have been logged out successfully.',
+          'You’ve been logged out.',
           title: 'Logged out',
         );
       } else if (result.hasBackendError) {
         AppSnackbar.info(
           'Could not reach the server, but your session was cleared.',
-          title: 'Logged out locally',
+          title: 'Signed out on this device',
         );
       } else {
         AppSnackbar.success('Your session was cleared.', title: 'Logged out');

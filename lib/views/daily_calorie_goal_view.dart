@@ -1048,7 +1048,7 @@ class _OptimizationBox extends StatelessWidget {
                   SizedBox(width: r.scale(10)),
                   Expanded(
                     child: Text(
-                      'This plan is optimized for your $goalLabel goal.',
+                      'This plan is tailored to your ${goalLabel.toLowerCase()} goal.',
                       style: TextStyle(
                         fontSize: r.scale(12),
                         color: AppColors.textPrimary,

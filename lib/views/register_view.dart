@@ -57,7 +57,7 @@ class RegisterView extends GetView<AuthController> {
                 GestureDetector(
                   onTap: () => Get.back(),
                   child: const Text(
-                    'Login',
+                    'Log in',
                     style: TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.w600,

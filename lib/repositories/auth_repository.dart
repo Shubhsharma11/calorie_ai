@@ -68,6 +68,13 @@ class AuthRepository {
     return _authApi.fetchMe(accessToken: accessToken);
   }
 
+  Future<Map<String, dynamic>> updateMe({
+    required String accessToken,
+    required String name,
+  }) {
+    return _authApi.updateMe(accessToken: accessToken, name: name);
+  }
+
   Future<String?> resolveRefreshToken({String? inMemoryToken}) async {
     if (inMemoryToken != null && inMemoryToken.isNotEmpty) {
       return inMemoryToken;

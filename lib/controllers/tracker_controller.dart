@@ -1,6 +1,7 @@
   import 'dart:async';
 
   import 'package:flutter/foundation.dart';
+  import 'package:flutter/scheduler.dart';
   import 'package:get/get.dart';
 
   import '../core/app_snackbar.dart';
@@ -405,7 +406,10 @@
         unawaited(
           AnalyticsService.logGoalCompleted(goalType: 'water_daily'),
         );
-        WaterGoalSuccessDialog.show();
+        // Dialog insert must not run while Obx/Theme are still building.
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          WaterGoalSuccessDialog.show();
+        });
       }
     }
 
@@ -461,7 +465,7 @@
       if (entryId == null || entryId.isEmpty) {
         return const WaterDeleteOutcome(
           WaterDeleteStatus.missingId,
-          message: 'This entry cannot be deleted without a server id.',
+          message: 'This entry can’t be deleted right now.',
         );
       }
 
@@ -535,7 +539,11 @@
       if (!isWaterGoalComplete) {
         _waterGoalCelebrationShown = false;
       }
-      _bumpWaterRevision();
+      // Defer — ever(waterGoalMl) can fire while Settings Obx is rebuilding.
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (isClosed) return;
+        _bumpWaterRevision();
+      });
     }
 
     /// Loads today's water total and paginated history from the API.
@@ -1037,7 +1045,7 @@
           return const WeightLogOutcome(WeightLogStatus.failed);
         } catch (_) {
           weightApiErrorMessage.value =
-              'Weight could not be saved to the server.';
+              'Weight could not be saved. Please try again.';
           return const WeightLogOutcome(WeightLogStatus.failed);
         }
       }
@@ -1079,7 +1087,7 @@
       if (entryId == null || entryId.isEmpty) {
         return const WeightDeleteOutcome(
           WeightDeleteStatus.missingId,
-          message: 'This entry cannot be deleted without a server id.',
+          message: 'This entry can’t be deleted right now.',
         );   
       }
 
@@ -1130,10 +1138,10 @@
         );
       } catch (_) {
         weightApiErrorMessage.value =
-            'Weight entry could not be deleted from the server.';
+            'Weight entry could not be deleted. Please try again.';
         return const WeightDeleteOutcome(
           WeightDeleteStatus.failed,
-          message: 'Weight entry could not be deleted from the server.',
+          message: 'Weight entry could not be deleted. Please try again.',
         );
       }
     }
@@ -1197,7 +1205,7 @@
       usesHealthConnect.value = false;
       needsHealthConnectInstall.value = false;
       stepTrackingMessage.value =
-          'Step tracking disconnected. Connect again anytime.';
+          'Step tracking is off. You can enable it again anytime.';
       _notifyActivityChanged();
     }
 
@@ -1231,7 +1239,7 @@
         unawaited(_startAutoStepTracking(force: true));
       } else {
         stepTrackingMessage.value =
-            'Step tracking is off. Tap Connect to enable.';
+            'Step tracking is off. Tap Enable steps to turn it on.';
       }
     }
 

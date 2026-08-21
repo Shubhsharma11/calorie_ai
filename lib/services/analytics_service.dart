@@ -254,6 +254,7 @@ class _AnalyticsScreenObserver extends NavigatorObserver {
   }
 
   void _stopScreenTrace() {
+
     final trace = _screenTrace;
     _screenTrace = null;
     if (trace != null) {

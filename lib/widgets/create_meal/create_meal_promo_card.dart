@@ -11,7 +11,7 @@ class CreateMealPromoCard extends StatelessWidget {
     super.key,
     required this.onTap,
     this.title = 'Create Meal',
-    this.description = 'Build and save your favorite meal.',
+    this.description = 'Build and save your favourite meal.',
     this.actionLabel = 'Create New Meal',
     this.illustrationAsset = 'assets/image/chef.json',
   });

@@ -110,7 +110,7 @@ class ScanController extends GetxController {
     try {
       final food = await _api.lookupBarcode(trimmed);
       if (food == null) {
-        scanError.value = 'No product found for barcode $trimmed';
+        scanError.value = 'No product found for this barcode.';
         await resumeBarcodeScan();
       } else {
         scanResult.value = food;

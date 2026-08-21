@@ -133,7 +133,7 @@ class DailyLogMealBlock extends GetView<FoodController> {
                 ),
                 child: visible.isEmpty
                     ? Text(
-                        'Tap + Add to log your first item.',
+                        'Tap + Add to log your first food.',
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: r.scale(13),

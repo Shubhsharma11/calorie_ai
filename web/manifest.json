@@ -1,11 +1,11 @@
 {
-    "name": "FitBuddy AI",
-    "short_name": "FitBuddy",
+    "name": "MyCaloriePal",
+    "short_name": "MyCaloriePal",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "FitBuddy AI - nutrition tracking app.",
+    "description": "MyCaloriePal - nutrition tracking app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

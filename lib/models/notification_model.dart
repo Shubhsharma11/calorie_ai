@@ -117,9 +117,18 @@ class NotificationModel {
 
   String get route {
     if (type == NotificationType.mealReminder) {
-      return NotificationType.routeForMealTime(data['mealTime'] as String?);
+      return NotificationType.routeForMealTime(
+        NotificationType.mealFromData(data),
+      );
     }
     return type.route;
+  }
+
+  /// Meal slot to pre-select when this notification opens Add Food.
+  String? get targetMeal {
+    final fromData = NotificationType.mealFromData(data);
+    if (fromData != null) return fromData;
+    return type.targetMeal;
   }
 
   static DateTime? _parseDateTime(Object? raw) {

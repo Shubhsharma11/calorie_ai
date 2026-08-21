@@ -56,44 +56,55 @@ class AuthApiService {
   }
 
   Future<Map<String, dynamic>> loginWithAppleIdToken(
-  String identityToken,
-) async {
-  debugPrint(
-    'AuthApiService: posting Apple ID token to ${ApiEndpoints.appleAuthUrl}',
-  );
-
-  final response = await _apiClient.post(
-    ApiEndpoints.appleAuth,
-    body: {
-      'idToken': identityToken,
-    },
-  );
-
-  final body = response.body.trim();
-
-  debugPrint(
-    'AuthApiService: Apple login response ${response.statusCode}: '
-    '${_redactTokenFields(body)}',
-  );
-
-  final decoded = _tryDecodeJson(body);
-
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    final message = decoded is Map<String, dynamic>
-        ? decoded['message'] as String? ?? decoded['error'] as String?
-        : null;
-
-    throw AuthApiException(
-      message ??
-          'Apple backend login failed (${response.statusCode}). $body',
+    String identityToken, {
+    String? name,
+    String? givenName,
+    String? familyName,
+  }) async {
+    debugPrint(
+      'AuthApiService: posting Apple ID token to ${ApiEndpoints.appleAuthUrl}',
     );
-  }
 
-  if (decoded is Map<String, dynamic>) {
-    return decoded;
-  }
+    final body = <String, dynamic>{'idToken': identityToken};
+    final trimmedName = name?.trim() ?? '';
+    final trimmedGiven = givenName?.trim() ?? '';
+    final trimmedFamily = familyName?.trim() ?? '';
+    // Apple only returns the name on the first authorization. Send it so the
+    // backend can persist it; omit empty values so later logins cannot wipe it.
+    if (trimmedName.isNotEmpty) body['name'] = trimmedName;
+    if (trimmedGiven.isNotEmpty) body['givenName'] = trimmedGiven;
+    if (trimmedFamily.isNotEmpty) body['familyName'] = trimmedFamily;
+    if (trimmedGiven.isNotEmpty || trimmedFamily.isNotEmpty) {
+      body['fullName'] = {
+        if (trimmedGiven.isNotEmpty) 'givenName': trimmedGiven,
+        if (trimmedFamily.isNotEmpty) 'familyName': trimmedFamily,
+      };
+    }
 
-  return <String, dynamic>{};
+    final response = await _apiClient.post(
+      ApiEndpoints.appleAuth,
+      body: body,
+    );
+
+    final responseBody = response.body.trim();
+    debugPrint(
+      'AuthApiService: Apple login response ${response.statusCode}: '
+      '${_redactTokenFields(responseBody)}',
+    );
+    final decoded = _tryDecodeJson(responseBody);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = decoded is Map<String, dynamic>
+          ? decoded['message'] as String? ?? decoded['error'] as String?
+          : null;
+      throw AuthApiException(
+        message ??
+            'Apple backend login failed (${response.statusCode}). $responseBody',
+      );
+    }
+
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> loginWithPhoneIdToken(String idToken) async {
@@ -182,6 +193,24 @@ class AuthApiService {
     );
 
     return _decodeSuccessMap(response, fallback: 'Could not load profile image');
+  }
+
+  Future<Map<String, dynamic>> updateMe({
+    required String accessToken,
+    required String name,
+  }) async {
+    final trimmed = name.trim();
+    debugPrint(
+      'AuthApiService: PATCH ${ApiEndpoints.authMeUrl} Authorization: Bearer ***',
+    );
+
+    final response = await _apiClient.patch(
+      ApiEndpoints.authMe,
+      body: {'name': trimmed},
+      headers: apiAuthHeaders(accessToken),
+    );
+
+    return _decodeSuccessMap(response, fallback: 'Could not update profile');
   }
 
   Map<String, dynamic> _decodeSuccessMap(

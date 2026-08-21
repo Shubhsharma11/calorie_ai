@@ -1307,7 +1307,7 @@ class FoodController extends GetxController {
         customFoodPresets.insert(0, removed);
       }
       throw MyFoodsApiException(
-        'Could not delete "${removed?.food.name ?? 'food'}" on the server.',
+        'Could not delete "${removed?.food.name ?? 'food'}" from your account.',
       );
     }
 
@@ -1358,7 +1358,7 @@ class FoodController extends GetxController {
       );
       AppSnackbar.info(
         '${preset.food.name} was saved on this device. '
-        'Sign in to sync to the server.',
+        'Sign in to sync it to your account.',
         title: 'Saved locally',
       );
       return preset;
@@ -1377,7 +1377,7 @@ class FoodController extends GetxController {
           '(no server my-food id resolved for localId=${preset.id})',
         );
         AppSnackbar.error(
-          'Could not update ${preset.food.name} on the server.',
+          'Could not update ${preset.food.name} in your account.',
           title: 'Save failed',
         );
         return preset;
@@ -1455,14 +1455,14 @@ class FoodController extends GetxController {
       AppSnackbar.error(
         error.message.isNotEmpty
             ? error.message
-            : 'Could not save ${preset.food.name} on the server.',
+            : 'Could not save ${preset.food.name} to your account.',
         title: 'Save failed',
       );
       return preset;
     } catch (error) {
       debugPrint('FoodController: my-foods API failed: $error');
       AppSnackbar.error(
-        'Could not save ${preset.food.name} on the server.',
+        'Could not save ${preset.food.name} to your account.',
         title: 'Save failed',
       );
       return preset;
@@ -1731,7 +1731,7 @@ class FoodController extends GetxController {
         '(no access token — sign in required)',
       );
       AppSnackbar.info(
-        '${preset.name} was saved on this device. Sign in to sync to the server.',
+        '${preset.name} was saved on this device. Sign in to sync it to your account.',
         title: 'Saved locally',
       );
       return preset;
@@ -1751,7 +1751,7 @@ class FoodController extends GetxController {
           '(no server my-meal id resolved for localId=${preset.id})',
         );
         AppSnackbar.error(
-          'Could not update ${preset.name} on the server.',
+          'Could not update ${preset.name} in your account.',
           title: 'Save failed',
         );
         return preset;
@@ -1817,14 +1817,14 @@ class FoodController extends GetxController {
     } on CustomMealsApiException catch (error) {
       debugPrint('FoodController: custom meal API failed: $error');
       AppSnackbar.error(
-        'Could not save ${preset.name} on the server.',
+        'Could not save ${preset.name} to your account.',
         title: 'Save failed',
       );
       return preset;
     } catch (error) {
       debugPrint('FoodController: custom meal API failed: $error');
       AppSnackbar.error(
-        'Could not save ${preset.name} on the server.',
+        'Could not save ${preset.name} to your account.',
         title: 'Save failed',
       );
       return preset;
@@ -1913,7 +1913,7 @@ class FoodController extends GetxController {
         customMealPresets.insert(0, removed);
       }
       throw CustomMealsApiException(
-        'Could not delete "${removed?.name ?? 'meal'}" on the server.',
+        'Could not delete "${removed?.name ?? 'meal'}" from your account.',
       );
     }
 
@@ -2658,7 +2658,7 @@ class FoodController extends GetxController {
       entries.removeWhere((e) => e.id == entry.id);
       entriesRevision.value++;
       AppSnackbar.error(
-        'Sign in to save meals to the server.',
+        'Sign in to save meals to your account.',
         title: 'Not signed in',
       );
       return;
@@ -2711,7 +2711,7 @@ class FoodController extends GetxController {
       entries.removeWhere((e) => e.id == entry.id);
       entriesRevision.value++;
       AppSnackbar.error(
-        'Could not save ${entry.food.name} to the server.',
+        'Could not save ${entry.food.name} to your account.',
         title: 'Save failed',
       );
     }
@@ -2860,7 +2860,7 @@ class FoodController extends GetxController {
       entries[index] = previous;
       _markEntriesDirty(celebrationDay: previous.date);
       AppSnackbar.error(
-        'Sign in to save meal changes to the server.',
+        'Sign in to save meal changes to your account.',
         title: 'Not signed in',
       );
       return false;
@@ -2964,7 +2964,7 @@ class FoodController extends GetxController {
         action: 'deleting meal',
       );
       AppSnackbar.error(
-        'Could not delete ${entry.food.name} on the server.',
+        'Could not delete ${entry.food.name} from your account.',
         title: 'Delete failed',
       );
       return false;
@@ -3067,7 +3067,7 @@ class FoodController extends GetxController {
         action: 'deleting meal',
       );
       AppSnackbar.error(
-        'Could not delete ${entry.food.name} on the server.',
+        'Could not delete ${entry.food.name} from your account.',
         title: 'Delete failed',
       );
       return false;
@@ -3113,7 +3113,7 @@ class FoodController extends GetxController {
         'FoodController: meal still present after DELETE+GET — delete failed',
       );
       AppSnackbar.error(
-        'Server still has “${entry.food.name}”. Delete did not stick.',
+        '“${entry.food.name}” could not be deleted. Please try again.',
         title: 'Delete failed',
       );
       return false;
@@ -3369,7 +3369,7 @@ class FoodController extends GetxController {
   }
 
   void showReadOnlyMessage() {
-    AppSnackbar.info("Past meals can't be edited.", title: 'Read only');
+    AppSnackbar.info("Past meals can't be edited.", title: 'Read-only');
   }
 
   @override

@@ -62,10 +62,11 @@ class MainController extends GetxController {
   }
 
   bool get _sessionBusy {
-    if (!Get.isRegistered<UserController>()) return false;
+     if (!Get.isRegistered<UserController>()) return false;
     final user = Get.find<UserController>();
     return user.isSessionBusy.value ||
         user.isLoggingOut ||
         user.isDeletingAccount;
   }
 }
+ 

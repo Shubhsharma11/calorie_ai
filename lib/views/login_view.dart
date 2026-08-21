@@ -8,6 +8,8 @@ import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
+import '../widgets/privacy_policy_dialog.dart';
+import '../widgets/terms_of_service_dialog.dart';
 
 class LoginView extends GetView<AuthController> {
   const LoginView({super.key});
@@ -17,54 +19,6 @@ class LoginView extends GetView<AuthController> {
   static const _appleAsset = 'assets/image/apple.svg';
 
   void _continue() => controller.login();
-
-  void _showTerms(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Terms of Service'),
-        content: const SingleChildScrollView(
-          child: Text(
-            'By using FitBuddy AI, you agree to track nutrition and health '
-            'data responsibly. Do not use this app as a substitute for '
-            'professional medical advice. You are responsible for the '
-            'accuracy of the information you enter.',
-            style: TextStyle(height: 1.45),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showPrivacyPolicy(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Privacy Policy'),
-        content: const SingleChildScrollView(
-          child: Text(
-            'FitBuddy AI stores your profile, goals, and food logs on your '
-            'device to personalize your experience. We do not sell your '
-            'personal data. You can update or clear your information from '
-            'the app settings at any time.',
-            style: TextStyle(height: 1.45),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +127,7 @@ class LoginView extends GetView<AuthController> {
                                     ),
                                     SizedBox(height: r.scale(10)),
                                     Text(
-                                      'Login to continue your health journey',
+                                      'Log in to continue your health journey',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         fontSize: r.scale(14, tablet: 15),
@@ -266,8 +220,9 @@ class LoginView extends GetView<AuthController> {
                   ),
                   child: _TermsFooter(
                     compact: compact,
-                    onTermsTap: () => _showTerms(context),
-                    onPrivacyTap: () => _showPrivacyPolicy(context),
+                    includeApple: Platform.isIOS,
+                    onTermsTap: () => showTermsOfServiceDialog(context),
+                    onPrivacyTap: openPrivacyPolicy,
                   ),
                 ),
               ],
@@ -314,9 +269,9 @@ class _BrandHeader extends StatelessWidget {
                 letterSpacing: -0.2,
               ),
               children: const [
-                TextSpan(text: 'FitBuddy '),
+                TextSpan(text: 'MyCalorie'),
                 TextSpan(
-                  text: 'AI',
+                  text: 'Pal',
                   style: TextStyle(color: AppColors.primary),
                 ),
               ],
@@ -555,11 +510,13 @@ class _TermsFooter extends StatelessWidget {
   const _TermsFooter({
     required this.onTermsTap,
     required this.onPrivacyTap,
+    this.includeApple = false,
     this.compact = false,
   });
 
   final VoidCallback onTermsTap;
   final VoidCallback onPrivacyTap;
+  final bool includeApple;
   final bool compact;
 
   @override
@@ -577,11 +534,15 @@ class _TermsFooter extends StatelessWidget {
       height: 1.55,
     );
 
+    final continueWith = includeApple
+        ? 'By continuing with Google or Apple, you agree to'
+        : 'By continuing with Google, you agree to';
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'By continuing, you agree to our',
+          continueWith,
           textAlign: TextAlign.center,
           style: baseStyle,
         ),
@@ -589,6 +550,7 @@ class _TermsFooter extends StatelessWidget {
           TextSpan(
             style: baseStyle,
             children: [
+              const TextSpan(text: 'our '),
               TextSpan(
                 text: 'Terms of Service',
                 style: linkStyle,
@@ -608,3 +570,4 @@ class _TermsFooter extends StatelessWidget {
     );
   }
 }
+

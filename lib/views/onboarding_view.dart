@@ -28,7 +28,7 @@ class _OnboardingViewState extends State<OnboardingView> {
 
   static const List<_OnboardPage> _pages = [
     _OnboardPage(
-      image: 'assets/image/onboarding1.png',
+      image: 'assets/image/onborading1_white.png',
       darkImage: 'assets/image/onbording1_dark.png',
       title: 'Eat Healthy',
       titleAccent: 'Live Healthy',
@@ -52,11 +52,11 @@ class _OnboardingViewState extends State<OnboardingView> {
       ],
     ),
     _OnboardPage(
-      image: 'assets/image/onboarding2.png',
+      image: 'assets/image/onboarding2_white.png',
       darkImage: 'assets/image/onboarding2_dark.png',
       title: 'AI-Powered',
       titleAccent: 'Tracking',
-      body: 'Scan a barcode or search — FitBuddy fills in calories for you.',
+      body: 'Scan a barcode or search — MyCaloriePal fills in calories for you.',
       features: [
         _FeatureItem(
           asset: 'assets/image/barcode.png',
@@ -76,7 +76,7 @@ class _OnboardingViewState extends State<OnboardingView> {
       ],
     ),
     _OnboardPage(
-      image: 'assets/image/onboarding3.png',
+      image: 'assets/image/onboarding3_white.png',
       darkImage: 'assets/image/onboarding3_dark.png',
       title: 'Personalized',
       titleAccent: 'For You',
@@ -85,7 +85,7 @@ class _OnboardingViewState extends State<OnboardingView> {
         _FeatureItem(
           asset: 'assets/image/nutrition.png',
           darkAsset: 'assets/image/nutrition_dark.png',
-          title: 'Nutrition Measure',
+          title: 'Nutrition Tracking',
         ),
         _FeatureItem(
           asset: 'assets/image/Weight_progress.png',
@@ -159,7 +159,9 @@ class _OnboardingViewState extends State<OnboardingView> {
                   child: Obx(() {
                     final isLast =
                         _controller.pageIndex.value == _pages.length - 1;
-                    if (isLast) return SizedBox(height: r.scale(40));
+                    if (isLast) {
+                      return SizedBox(height: r.scale(38, tablet: 40));
+                    }
                     return _SkipButton(onPressed: _finish);
                   }),
                 ),
@@ -177,7 +179,7 @@ class _OnboardingViewState extends State<OnboardingView> {
                     },
                   ),
                 ),
-                SizedBox(height: r.scale(short ? 10 : 14)),
+                SizedBox(height: r.scale(short ? 8 : 10)),
                 Obx(() {
                   final current = _controller.pageIndex.value;
                   return Row(
@@ -204,7 +206,7 @@ class _OnboardingViewState extends State<OnboardingView> {
                     ),
                   );
                 }),
-                SizedBox(height: r.scale(short ? 16 : 22)),
+                SizedBox(height: r.scale(short ? 12 : 16)),
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: r.formMaxWidth),
                   child: Obx(() {
@@ -235,7 +237,7 @@ class _OnboardingViewState extends State<OnboardingView> {
                     );
                   }),
                 ),
-                SizedBox(height: r.scale(short ? 12 : 18)),
+                SizedBox(height: r.scale(short ? 10 : 14)),
               ],
             ),
           ),
@@ -256,7 +258,7 @@ class _SkipButton extends StatelessWidget {
     final isDark = AppColors.isDark(context);
 
     return Padding(
-      padding: EdgeInsets.only(top: r.scale(4), bottom: r.scale(4)),
+      padding: EdgeInsets.only(top: r.scale(2), bottom: r.scale(2)),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -306,7 +308,6 @@ class _OnboardSlide extends StatelessWidget {
     final isDark = AppColors.isDark(context);
     final titleSize = r.scale(short ? 28 : 32, tablet: 36, desktop: 40);
     final bodySize = r.scale(short ? 14 : 15, tablet: 16, desktop: 17);
-    final heroFit = isDark ? BoxFit.fitWidth : BoxFit.contain;
 
     return Center(
       child: ConstrainedBox(
@@ -315,19 +316,15 @@ class _OnboardSlide extends StatelessWidget {
         ),
         child: Column(
           children: [
+            const Spacer(flex: 2),
             Expanded(
-              flex: short ? 6 : 7,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: _OnboardImage(
-                  assetPath: isDark
-                      ? (page.darkImage ?? page.image)
-                      : page.image,
-                  fit: heroFit,
-                ),
+              flex: 14,
+              child: _OnboardImage(
+                assetPath:
+                    isDark ? (page.darkImage ?? page.image) : page.image,
               ),
             ),
-            SizedBox(height: r.scale(short ? 4 : 8)),
+            const Spacer(flex: 2),
             Text.rich(
               TextSpan(
                 style: TextStyle(
@@ -365,7 +362,7 @@ class _OnboardSlide extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: r.scale(short ? 14 : 18)),
+            const Spacer(flex: 2),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -380,7 +377,7 @@ class _OnboardSlide extends StatelessWidget {
                 ],
               ],
             ),
-            SizedBox(height: r.scale(short ? 4 : 8)),
+            const Spacer(flex: 2),
           ],
         ),
       ),
@@ -469,10 +466,9 @@ class _OnboardPage {
 
 /// Renders PNG assets normally, and SVG assets that may wrap an embedded PNG.
 class _OnboardImage extends StatefulWidget {
-  const _OnboardImage({required this.assetPath, this.fit = BoxFit.contain});
+  const _OnboardImage({required this.assetPath});
 
   final String assetPath;
-  final BoxFit fit;
 
   @override
   State<_OnboardImage> createState() => _OnboardImageState();
@@ -486,22 +482,33 @@ class _OnboardImageState extends State<_OnboardImage> {
   static final Map<String, Future<Widget>> _cache = {};
 
   late final Future<Widget> _imageFuture = _cache.putIfAbsent(
-    '${widget.assetPath}|${widget.fit}',
-    () => _loadImage(widget.assetPath, widget.fit),
+    widget.assetPath,
+    () => _loadImage(widget.assetPath),
   );
 
-  static Future<Widget> _loadImage(String assetPath, BoxFit fit) async {
+  static Future<Widget> _loadImage(String assetPath) async {
     if (!assetPath.toLowerCase().endsWith('.svg')) {
-      return Image.asset(assetPath, fit: fit);
+      return Image.asset(
+        assetPath,
+        fit: BoxFit.contain,
+        width: double.infinity,
+        filterQuality: FilterQuality.high,
+      );
     }
 
     final svgText = await rootBundle.loadString(assetPath);
     final match = _embeddedPngPattern.firstMatch(svgText);
     if (match != null) {
       final bytes = base64Decode(match.group(1)!);
-      return Image.memory(bytes, fit: fit, gaplessPlayback: true);
+      return Image.memory(
+        bytes,
+        fit: BoxFit.contain,
+        width: double.infinity,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.high,
+      );
     }
-    return SvgPicture.string(svgText, fit: fit);
+    return SvgPicture.string(svgText, fit: BoxFit.contain);
   }
 
   @override
@@ -509,20 +516,18 @@ class _OnboardImageState extends State<_OnboardImage> {
     if (!widget.assetPath.toLowerCase().endsWith('.svg')) {
       return Image.asset(
         widget.assetPath,
-        fit: widget.fit,
-        width: widget.fit == BoxFit.fitWidth ? double.infinity : null,
-        alignment: Alignment.topCenter,
+        fit: BoxFit.contain,
+        width: double.infinity,
+        height: double.infinity,
+        alignment: Alignment.center,
+        filterQuality: FilterQuality.high,
       );
     }
 
     return FutureBuilder<Widget>(
       future: _imageFuture,
       builder: (context, snapshot) {
-        final child = snapshot.data;
-        if (child != null) {
-          return SizedBox.expand(child: child);
-        }
-        return const SizedBox.expand();
+        return snapshot.data ?? const SizedBox.shrink();
       },
     );
   }

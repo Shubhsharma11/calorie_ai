@@ -37,7 +37,7 @@ class CustomMealPreset {
     required this.createdAt,
     required this.meal,
     required this.items,
-    this.visibility = MealShareVisibility.onlyMe,
+    this.visibility = MealShareVisibility.public,
     this.imageBytes,
     this.imageUrl,
   });

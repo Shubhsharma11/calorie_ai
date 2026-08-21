@@ -649,7 +649,7 @@ class _InfoRow extends StatelessWidget {
                       ConstrainedBox(
                         constraints: BoxConstraints(
                           maxWidth: r.scale(wideValue ? 124 : 80),
-                        ),
+                        ),  
                         child: Text(
                           displayValue,
                           maxLines: 1,
@@ -726,7 +726,7 @@ class _WhyWeNeedThisCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Why we need this?',
+                      'Why do we need this?',
                       style: TextStyle(
                         fontSize: r.scale(15, tablet: 16),
                         fontWeight: FontWeight.w700,
@@ -821,7 +821,7 @@ class _ActivityOptionTile extends StatelessWidget {
                         color: AppColors.textSecondaryOf(context),
                         height: 1.3,
                       ),
-                    ),
+                    ),     
                   ],
                 ),
               ),

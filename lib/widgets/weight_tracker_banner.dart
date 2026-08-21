@@ -97,15 +97,18 @@ class _WeightTrackerCard extends StatelessWidget {
       currentKg,
       useMetricUnits,
     );
-    final remainingDisplay = WeightChartData.toDisplayWeight(
-      (goalKg - currentKg).abs(),
-      useMetricUnits,
-    );
     final unit = WeightChartData.weightUnitLabel(useMetricUnits);
     final latestEntry = entries.isEmpty ? null : entries.last;
     final remainingKg = (goalKg - currentKg).abs();
-    final atGoal = remainingKg < 0.05;
-    final effectiveGoal = goal ?? _inferGoalType(currentKg, goalKg);
+    final inferredGoal = _inferGoalType(currentKg, goalKg);
+    // If the stored goal type is stale/mismatched with the actual
+    // goal-vs-current direction, prefer the inferred type.
+    final effectiveGoal = goal == null || goal == inferredGoal
+        ? (goal ?? inferredGoal)
+        : inferredGoal;
+    final atGoal = remainingKg < 0.05 ||
+        (effectiveGoal == GoalType.loseWeight && currentKg <= goalKg + 0.05) ||
+        (effectiveGoal == GoalType.gainWeight && currentKg >= goalKg - 0.05);
     final isOnTrack = trend.isOnTrackFor(effectiveGoal);
 
     return Container(
@@ -330,9 +333,12 @@ class _WeightTrackerCard extends StatelessWidget {
                         SizedBox(width: r.scale(10)),
                         Expanded(
                           child: Text(
-                            atGoal
-                                ? 'Goal reached'
-                                : '${remainingDisplay.toStringAsFixed(1)} $unit remaining',
+                            _remainingGoalLabel(
+                              goal: effectiveGoal,
+                              currentKg: currentKg,
+                              goalKg: goalKg,
+                              useMetricUnits: useMetricUnits,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.right,
@@ -373,7 +379,6 @@ class _WeightTrackerCard extends StatelessWidget {
                                   trend: trend,
                                   currentKg: currentKg,
                                   goalKg: goalKg,
-                                  useMetricUnits: useMetricUnits,
                                 ),
                                 textAlign: TextAlign.center,
                                 maxLines: 2,
@@ -635,7 +640,9 @@ class _WeightTrend {
       useMetricUnits,
     ).toStringAsFixed(1);
     final unit = WeightChartData.weightUnitLabel(useMetricUnits);
-    return '$amount $unit this week';
+    return type == _WeightTrendType.losing
+        ? 'Losing $amount $unit'
+        : 'Gaining $amount $unit';
   }
 
   bool isOnTrackFor(GoalType? goal) {
@@ -695,70 +702,113 @@ GoalType _inferGoalType(double currentKg, double goalKg) {
   return GoalType.gainWeight;
 }
 
+String _remainingAmountLabel(double remainingKg, bool useMetricUnits) {
+  final unit = WeightChartData.weightUnitLabel(useMetricUnits);
+  final amount = WeightChartData.toDisplayWeight(
+    remainingKg,
+    useMetricUnits,
+  ).toStringAsFixed(1);
+  return '$amount $unit';
+}
+
+/// Short label next to the goal weight, e.g. "5.0 kg to lose".
+String _remainingGoalLabel({
+  required GoalType goal,
+  required double currentKg,
+  required double goalKg,
+  required bool useMetricUnits,
+}) {
+  final remainingKg = (goalKg - currentKg).abs();
+  final amount = _remainingAmountLabel(remainingKg, useMetricUnits);
+
+  if (goal == GoalType.maintainWeight) {
+    if (remainingKg < 0.05) return 'On target';
+    return '$amount off target';
+  }
+
+  if (goal == GoalType.loseWeight && currentKg <= goalKg + 0.05) {
+    return 'On target';
+  }
+  if (goal == GoalType.gainWeight && currentKg >= goalKg - 0.05) {
+    return 'On target';
+  }
+
+  return switch (goal) {
+    GoalType.loseWeight => '$amount to lose',
+    GoalType.gainWeight => '$amount to gain',
+    GoalType.maintainWeight => 'On target',
+  };
+}
+
 String _goalMotivationText({
   required GoalType? goal,
   required bool isOnTrack,
   required _WeightTrend trend,
   required double currentKg,
   required double goalKg,
-  required bool useMetricUnits,
 }) {
   final remainingKg = (goalKg - currentKg).abs();
   final atGoal = remainingKg < 0.05;
-  final unit = WeightChartData.weightUnitLabel(useMetricUnits);
-  final remainingLabel = WeightChartData.toDisplayWeight(
-    remainingKg,
-    useMetricUnits,
-  ).toStringAsFixed(1);
   final effectiveGoal = goal ?? _inferGoalType(currentKg, goalKg);
-  final needsLose = currentKg > goalKg + 0.05;
-  final needsGain = currentKg < goalKg - 0.05;
 
-  if (atGoal) {
-    return switch (trend.type) {
-      _WeightTrendType.maintaining => 'Goal reached — weight looks stable',
-      _WeightTrendType.losing ||
-      _WeightTrendType.gaining => 'You hit your goal — keep it steady',
-      _WeightTrendType.unavailable => 'Goal reached — keep logging weekly',
+  if (atGoal ||
+      (effectiveGoal == GoalType.loseWeight && currentKg <= goalKg + 0.05) ||
+      (effectiveGoal == GoalType.gainWeight && currentKg >= goalKg - 0.05)) {
+    return switch (effectiveGoal) {
+      GoalType.maintainWeight => switch (trend.type) {
+        _WeightTrendType.maintaining =>
+          'You’re holding your maintenance weight',
+        _WeightTrendType.losing =>
+          'Stay steady so you don’t keep losing',
+        _WeightTrendType.gaining =>
+          'Stay steady so you don’t keep gaining',
+        _WeightTrendType.unavailable =>
+          'You’re at your maintenance goal',
+      },
+      GoalType.loseWeight => switch (trend.type) {
+        _WeightTrendType.maintaining => 'You’re holding your new weight',
+        _WeightTrendType.gaining => 'Keep the weight off now that you’re there',
+        _WeightTrendType.losing => 'You’re at goal — keep it steady',
+        _WeightTrendType.unavailable => 'You hit your weight-loss goal',
+      },
+      GoalType.gainWeight => switch (trend.type) {
+        _WeightTrendType.maintaining => 'You’re holding your new weight',
+        _WeightTrendType.losing => 'Keep the weight on now that you’re there',
+        _WeightTrendType.gaining => 'You’re at goal — keep it steady',
+        _WeightTrendType.unavailable => 'You hit your weight-gain goal',
+      },
     };
   }
 
   if (trend.type == _WeightTrendType.unavailable) {
-    return needsLose
-        ? '$remainingLabel $unit left to reach your goal'
-        : needsGain
-            ? '$remainingLabel $unit left to reach your goal'
-            : 'Keep tracking your weight progress';
+    return switch (effectiveGoal) {
+      GoalType.loseWeight => 'Keep logging to track your weight loss',
+      GoalType.gainWeight => 'Keep logging to track your weight gain',
+      GoalType.maintainWeight => 'Log weekly to stay on maintenance',
+    };
   }
 
   if (trend.type == _WeightTrendType.maintaining) {
-    return needsLose
-        ? 'You are making progress • $remainingLabel $unit remaining'
-        : needsGain
-            ? 'You are making progress • $remainingLabel $unit remaining'
-            : 'Keep maintaining your progress';
+    return switch (effectiveGoal) {
+      GoalType.loseWeight => 'Weight is holding — stay on your loss plan',
+      GoalType.gainWeight => 'Weight is holding — stay on your gain plan',
+      GoalType.maintainWeight => 'You’re maintaining your goal weight',
+    };
   }
 
   if (isOnTrack) {
     return switch (effectiveGoal) {
-      GoalType.loseWeight =>
-        'On track — $remainingLabel $unit remaining to reach your goal',
-      GoalType.gainWeight =>
-        'On track — $remainingLabel $unit remaining to reach your goal',
-      GoalType.maintainWeight => 'You are maintaining your goal weight',
+      GoalType.loseWeight => 'You’re losing this week — keep it up',
+      GoalType.gainWeight => 'You’re gaining this week — keep it up',
+      GoalType.maintainWeight => 'You’re maintaining your goal weight',
     };
   }
 
-  if (needsLose && trend.type == _WeightTrendType.gaining) {
-    return '$remainingLabel $unit remaining to reach your goal';
-  }
-  if (needsGain && trend.type == _WeightTrendType.losing) {
-    return '$remainingLabel $unit remaining to reach your goal';
-  }
-
   return switch (effectiveGoal) {
-    GoalType.loseWeight || GoalType.gainWeight =>
-      '$remainingLabel $unit remaining to reach your goal', 
-    GoalType.maintainWeight => 'Consistency keeps your weight stable',
+    GoalType.loseWeight => 'You’re gaining this week — stay on your loss plan',
+    GoalType.gainWeight => 'You’re losing this week — stay on your gain plan',
+    GoalType.maintainWeight => trend.type == _WeightTrendType.losing
+        ? 'You’re dropping below maintenance'
+        : 'You’re moving above maintenance',
   };
 }

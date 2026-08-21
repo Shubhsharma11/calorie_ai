@@ -112,9 +112,9 @@ class StreakView extends GetView<StreakController> {
                 PrimaryButton(
                   label: stats.currentStreak == 0
                       ? (stats.streakBroken
-                          ? 'Log a meal to restart streak'
+                          ? 'Log a meal to restart your streak'
                           : 'Log your first meal')
-                      : 'Log a meal to save streak',
+                      : 'Log a meal to keep your streak',
                   onPressed: () => Get.toNamed(AppRoutes.addFood),
                 ),
               ],
@@ -178,7 +178,7 @@ class _StreakHero extends StatelessWidget {
             ),
           ),
           Text(
-            streak == 1 ? 'Day Streak' : 'Day Streak',
+            'Day streak',
             style: TextStyle(
               color: AppColors.textSecondary,
               fontSize: 16,
@@ -197,7 +197,7 @@ class _StreakHero extends StatelessWidget {
           ] else if (streakBroken) ...[
             const SizedBox(height: 8),
             Text(
-              'Missed day',
+              'You missed a day',
               style: TextStyle(
                 color: AppColors.error.withValues(alpha: 0.85),
                 fontWeight: FontWeight.w600,

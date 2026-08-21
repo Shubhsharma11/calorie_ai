@@ -4,7 +4,7 @@ enum ProblemCategory {
   waterTracking('Water Tracking', 'water_tracking'),
   weightAndGoals('Weight & Goals', 'weight_and_goals'),
   notifications('Notifications', 'notifications'),
-  loginAccount('Login / Account', 'login_account'),
+  loginAccount('Sign-in / Account', 'login_account'),
   appCrash('App Crash', 'app_crash'),
   other('Other', 'other');
 
@@ -32,9 +32,9 @@ class AppDeviceInfo {
   String get footerLabel {
     final version = appVersion.trim();
     final build = buildNumber.trim();
-    if (version.isEmpty) return 'FitBuddy AI';
-    if (build.isEmpty) return 'FitBuddy AI • v$version';
-    return 'FitBuddy AI • v$version (Build $build)';
+    if (version.isEmpty) return 'MyCaloriePal';
+    if (build.isEmpty) return 'MyCaloriePal • v$version';
+    return 'MyCaloriePal • v$version (Build $build)';
   }
 
   Map<String, String> toApiFields() => {

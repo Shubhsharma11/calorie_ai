@@ -34,6 +34,7 @@ class StreakStats {
   final int longestStreak;
   final bool hasLoggedToday;
   final bool isAtRisk;
+  
   final List<StreakDay> recentDays;
 
   /// True when the user had past logs but the streak is currently broken.
@@ -49,7 +50,7 @@ class StreakStats {
     currentStreak: 0,
     longestStreak: 0,
     hasLoggedToday: false,
-    isAtRisk: false,
+    isAtRisk: false,  
     recentDays: [],
   );
 }

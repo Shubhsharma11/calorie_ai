@@ -127,7 +127,7 @@ class CaloriesBurnView extends GetView<TrackerController> {
                       ? 'Goal reached — great work today!'
                       : isAutoTracking
                           ? 'Auto-detected from your device'
-                          : 'Connect health access to keep steps updated',
+                          : 'Allow health access to keep your steps updated',
                   style: TextStyle(
                     fontSize: r.scale(13),
                     color: AppColors.textSecondary,
@@ -257,7 +257,7 @@ class _EmptyConnectCard extends StatelessWidget {
           Text(
             needsInstall
                 ? 'Install Health Connect so we can estimate calories burned from your steps.'
-                : 'Connect health access to sync steps and see calories burned automatically.',
+                : 'Allow health access to sync steps and see calories burned automatically.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: r.scale(13),
@@ -269,7 +269,7 @@ class _EmptyConnectCard extends StatelessWidget {
           FilledButton.icon(
             onPressed: onConnect,
             icon: Icon(needsInstall ? Icons.download_rounded : Icons.link_rounded),
-            label: Text(needsInstall ? 'Install Health Connect' : 'Connect steps'),
+            label: Text(needsInstall ? 'Install Health Connect' : 'Enable steps'),
             style: FilledButton.styleFrom(
               minimumSize: Size(0, r.scale(46)),
               shape: RoundedRectangleBorder(

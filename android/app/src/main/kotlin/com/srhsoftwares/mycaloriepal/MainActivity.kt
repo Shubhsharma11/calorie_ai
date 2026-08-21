@@ -1,4 +1,4 @@
-package com.srhsoftwares.fitbuddyai
+package com.srhsoftwares.mycaloriepal
 
 import android.os.Bundle
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen

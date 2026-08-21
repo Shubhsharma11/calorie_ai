@@ -1,5 +1,5 @@
 name: calorie_ai
-description: FitBuddy AI - nutrition tracking app.
+description: MyCaloriePal - nutrition tracking app.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -58,6 +58,7 @@ flutter_launcher_icons:
 
 # Native launch splash (Android / iOS). Regenerate with:
 #   dart run flutter_native_splash:create
+# Re-apply iOS LaunchScreen.storyboard after that (168x120 centered logo).
 flutter_native_splash:
   color: "#FFFFFF"
   color_dark: "#000000"

@@ -158,12 +158,23 @@ class AuthController extends GetxController {
 
       debugPrint('AuthController: Apple sign-in success');
       debugPrint('Apple email: ${credential.email}');
-      debugPrint('Apple name: ${credential.givenName}');
+      debugPrint(
+        'Apple name: ${credential.givenName} ${credential.familyName}',
+      );
+
+      final appleName = appleDisplayName(
+        givenName: credential.givenName,
+        familyName: credential.familyName,
+      );
 
       debugPrint('AuthController: sending Apple token to backend');
 
-      final backendResponse =
-          await _authApi.loginWithAppleIdToken(identityToken);
+      final backendResponse = await _authApi.loginWithAppleIdToken(
+        identityToken,
+        name: appleName.isEmpty ? null : appleName,
+        givenName: credential.givenName,
+        familyName: credential.familyName,
+      );
 
       debugPrint('APPLE BACKEND RESPONSE: $backendResponse');
 
@@ -178,16 +189,20 @@ class AuthController extends GetxController {
 
       final claims = _decodeJwtClaims(accessToken);
       final user = Get.find<UserController>();
+      final backendName = UserController.readDisplayName(backendResponse);
 
       await user.saveGoogleLoginDetails(
         userId: _claimString(claims, 'sub'),
         provider: 'apple',
         email: _claimString(claims, 'email') ?? credential.email ?? '',
-        name: credential.givenName ?? '',
+        name: appleName,
         accessToken: accessToken,
         refreshToken: refreshToken.isEmpty ? null : refreshToken,
         backendResponse: backendResponse,
       );
+      if (appleName.isNotEmpty && backendName.isEmpty) {
+        await user.updateDisplayName(appleName, force: true);
+      }
       await _logAuthAnalytics(
         user: user,
         method: 'apple',
@@ -244,7 +259,7 @@ class AuthController extends GetxController {
   }
 
   void _showAuthError(String message) {
-    AppSnackbar.error(message, title: 'Login failed');
+    AppSnackbar.error(message, title: 'Sign-in failed');
   }
 
   String _readBackendString(Map<String, dynamic> response, String key) {
@@ -289,6 +304,14 @@ class AuthController extends GetxController {
     final value = claims[key];
     if (value is String && value.isNotEmpty) return value;
     return null;
+  }
+
+  /// Apple only returns given/family name on the first authorization.
+  static String appleDisplayName({String? givenName, String? familyName}) {
+    return [
+      givenName?.trim() ?? '',
+      familyName?.trim() ?? '',
+    ].where((part) => part.isNotEmpty).join(' ');
   }
 
   @override

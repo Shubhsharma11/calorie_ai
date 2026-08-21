@@ -1,6 +1,7 @@
+import '../models/meal_type.dart';
 import '../routes/app_routes.dart';
 
-/// Supported push notification categories for FitBuddy AI.
+/// Supported push notification categories for MyCaloriePal.
 enum NotificationType {
   mealReminder('meal_reminder'),
   breakfastReminder('breakfast_reminder'),
@@ -138,6 +139,48 @@ enum NotificationType {
     }
   }
 
+  /// Meal slot to pre-select when opening Add Food from this notification.
+  String? get targetMeal {
+    switch (this) {
+      case NotificationType.breakfastReminder:
+        return MealType.breakfast;
+      case NotificationType.lunchReminder:
+        return MealType.lunch;
+      case NotificationType.dinnerReminder:
+        return MealType.dinner;
+      case NotificationType.mealReminder:
+      default:
+        return null;
+    }
+  }
+
+  static String? mealFromData(Map<String, dynamic> data) {
+    return mealFromMealTime(
+      _stringFrom(data, const [
+        'mealTime',
+        'meal_time',
+        'mealtime',
+        'meal',
+      ]),
+    );
+  }
+
+  static String? mealFromMealTime(String? raw) {
+    switch (raw?.trim().toLowerCase()) {
+      case 'breakfast':
+        return MealType.breakfast;
+      case 'lunch':
+        return MealType.lunch;
+      case 'dinner':
+        return MealType.dinner;
+      case 'snack':
+      case 'snacks':
+        return MealType.snacks;
+      default:
+        return null;
+    }
+  }
+
   String get route {
     switch (this) {
       case NotificationType.mealReminder:
@@ -242,7 +285,7 @@ enum NotificationType {
       case NotificationType.motivational:
         return 'Daily motivational messages';
       case NotificationType.unknown:
-        return 'General FitBuddy AI notifications';
+        return 'General MyCaloriePal notifications';
     }
   }
 }

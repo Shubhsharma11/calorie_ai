@@ -171,6 +171,12 @@ class _FitBuddyAiAppState extends State<FitBuddyAiApp> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(AnalyticsService.logScreenView(widget.initialRoute));
+      // Push stored ThemeMode into GetMaterialApp after the shell is mounted.
+      if (Get.isRegistered<ThemeController>()) {
+        final theme = Get.find<ThemeController>();
+        Get.changeThemeMode(theme.themeMode.value);
+        AppColors.syncWithBrightness(theme.effectiveBrightness);
+      }
     });
   }
 
@@ -180,11 +186,13 @@ class _FitBuddyAiAppState extends State<FitBuddyAiApp> {
     AppColors.syncWithBrightness(themeController.effectiveBrightness);
 
     return GetMaterialApp(
-      title: 'FitBuddy AI',
+      title: 'MyCaloriePal',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.light,
+      // Shell ThemeMode is owned by ThemeController via Get.changeThemeMode.
+      // Do not wrap Theme in Obx — that races DefaultTextStyle during build.
+      themeMode: themeController.themeMode.value,
       initialBinding: BindingsBuilder(() {
         InitialBinding().dependencies();
         // GetX often skips the page binding for [initialRoute]. Register
@@ -211,19 +219,10 @@ class _FitBuddyAiAppState extends State<FitBuddyAiApp> {
           });
         }
 
-        return Obx(() {
-          final theme = Get.find<ThemeController>();
-          final brightness = theme.appliedBrightness.value;
-          AppColors.syncWithBrightness(brightness);
-          return Theme(
-            data: brightness == Brightness.dark
-                ? AppTheme.dark
-                : AppTheme.light,
-            child: SessionBusyBarrier(
-              child: child ?? const SizedBox.shrink(),
-            ),
-          );
-        });
+        AppColors.syncFromContext(context);
+        return SessionBusyBarrier(
+          child: child ?? const SizedBox.shrink(),
+        );
       },
     );
   }

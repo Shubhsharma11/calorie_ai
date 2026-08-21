@@ -16,7 +16,7 @@ const _deviceInfo = AppDeviceInfo(
 
 void main() {
   test('AppDeviceInfo footer is read-only version text', () {
-    expect(_deviceInfo.footerLabel, 'FitBuddy AI • v1.0.0 (Build 12)');
+    expect(_deviceInfo.footerLabel, 'MyCaloriePal • v1.0.0 (Build 12)');
   });
 
   test('ProblemCategory omits subscription until the app has IAP', () {
@@ -28,7 +28,7 @@ void main() {
         'Water Tracking',
         'Weight & Goals',
         'Notifications',
-        'Login / Account',
+        'Sign-in / Account',
         'App Crash',
         'Other',
       ],

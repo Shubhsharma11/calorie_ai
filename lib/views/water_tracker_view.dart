@@ -71,7 +71,7 @@ class WaterTrackerView extends GetView<TrackerController> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Track your daily water intake easily.',
+                'Track your daily water intake.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppColors.textSecondary,
@@ -352,7 +352,7 @@ class _CustomWaterAmountSheetState extends State<_CustomWaterAmountSheet> {
           ),
           SizedBox(height: r.scale(8)),
           Text(
-            'Quick glasses or enter an exact amount in ml.',
+            'Add a glass, or enter an exact amount in ml.',
             style: TextStyle(
               fontSize: r.scale(13),
               color: AppColors.textSecondary,

@@ -1259,7 +1259,7 @@ class _MacroRing extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              goal > 0 ? 'Need ${goal}g' : 'No goal set',
+              goal > 0 ? 'Goal ${goal}g' : 'No goal set',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,

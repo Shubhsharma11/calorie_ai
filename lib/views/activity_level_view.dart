@@ -391,7 +391,7 @@ class _SettingsNote extends StatelessWidget {
         SizedBox(width: r.scale(6)),
         Flexible(
           child: Text(
-            'You can change this anytime in settings',
+            'You can change this anytime in your profile',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: r.scale(12, tablet: 13),

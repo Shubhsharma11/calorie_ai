@@ -74,10 +74,10 @@ class StreakMilestoneDialog extends StatelessWidget {
 
   static String _messageFor(int days) => switch (days) {
         3 => 'Three days in a row — consistency is building.',
-        7 => 'A full week of logging. That is real momentum.',
-        14 => 'Two weeks strong. You are making this a habit.',
+        7 => 'A full week of logging. That’s real momentum.',
+        14 => 'Two weeks strong. You’re making this a habit.',
         30 => 'One month streak. Incredible dedication.',
-        60 => 'Sixty days. You are unstoppable.',
+        60 => 'Sixty days. You’re unstoppable.',
         100 => 'One hundred days. Legendary consistency.',
         _ => 'Amazing work staying consistent.',
       };

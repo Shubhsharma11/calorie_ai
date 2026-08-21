@@ -119,7 +119,7 @@ class StreakBadge extends StatelessWidget {
     if (streakDays > 0) {
       if (veryCompact) return '$streakDays-day';
       if (compact) return '$streakDays-day streak';
-      return '$streakDays Day Streak';
+      return '$streakDays-day streak';
     }
     if (veryCompact) return 'Streak';
     if (compact) return 'Start streak';

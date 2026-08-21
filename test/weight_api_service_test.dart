@@ -20,7 +20,7 @@ void main() {
       capturedBody = jsonDecode(request.body as String) as Map<String, dynamic>;
       return http.Response(
         jsonEncode({
-          'success': true,
+          'success': true, 
           'data': {
             'weightEntry': {
               'id': 'w-1',
@@ -49,7 +49,7 @@ void main() {
       'weight': 68,
       'weightUnit': 'kg',
       'recordedAt': '2026-06-29',
-    });
+    }); 
     expect(response.entry?.kg, 68);
     expect(response.profileUpdated, isTrue);
   });

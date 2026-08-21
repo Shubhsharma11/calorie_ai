@@ -180,7 +180,7 @@ class _WaterGoalSuccessDialogState extends State<WaterGoalSuccessDialog>
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    '💧 Daily Goal Achieved!',
+                    'Daily water goal achieved!',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 22,
@@ -190,9 +190,7 @@ class _WaterGoalSuccessDialogState extends State<WaterGoalSuccessDialog>
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Hey! You have completed your daily water intake goal, '
-                    'and your water history has been updated successfully. '
-                    'Keep drinking water regularly to maintain a healthy lifestyle.',
+                    'You completed your daily water goal. Keep drinking regularly to stay healthy.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 15,

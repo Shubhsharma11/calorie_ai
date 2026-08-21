@@ -45,7 +45,7 @@ class _CreateMealViewState extends State<CreateMealView> {
   bool _isSaving = false;
   bool _isSearching = false;
   String? _searchError;
-  MealShareVisibility _visibility = MealShareVisibility.onlyMe;
+  MealShareVisibility _visibility = MealShareVisibility.public;
   CustomMealPreset? _editingPreset;
   Timer? _searchDebounce;
   int _searchRequestId = 0;
@@ -53,6 +53,9 @@ class _CreateMealViewState extends State<CreateMealView> {
   String? _mealImageUrl;
 
   bool get _isEditing => _editingPreset != null;
+
+  bool get _hasMealPhoto =>
+      canViewMedia(imageBytes: _mealImageBytes, imageUrl: _mealImageUrl);
 
   @override
   void initState() {
@@ -213,15 +216,6 @@ class _CreateMealViewState extends State<CreateMealView> {
     });
   }
 
-  void _removeMealPhoto() {
-    if (_isSaving) return;
-    HapticFeedback.selectionClick();
-    setState(() {
-      _mealImageBytes = null;
-      _mealImageUrl = null;
-    });
-  }
-
   Future<void> _viewMealPhoto() async {
     if (_isSaving) return;
     HapticFeedback.selectionClick();
@@ -232,7 +226,6 @@ class _CreateMealViewState extends State<CreateMealView> {
       title: _nameController.text.trim().isEmpty
           ? 'Meal photo'
           : _nameController.text.trim(),
-      onDelete: _removeMealPhoto,
     );
   }
 
@@ -281,6 +274,10 @@ class _CreateMealViewState extends State<CreateMealView> {
     if (_isSaving) return;
 
     final name = _nameController.text.trim();
+    if (!_hasMealPhoto) {
+      AppSnackbar.error('Add a meal photo first.', title: 'Photo required');
+      return;
+    }
     if (name.isEmpty) {
       AppSnackbar.error('Give your meal a name first.', title: 'Name required');
       return;
@@ -368,7 +365,6 @@ class _CreateMealViewState extends State<CreateMealView> {
                           onAdd: _showMealImageOptions,
                           onView: _viewMealPhoto,
                           onChange: _showMealImageOptions,
-                          onRemove: _removeMealPhoto,
                         ),
                         SizedBox(height: r.scale(14)),
                         TextField(
@@ -446,7 +442,7 @@ class _CreateMealViewState extends State<CreateMealView> {
                         SizedBox(height: r.scale(8)),
                         Text(
                           _visibility == MealShareVisibility.public
-                              ? 'Public is saved on this device for now. Community sharing is coming soon.'
+                              ? 'Public meals are saved on this device for now. Community sharing is coming soon.'
                               : 'Only you can see and use this meal template.',
                           style: TextStyle(
                             fontSize: r.scale(12),
@@ -1310,7 +1306,6 @@ class _MealImagePicker extends StatelessWidget {
     required this.onAdd,
     required this.onView,
     required this.onChange,
-    required this.onRemove,
   });
 
   final Uint8List? imageBytes;
@@ -1318,7 +1313,6 @@ class _MealImagePicker extends StatelessWidget {
   final VoidCallback onAdd;
   final VoidCallback onView;
   final VoidCallback onChange;
-  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -1355,20 +1349,10 @@ class _MealImagePicker extends StatelessWidget {
                       Positioned(
                         right: r.scale(8),
                         bottom: r.scale(8),
-                        child: Row(
-                          children: [
-                            _MealImageAction(
-                              icon: Icons.photo_camera_outlined,
-                              tooltip: 'Change meal photo',
-                              onTap: onChange,
-                            ),
-                            SizedBox(width: r.scale(6)),
-                            _MealImageAction(
-                              icon: Icons.delete_outline_rounded,
-                              tooltip: 'Remove meal photo',
-                              onTap: onRemove,
-                            ),
-                          ],
+                        child: _MealImageAction(
+                          icon: Icons.photo_camera_outlined,
+                          tooltip: 'Change meal photo',
+                          onTap: onChange,
                         ),
                       ),
                     ],
@@ -1399,7 +1383,7 @@ class _MealImagePicker extends StatelessWidget {
                       ),
                       SizedBox(height: r.scale(3)),
                       Text(
-                        'Choose from gallery or take a photo, then crop',
+                        'Required · gallery or camera, then crop',
                         style: TextStyle(
                           fontSize: r.scale(11),
                           color: AppColors.textSecondary,

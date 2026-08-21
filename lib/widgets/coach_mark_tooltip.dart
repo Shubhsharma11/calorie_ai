@@ -14,6 +14,7 @@ class CoachMarkBubble extends StatelessWidget {
     required this.isLast,
     required this.onSkip,
     required this.onNext,
+    this.enabled = true,
   });
 
   final String title;
@@ -23,6 +24,7 @@ class CoachMarkBubble extends StatelessWidget {
   final bool isLast;
   final VoidCallback onSkip;
   final VoidCallback onNext;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -151,10 +153,12 @@ class CoachMarkBubble extends StatelessWidget {
               children: [
                 if (!isLast)
                   TextButton(
-                    onPressed: () {
-                      HapticFeedback.selectionClick();
-                      onSkip();
-                    },
+                    onPressed: enabled
+                        ? () {
+                            HapticFeedback.selectionClick();
+                            onSkip();
+                          }
+                        : null,
                     style: TextButton.styleFrom(
                       foregroundColor: muted,
                       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -174,10 +178,12 @@ class CoachMarkBubble extends StatelessWidget {
                   const SizedBox.shrink(),
                 const Spacer(),
                 FilledButton(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    onNext();
-                  },
+                  onPressed: enabled
+                      ? () {
+                          HapticFeedback.lightImpact();
+                          onNext();
+                        }
+                      : null,
                   style: FilledButton.styleFrom(
                     backgroundColor: primary,
                     foregroundColor: Colors.white,

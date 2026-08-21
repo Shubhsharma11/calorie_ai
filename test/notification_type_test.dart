@@ -56,6 +56,7 @@ void main() {
         'data': {'mealTime': 'lunch'},
       });
       expect(item.type, NotificationType.lunchReminder);
+      expect(item.targetMeal, 'Lunch');
     });
 
     test('reads notification_type when type is absent', () {
@@ -65,6 +66,28 @@ void main() {
         'notification_type': 'lunch_reminder',
       });
       expect(item.type, NotificationType.lunchReminder);
+      expect(item.targetMeal, 'Lunch');
+    });
+
+    test('targetMeal prefers payload mealTime over generic reminder type', () {
+      final item = NotificationModel.fromJson({
+        'id': '3',
+        'type': 'meal_reminder',
+        'data': {'mealTime': 'dinner'},
+      });
+      expect(item.targetMeal, 'Dinner');
+    });
+  });
+
+  group('NotificationType.targetMeal', () {
+    test('maps meal reminder types to meal slots', () {
+      expect(
+        NotificationType.breakfastReminder.targetMeal,
+        'Breakfast',
+      );
+      expect(NotificationType.lunchReminder.targetMeal, 'Lunch');
+      expect(NotificationType.dinnerReminder.targetMeal, 'Dinner');
+      expect(NotificationType.waterReminder.targetMeal, isNull);
     });
   });
 }

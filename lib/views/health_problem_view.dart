@@ -805,28 +805,31 @@ class _PathChoiceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = context.responsive;
 
-    return Row(
-      children: [
-        Expanded(
-          child: _PathChoiceCard(
-            title: 'Yes',
-            subtitle: 'I have concerns',
-            imageAsset: 'assets/image/heartbeat.svg',
-            selected: hasConcerns == true,
-            onTap: () => onSelect(true),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _PathChoiceCard(
+              title: 'Yes',
+              subtitle: 'I have concerns',
+              imageAsset: 'assets/image/heartbeat.svg',
+              selected: hasConcerns == true,
+              onTap: () => onSelect(true),
+            ),
           ),
-        ),
-        SizedBox(width: r.scale(10)),
-        Expanded(
-          child: _PathChoiceCard(
-            title: 'No',
-            subtitle: "I don't have any",
-            imageAsset: 'assets/image/smile.svg',
-            selected: hasConcerns == false,
-            onTap: () => onSelect(false),
+          SizedBox(width: r.scale(10)),
+          Expanded(
+            child: _PathChoiceCard(
+              title: 'No',
+              subtitle: "I don't have any concerns",
+              imageAsset: 'assets/image/smile.svg',
+              selected: hasConcerns == false,
+              onTap: () => onSelect(false),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -859,6 +862,8 @@ class _PathChoiceCard extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
+          width: double.infinity,
+          height: double.infinity,
           padding: EdgeInsets.fromLTRB(
             r.scale(14),
             r.scale(14),

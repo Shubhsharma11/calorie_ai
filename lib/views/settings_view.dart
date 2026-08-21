@@ -105,118 +105,102 @@ class _SettingsViewState extends State<SettingsView> {
   Widget build(BuildContext context) {
     final r = context.responsive;
 
-    return Obx(() {
-      // Read both so device-theme + manual dark mode both refresh the page.
-      _theme.themeMode.value;
-      _theme.platformBrightness.value;
-      final brightness = _theme.effectiveBrightness;
-      AppColors.syncWithBrightness(brightness);
+    // GetBuilder (not Obx wrapping Theme) — avoids markNeedsBuild during
+    // DefaultTextStyle when Appearance toggles update theme Rx values.
+    return GetBuilder<ThemeController>(
+      builder: (theme) {
+        final brightness = theme.effectiveBrightness;
+        AppColors.syncWithBrightness(brightness);
 
-      // Local Theme so every section (Appearance + Notifications + General)
-      // paints together. Global theme still applies when leaving Settings.
-      return Theme(
-        key: ValueKey<Brightness>(brightness),
-        data: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
-        child: Scaffold(
-          backgroundColor: AppColors.background,
-          appBar: AppAppBar(
-            key: ValueKey<String>('settings-app-bar-$brightness'),
-            title: 'Settings',
-          ),
-          body: ResponsivePage(
-            scrollable: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'App Preferences',
-                  style: TextStyle(
-                    fontSize: r.scale(22, tablet: 24),
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+        // Local Theme so Appearance + General paint together while MainView
+        // tabs stay frozen. Shell ThemeMode still applies when leaving.
+        return Theme(
+          key: ValueKey<Brightness>(brightness),
+          data: brightness == Brightness.dark ? AppTheme.dark : AppTheme.light,
+          child: Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppAppBar(
+              key: ValueKey<String>('settings-app-bar-$brightness'),
+              title: 'Settings',
+            ),
+            body: ResponsivePage(
+              scrollable: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'App Preferences',
+                    style: TextStyle(
+                      fontSize: r.scale(22, tablet: 24),
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
-                SizedBox(height: r.scale(24)),
-                _SettingsGroup(
-                  title: 'Appearance',
-                  children: [
-                    _SettingsSwitchTile(
-                      icon: Icons.brightness_auto_rounded,
-                      title: 'Use Device Theme',
-                      subtitle: 'Follow your phone light or dark mode',
-                      value: _theme.isSystemMode,
-                      onChanged: (enabled) {
-                        if (enabled) {
-                          _theme.setThemeMode(ThemeMode.system);
-                        } else {
-                          // Lock to whatever the screen is showing now.
-                          _theme.setThemeMode(
-                            _theme.isDarkMode
-                                ? ThemeMode.dark
-                                : ThemeMode.light,
-                          );
-                        }
-                      },
-                    ),
-                    _SettingsSwitchTile(
-                      icon: Icons.dark_mode_rounded,
-                      title: 'Dark Mode',
-                      subtitle: _theme.isSystemMode
-                          ? 'Changing this turns off device theme'
-                          : 'Use a dark color scheme across the app',
-                      value: _theme.isDarkMode,
-                      onChanged: (enabled) {
-                        // Always apply — toggling leaves system mode.
-                        _theme.toggleDarkMode(enabled);
-                      },
-                    ),
-                  ],
-                ),
-                SizedBox(height: r.scale(20)),
-                // Built inside Obx (not captured outside) so cards refresh with theme.
-                // _NotificationsSettings(
-                //   settings: _settings,
-                //   themeRevision: Object.hash(
-                //     _theme.themeMode.value,
-                //     _theme.platformBrightness.value,
-                //     brightness,
-                //   ),
-                //   onPickMealTime: _pickMealReminderTime,
-                //   onPickWaterInterval: _pickWaterInterval,
-                // ),
-                // SizedBox(height: r.scale(20)),
-                _GeneralSettings(
-                  settings: _settings,
-                  themeRevision: Object.hash(
-                    _theme.themeMode.value,
-                    _theme.platformBrightness.value,
-                    brightness,
+                  SizedBox(height: r.scale(24)),
+                  _SettingsGroup(
+                    title: 'Appearance',
+                    children: [
+                      _SettingsSwitchTile(
+                        icon: Icons.brightness_auto_rounded,
+                        title: 'Use Device Theme',
+                        subtitle: 'Follow your phone’s light or dark mode',
+                        value: theme.isSystemMode,
+                        onChanged: (enabled) {
+                          if (enabled) {
+                            theme.setThemeMode(ThemeMode.system);
+                          } else {
+                            theme.setThemeMode(
+                              theme.isDarkMode
+                                  ? ThemeMode.dark
+                                  : ThemeMode.light,
+                            );
+                          }
+                        },
+                      ),
+                      _SettingsSwitchTile(
+                        icon: Icons.dark_mode_rounded,
+                        title: 'Dark Mode',
+                        subtitle: theme.isSystemMode
+                            ? 'Changing this turns off the device theme'
+                            : 'Use a dark color scheme across the app',
+                        value: theme.isDarkMode,
+                        onChanged: theme.toggleDarkMode,
+                      ),
+                    ],
                   ),
-                  onPickWaterGoal: _pickWaterGoal,
-                ),
-                SizedBox(height: r.scale(20)),
-                _SettingsGroup(
-                  key: ValueKey<String>('settings-about-$brightness'),
-                  title: 'About',
-                  children: const [
-                    _SettingsInfoTile(
-                      icon: Icons.info_outline_rounded,
-                      title: 'App Version',
-                      value: '1.0.0',
+                  SizedBox(height: r.scale(20)),
+                  _GeneralSettings(
+                    settings: _settings,
+                    themeRevision: Object.hash(
+                      theme.themeMode.value,
+                      theme.platformBrightness.value,
+                      brightness,
                     ),
-                  ],
-                ),
-                // Clear the home indicator / system gesture bar.
-                SizedBox(
-                  height:
-                      MediaQuery.viewPaddingOf(context).bottom + r.scale(16),
-                ),
-              ],
+                    onPickWaterGoal: _pickWaterGoal,
+                  ),
+                  SizedBox(height: r.scale(20)),
+                  _SettingsGroup(
+                    key: ValueKey<String>('settings-about-$brightness'),
+                    title: 'About',
+                    children: const [
+                      _SettingsInfoTile(
+                        icon: Icons.info_outline_rounded,
+                        title: 'App Version',
+                        value: '1.0.0',
+                      ),
+                    ],
+                  ),
+                  SizedBox(
+                    height:
+                        MediaQuery.viewPaddingOf(context).bottom + r.scale(16),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }
 
@@ -376,7 +360,7 @@ class _GeneralSettings extends StatelessWidget {
           _SettingsSwitchTile(
             icon: Icons.straighten_rounded,
             title: 'Metric Units',
-            subtitle: 'Use kg and cm (off for lbs & ft)',
+            subtitle: 'Use kg and cm (turn off for lb and ft)',
             value: settings.useMetricUnits.value,
             onChanged: settings.toggleUseMetricUnits,
           ),

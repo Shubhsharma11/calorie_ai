@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
@@ -32,7 +34,6 @@ class DashboardView extends GetView<DashboardController> {
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
-    final user = Get.find<UserController>().user;
     final food = Get.find<FoodController>();
     final r = context.responsive;
 
@@ -47,14 +48,22 @@ class DashboardView extends GetView<DashboardController> {
           children: [
             Obx(() {
               final hasBadge = DashboardActions.hasNotificationBadge;
-              return DashboardHeader(
-                firstName: user.firstName,
-                showNotificationBadge: hasBadge,
-                onSearch: DashboardActions.openFoodSearch,
-                onCalendar: () => DashboardActions.openCalendar(context),
-                onNotifications: () =>
-                    DashboardActions.openNotifications(context),
-                searchShowcaseKey: AppCoachMarks.searchKey,
+              return GetBuilder<UserController>(
+                builder: (userCtrl) {
+                  final name = userCtrl.user.name.trim();
+                  final homeTitle = Platform.isIOS && name.isEmpty
+                      ? 'MyCaloriePal'
+                      : userCtrl.user.firstName;
+                  return DashboardHeader(
+                    firstName: homeTitle,
+                    showNotificationBadge: hasBadge,
+                    onSearch: DashboardActions.openFoodSearch,
+                    onCalendar: () => DashboardActions.openCalendar(context),
+                    onNotifications: () =>
+                        DashboardActions.openNotifications(context),
+                    searchShowcaseKey: AppCoachMarks.searchKey,
+                  );
+                },
               );
             }),
             Obx(() {
@@ -449,8 +458,8 @@ class _TodayEmptyState extends StatelessWidget {
                     SizedBox(height: r.scale(2)),
                     Text(
                       viewingToday
-                          ? 'Add Food to log your first meal today.'
-                          : 'Nothing was logged this day.',
+                          ? 'Tap Add Food to log your first meal today.'
+                          : 'Nothing was logged on this day.',
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: r.scale(13),

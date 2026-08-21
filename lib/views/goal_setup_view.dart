@@ -29,6 +29,7 @@ class GoalSetupView extends StatefulWidget {
 
 class _GoalSetupViewState extends State<GoalSetupView> {
   final UserController controller = Get.find<UserController>();          
+  bool _isSaving = false;
 
   @override  
 
@@ -56,6 +57,8 @@ class _GoalSetupViewState extends State<GoalSetupView> {
   }
 
   Future<void> _onContinue({required bool fromProfile}) async {    
+    if (_isSaving) return;
+
     final goal = controller.user.goal;
     if (goal == null) {
       AppSnackbar.error('Select your goal first.');
@@ -64,25 +67,30 @@ class _GoalSetupViewState extends State<GoalSetupView> {
 
     if (fromProfile) {
       if (goal == GoalType.maintainWeight) {
-        controller.useRecommendedGoalWeight();
-        final patch = OnboardingPatchModel.goalProfileDiff(
-          controller.user,
-          controller.baselineForGoalProfileSave(),
-        );
-        if (patch.isEmpty) {
+        setState(() => _isSaving = true);
+        try {
+          controller.useRecommendedGoalWeight();
+          final patch = OnboardingPatchModel.goalProfileDiff(
+            controller.user,
+            controller.baselineForGoalProfileSave(),
+          );
+          if (patch.isEmpty) {
+            controller.commitGoalEditFromProfile();
+            AppSnackbar.info('No changes to save.', title: 'Nothing changed');
+            controller.popToMyGoals();
+            return;
+          }
+          final error = await controller.patchOnboarding(patch);
+          if (error != null) {
+            AppSnackbar.error(error, title: 'Save failed');
+            return;
+          }
           controller.commitGoalEditFromProfile();
-          AppSnackbar.info('No changes to save.', title: 'Nothing changed');
           controller.popToMyGoals();
-          return;
+          AppSnackbar.success('Goal updated.');
+        } finally {
+          if (mounted) setState(() => _isSaving = false);
         }
-        final error = await controller.patchOnboarding(patch);
-        if (error != null) {
-          AppSnackbar.error(error, title: 'Save failed');
-          return;
-        }
-        controller.commitGoalEditFromProfile();
-        controller.popToMyGoals();
-        AppSnackbar.success('Goal updated.');
         return;
       }
 
@@ -147,10 +155,19 @@ class _GoalSetupViewState extends State<GoalSetupView> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: selected == null
+                  onPressed: selected == null || _isSaving
                       ? null
                       : () => _onContinue(fromProfile: fromProfile),
-                  child: Text(fromProfile ? 'Next' : 'Next'),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: AppColors.onPrimary,
+                          ),
+                        )
+                      : Text(fromProfile ? 'Next' : 'Next'),
                 ),
               ),
             );

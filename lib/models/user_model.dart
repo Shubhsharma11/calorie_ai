@@ -13,7 +13,7 @@ class UserModel {
 
   String get firstName {
     final trimmed = name.trim();
-    if (trimmed.isEmpty) return 'there';
+    if (trimmed.isEmpty) return 'There';
     return trimmed.split(RegExp(r'\s+')).first;
   }
 

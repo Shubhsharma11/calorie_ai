@@ -75,7 +75,7 @@ abstract final class AppCoachMarks {
     ),
     CoachMarkStep(
       key: calorieKey,
-      title: 'Your day, clear',
+      title: 'Your day at a glance',
       description:
           'Calories left, macros, and today’s progress — all here.',
       // Frame the overview block (card edges through macros).
@@ -438,6 +438,7 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
           stepCount: _steps.length,
           step: _steps[i],
           ready: _ready,
+          canAdvance: _ready && (!_busy || _displayStep == _step),
           onSkip: _skipTour,
           onNext: _next,
         );
@@ -497,7 +498,10 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
   }
 
   void _next() {
-    if (!_active || _busy) return;
+    if (!_active || !_ready) return;
+    // Block only while the overlay hasn't caught up to [_step] yet.
+    // After [_displayStep] updates, allow Continue even during scroll polish.
+    if (_busy && _displayStep != _step) return;
     final next = _step + 1;
     if (next >= _steps.length) {
       unawaited(_finish(skipped: false));
@@ -536,6 +540,7 @@ class _CoachMarkLayer extends StatefulWidget {
     required this.stepCount,
     required this.step,
     required this.ready,
+    required this.canAdvance,
     required this.onSkip,
     required this.onNext,
   });
@@ -544,6 +549,7 @@ class _CoachMarkLayer extends StatefulWidget {
   final int stepCount;
   final CoachMarkStep step;
   final bool ready;
+  final bool canAdvance;
   final VoidCallback onSkip;
   final VoidCallback onNext;
 
@@ -1087,7 +1093,7 @@ class _CoachMarkLayerState extends State<_CoachMarkLayer>
     // Scale from center so tip never expands into the spotlight.
     const tipScaleAlign = Alignment.center;
     final canAdvance =
-        widget.ready && appear >= 0.95 && !_motion.isAnimating;
+        widget.canAdvance && appear >= 0.95;
 
     // Slide in from the tip's free side (never toward the hole).
     final tipSlide =
@@ -1181,12 +1187,13 @@ class _CoachMarkLayerState extends State<_CoachMarkLayer>
             isLast: widget.stepIndex >= widget.stepCount - 1,
             onSkip: widget.onSkip,
             onNext: widget.onNext,
+            enabled: widget.canAdvance && appear >= 0.95,
           ),
         ),
       ),
     );
 
-    final ignoring = !widget.ready || appear < 0.95;
+    final ignoring = !widget.canAdvance || appear < 0.95;
     final target = _targetRect();
     final settled = !_motion.isAnimating && target != null;
 

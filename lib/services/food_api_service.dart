@@ -142,7 +142,7 @@ class FoodApiService {
       baseUrl: ApiEndpoints.openFoodFactsBaseUrl,
       headers: const {
         // Open Food Facts asks clients to identify themselves.
-        'User-Agent': 'FitBuddyAI/1.0 (Flutter; https://fitbuddyai.app)',
+        'User-Agent': 'MyCaloriePal/1.0 (Flutter; https://fitbuddyai.app)',
         'Accept': 'application/json',
       },
     );

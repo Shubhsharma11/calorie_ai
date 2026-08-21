@@ -268,4 +268,82 @@ void main() {
       ),
     );
   });
+
+  test('Apple login sends name only when Apple provided one', () async {
+    late Map<String, dynamic> capturedBody;
+
+    final client = MockClient((request) async {
+      capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response(
+        '{"success":true,"data":{"accessToken":"tok","user":{"name":"Ramji RN"}}}',
+        200,
+      );
+    });
+
+    final service = AuthApiService(apiClient: ApiClient(client: client));
+    await service.loginWithAppleIdToken(
+      'identity-token',
+      name: 'Ramji RN',
+      givenName: 'Ramji',
+      familyName: 'RN',
+    );
+
+    expect(capturedBody['idToken'], 'identity-token');
+    expect(capturedBody['name'], 'Ramji RN');
+    expect(capturedBody['givenName'], 'Ramji');
+    expect(capturedBody['familyName'], 'RN');
+  });
+
+  test('Apple login omits empty name so a later login cannot wipe it', () async {
+    late Map<String, dynamic> capturedBody;
+
+    final client = MockClient((request) async {
+      capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response(
+        '{"success":true,"data":{"accessToken":"tok","user":{"name":"Ramji RN"}}}',
+        200,
+      );
+    });
+
+    final service = AuthApiService(apiClient: ApiClient(client: client));
+    await service.loginWithAppleIdToken('identity-token', name: '  ');
+
+    expect(capturedBody['idToken'], 'identity-token');
+    expect(capturedBody.containsKey('name'), isFalse);
+    expect(capturedBody.containsKey('givenName'), isFalse);
+    expect(capturedBody.containsKey('fullName'), isFalse);
+  });
+
+  test('AuthApiService updateMe PATCHes name on /auth/me', () async {
+    late Uri capturedUri;
+    late String capturedMethod;
+    late Map<String, String> capturedHeaders;
+    late Map<String, dynamic> capturedBody;
+
+    final client = MockClient((request) async {
+      capturedUri = request.url;
+      capturedMethod = request.method;
+      capturedHeaders = request.headers;
+      capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response(
+        '{"success":true,"data":{"user":{"name":"Fit Buddy"}}}',
+        200,
+      );
+    });
+
+    final service = AuthApiService(apiClient: ApiClient(client: client));
+    final result = await service.updateMe(
+      accessToken: 'token-123',
+      name: 'Fit Buddy',
+    );
+
+    expect(capturedUri.path, ApiEndpoints.authMe);
+    expect(capturedMethod.toUpperCase(), 'PATCH');
+    expect(capturedHeaders['authorization'], 'Bearer token-123');
+    expect(capturedBody['name'], 'Fit Buddy');
+    expect(
+      result['data'],
+      {'user': {'name': 'Fit Buddy'}},
+    );
+  });
 }

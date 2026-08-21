@@ -25,7 +25,7 @@ class HelpSupportView extends StatefulWidget {
 }
 
 class _HelpSupportViewState extends State<HelpSupportView> {
-  static const _supportEmail = 'support@fitbuddyai.com';
+  static const _supportEmail = 'support@srhsoftwares.com';
   static const _appVersion = '1.0.0';
 
   int? _expandedIndex;
@@ -58,14 +58,14 @@ class _HelpSupportViewState extends State<HelpSupportView> {
       question: 'How does food scanning work?',
       answer:
           'Open the Scan tab and point your camera at a product barcode. '
-          'FitBuddy AI looks up nutrition data from Open Food Facts and lets '
+          'MyCaloriePal looks up nutrition data from Open Food Facts and lets '
           'you add it to your log.',
     ),
     (
       question: 'Why can\'t I find a food in search?',
       answer:
           'Search uses a curated Indian foods database. If your item is not '
-          'listed, try a similar dish or use barcode scan for packaged products.',
+          'listed, try a similar dish, or scan the barcode on packaged products.',
     ),
     (
       question: 'How do I change my weight or goals?',
@@ -200,7 +200,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
             _ContactCard(
               icon: Icons.tour_outlined,
               title: 'Replay app tour',
-              subtitle: 'Highlight Home, Search tabs, and navigation',
+              subtitle: 'Walks through Home, Search, and navigation',
               detail: 'Takes about a minute',
               actionLabel: 'Start tour',
               onAction: () => _replayTour(context),
@@ -223,14 +223,14 @@ class _HelpSupportViewState extends State<HelpSupportView> {
               detail: 'We typically reply within 24 hours',
               actionLabel: 'Send Email',
               onAction: () => _openSupportEmail(
-                subject: 'FitBuddy AI Support',
+                subject: 'MyCaloriePal Support',
                 body: _supportEmailBody(),
               ),
             ),
             SizedBox(height: r.scale(16)),
             Center(
               child: Text(
-                'FitBuddy AI v$_appVersion',
+                'MyCaloriePal v$_appVersion',
                 style: TextStyle(
                   fontSize: r.scale(12),
                   color: AppColors.textSecondaryOf(context),
@@ -297,7 +297,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
     final email = user?.user.email.trim() ?? '';
 
     return [
-      'Hi FitBuddy team,',
+      'Hi MyCaloriePal team,',
       '',
       'I need help with:',
       '',
@@ -305,7 +305,7 @@ class _HelpSupportViewState extends State<HelpSupportView> {
       '—',
       if (name.isNotEmpty) 'Name: $name',
       if (email.isNotEmpty) 'Account: $email',
-      'App: FitBuddy AI v$_appVersion',
+      'App: MyCaloriePal v$_appVersion',
       'Platform: ${Platform.operatingSystem}',
     ].join('\n');
   }

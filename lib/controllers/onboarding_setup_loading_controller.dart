@@ -13,7 +13,7 @@ class OnboardingSetupLoadingController extends GetxController {
   Timer? _progressTimer;
   static const _steps = 3;
 
-  @override
+  @override                                          
   void onInit() {
     super.onInit();
     unawaited(_runSetup());
@@ -22,7 +22,7 @@ class OnboardingSetupLoadingController extends GetxController {
   @override
   void onClose() {
     _progressTimer?.cancel();
-    super.onClose();
+    super.onClose();                                                                                                                                                                                           
   }
 
   Future<void> _runSetup() async {
@@ -43,7 +43,7 @@ class OnboardingSetupLoadingController extends GetxController {
     Get.offNamed(AppRoutes.dailyCalorieGoal);
   }
 
-  void _handleProgress(double value, int step) {
+     void _handleProgress(double value, int step) {
     _progressTimer?.cancel();
     progress.value = value.clamp(0.0, 1.0);
     activeStep.value = step.clamp(0, _steps);
@@ -55,8 +55,8 @@ class OnboardingSetupLoadingController extends GetxController {
     }
   }
 
-  void _animateWithinStep(double from, double to) {
-    final startedAt = DateTime.now();
+     void _animateWithinStep(double from, double to) {
+      final startedAt = DateTime.now();
     _progressTimer = Timer.periodic(const Duration(milliseconds: 60), (_) {
       final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
       final t = (elapsedMs / 4000).clamp(0.0, 1.0);

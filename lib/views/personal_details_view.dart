@@ -297,13 +297,13 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       if (weight == null) {
         weightError = _weightUseKg
             ? 'Use a weight between 30 and 300 kg'
-            : 'Use a weight between 66 and 661 lbs';
+            : 'Use a weight between 66 and 661 lb';
       } else if (_weightUseKg) {
         if (!BodyMeasurementUnits.isValidKg(weight)) {
           weightError = 'Use a weight between 30 and 300 kg';
         }
       } else if (!BodyMeasurementUnits.isValidLbs(weight)) {
-        weightError = 'Use a weight between 66 and 661 lbs';
+        weightError = 'Use a weight between 66 and 661 lb';
       }
     }
 
@@ -481,7 +481,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
               child: _NumberInput(
                 controller: _weightCtrl,
                 focusNode: _weightFocus,
-                unit: _weightUseKg ? 'kg' : 'lbs',
+                unit: _weightUseKg ? 'kg' : 'lb',
                 maxLength: 3,
                 hasError: _weightError != null,
                 onUnitTap: () => _selectWeightUnit(!_weightUseKg),

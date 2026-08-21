@@ -126,8 +126,8 @@ class _CalorieGoalSuccessDialogState extends State<CalorieGoalSuccessDialog>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Congratulations! You hit your daily calorie goal of '
-                    '${widget.goal} kcal with ${widget.consumed} kcal logged today. '
+                    'You hit your daily calorie goal of '
+                    '${widget.goal} kcal, with ${widget.consumed} kcal logged today. '
                     'Great work staying on track!',
                     textAlign: TextAlign.center,
                     style: TextStyle(

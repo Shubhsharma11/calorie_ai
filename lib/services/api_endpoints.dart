@@ -8,7 +8,7 @@ abstract final class ApiEndpoints {
       'https://fitbuddyai.s3.ap-south-1.amazonaws.com';
 
 
-// static const String baseUrl = 'https://conventional-plate-fitness-cole.trycloudflare.com';
+// static const String baseUrl = 'https://pdt-state-secretary-manchester.trycloudflare.com';
 
 
 
@@ -36,7 +36,7 @@ abstract final class ApiEndpoints {
   static const String water = '$apiVersion/water';
   static const String myFoods = '$apiVersion/my-foods';
   static const String favouriteMeals = '$apiVersion/favourite-meals';
-  static const String searchFoods = '$apiVersion/search/foods';
+  static const String searchFoods = '$apiVersion/search/foods';       
   static const String supportReports = '$apiVersion/support/reports';
   static const String uploadsImage = '$apiVersion/uploads/image';
 
@@ -219,7 +219,7 @@ abstract final class ApiEndpoints {
   static String get myMealsUrl => url(myMeals);
   static String mealsByIdUrl(String mealId) => url(mealById(mealId));
   static String get mealsStreakUrl => url(mealsStreak);
-  static String get weightUrl => url(weight); 
+  static String get weightUrl => url(weight);              
   static String weightByIdUrl(String weightId) => url(weightById(weightId));
   static String get waterUrl => url(water);
   static String waterByIdUrl(String waterId) => url(waterById(waterId));

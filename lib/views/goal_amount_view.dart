@@ -846,59 +846,59 @@ class _PaceCard extends StatelessWidget {
     if (paceKgPerWeek < 0.25) {
       return (
         title: '$formatted $unit/wk',
-        description: 'A calm pace - great start for your $timeframe goal.',
+        description: 'A calm pace — a great start for your $timeframe goal.',
       );
     }
     if (paceKgPerWeek <= 0.5) {
       return (
         title: '$formatted $unit/wk',
-        description: 'Solid pace over $timeframe - keep showing up.',
+        description: 'Solid pace over $timeframe — keep showing up.',
       );
     }
     if (paceKgPerWeek <= 0.75) {
       return (
         title: '$formatted $unit/wk',
-        description: 'Strong effort for $timeframe - consistency wins.',
+        description: 'Strong effort for $timeframe — consistency wins.',
       );
     }
     if (paceKgPerWeek <= 1.0) {
       return (
         title: '$formatted $unit/wk',
-        description: 'Bold target for $timeframe - listen to your body.',
+        description: 'Bold target for $timeframe — listen to your body.',
       );
     }
     if (weeks <= 1) {
       return (
         title: '$formatted $unit/wk',
         description:
-            'Big goal in 1 week - you can do it. A little more time helps it stick.',
+            'Big goal in 1 week — you can do it. A little more time helps it stick.',
       );
     }
     if (weeks <= 2) {
       return (
         title: '$formatted $unit/wk',
         description:
-            'Strong push for 2 weeks - adding time makes progress easier to keep.',
+            'Strong push for 2 weeks — adding time makes progress easier to keep.',
       );
     }
     if (weeks <= 4) {
       return (
         title: '$formatted $unit/wk',
         description:
-            'Ambitious 1-month plan - stay focused and trust the process.',
+            'Ambitious 1-month plan — stay focused and trust the process.',
       );
     }
     if (weeks <= 8) {
       return (
         title: '$formatted $unit/wk',
         description:
-            "You're aiming high in $timeframe - small steps add up fast.",
+            "You're aiming high in $timeframe — small steps add up fast.",
       );
     }
     return (
       title: '$formatted $unit/wk',
       description:
-          'Big $timeframe goal - stay patient, stay consistent, and celebrate progress.',
+          'Big $timeframe goal — stay patient, stay consistent, and celebrate progress.',
     );
   }
 

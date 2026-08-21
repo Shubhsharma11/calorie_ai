@@ -4,7 +4,7 @@ import 'package:cronet_http/cronet_http.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
-const _userAgent = 'FitBuddyAI/1.0';
+const _userAgent = 'MyCaloriePal/1.0';
 const _connectionTimeout = Duration(seconds: 20);
 
 http.Client? _shared;

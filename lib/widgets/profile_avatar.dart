@@ -15,6 +15,7 @@ class ProfileAvatar extends StatelessWidget {
     this.radius,
     this.isUploading = false,
     this.showEditBadge = false,
+    this.onEditBadgeTap,
     this.tooltip,
   });
 
@@ -23,6 +24,7 @@ class ProfileAvatar extends StatelessWidget {
   final double? radius;
   final bool isUploading;
   final bool showEditBadge;
+  final VoidCallback? onEditBadgeTap;
   final String? tooltip;
 
   @override
@@ -104,31 +106,13 @@ class ProfileAvatar extends StatelessWidget {
                 ),
               ),
             ),
-          if (showEditBadge && !isUploading)
+          if ((showEditBadge || onEditBadgeTap != null) && !isUploading)
             Positioned(
               right: -2,
               bottom: -2,
-              child: IgnorePointer(
-                child: Container(
-                  width: badgeSize,
-                  height: badgeSize,
-                  padding: EdgeInsets.all(badgeSize * 0.2),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.16),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: SvgPicture.asset(
-                    'assets/image/pencil.svg',
-                    fit: BoxFit.contain,
-                  ),
-                ),
+              child: _EditBadge(
+                size: badgeSize,
+                onTap: onEditBadgeTap,
               ),
             ),
         ],
@@ -169,6 +153,54 @@ class _PersonFallback extends StatelessWidget {
         Icons.person_rounded,
         size: size * 1.1,
         color: AppColors.textSecondary,
+      ),
+    );
+  }
+}
+
+class _EditBadge extends StatelessWidget {
+  const _EditBadge({required this.size, this.onTap});
+
+  final double size;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final badge = Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.2),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.16),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: SvgPicture.asset(
+        'assets/image/pencil.svg',
+        fit: BoxFit.contain,
+      ),
+    );
+
+    if (onTap == null) {
+      return IgnorePointer(child: badge);
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: badge,
       ),
     );
   }
