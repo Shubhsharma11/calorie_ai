@@ -72,7 +72,7 @@ class DashboardView extends GetView<DashboardController> {
                 return SizedBox(height: r.scale(10));
               }
               return Column(
-                children: [
+                children: [    
                   SizedBox(height: r.scale(12)),
                   PastDateBanner(
                     dateLabel: formatLogDateLabel(controller.viewingDate),

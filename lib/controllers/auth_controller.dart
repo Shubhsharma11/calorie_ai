@@ -25,8 +25,15 @@ class AuthController extends GetxController {
   final isSigningInWithGoogle = false.obs;
   final isSigningInWithApple = false.obs;
 
+  /// Sync lock so rapid taps cannot re-enter before Obx rebuilds.
+  bool _googleAuthInFlight = false;
+  bool _appleAuthInFlight = false;
+
   bool get isSigningIn =>
-      isSigningInWithGoogle.value || isSigningInWithApple.value;
+      isSigningInWithGoogle.value ||
+      isSigningInWithApple.value ||
+      _googleAuthInFlight ||
+      _appleAuthInFlight;
 
   void login() {
     final user = Get.find<UserController>();
@@ -46,19 +53,30 @@ class AuthController extends GetxController {
   }
 
   Future<void> loginWithGoogle() async {
-    if (isSigningIn) return;
+    if (_googleAuthInFlight || _appleAuthInFlight || isSigningIn) {
+      debugPrint('AuthController: ignoring Google sign-in (already in progress)');
+      return;
+    }
 
+    _googleAuthInFlight = true;
     isSigningInWithGoogle.value = true;
 
     try {
       debugPrint('AuthController: starting Google sign-in');
+      // Startup init is fire-and-forget; ensure it finished before authenticate.
+      await GoogleSignIn.instance.initialize(
+        serverClientId:
+            '950645223660-73fq24ua6hn9h7u92bc9nhtg22rjag1d.apps.googleusercontent.com',
+      );
       final googleUser = await GoogleSignIn.instance.authenticate();
 
       debugPrint('AuthController: Google sign-in returned ${googleUser.email}');
 
       final googleAuth = googleUser.authentication;
       final idToken = googleAuth.idToken;
-      debugPrint('AuthController: Google ID token: $idToken');
+      debugPrint(
+        'AuthController: Google ID token length=${idToken?.length ?? 0}',
+      );
       if (idToken == null || idToken.isEmpty) {
         throw const AuthApiException('Google ID token was not returned.');
       }
@@ -119,9 +137,17 @@ class AuthController extends GetxController {
         Get.offAllNamed(resumeRoute);
       }
     } on GoogleSignInException catch (e) {
-      if (e.code == GoogleSignInExceptionCode.canceled) return;
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        debugPrint('AuthController: Google sign-in canceled by user');
+        return;
+      }
+      debugPrint(
+        'AuthController: GoogleSignInException code=${e.code} '
+        'description=${e.description}',
+      );
       _showAuthError(e.description ?? 'Google sign-in failed.');
     } on AuthApiException catch (e) {
+      debugPrint('AuthController: Google backend auth failed: ${e.message}');
       _showAuthError(e.message);
     } catch (e, stackTrace) {
       debugPrint('GOOGLE SIGN IN ERROR: $e');
@@ -129,13 +155,18 @@ class AuthController extends GetxController {
 
       _showAuthError('Unable to sign in with Google: $e');
     } finally {
+      _googleAuthInFlight = false;
       isSigningInWithGoogle.value = false;
     }
   }
 
   Future<void> loginWithApple() async {
-    if (isSigningIn) return;
+    if (_googleAuthInFlight || _appleAuthInFlight || isSigningIn) {
+      debugPrint('AuthController: ignoring Apple sign-in (already in progress)');
+      return;
+    }
 
+    _appleAuthInFlight = true;
     isSigningInWithApple.value = true;
 
     try {
@@ -221,11 +252,17 @@ class AuthController extends GetxController {
       }
     } on SignInWithAppleAuthorizationException catch (e) {
       if (e.code == AuthorizationErrorCode.canceled) {
+        debugPrint('AuthController: Apple sign-in canceled by user');
         return;
       }
 
+      debugPrint(
+        'AuthController: AppleAuthorizationException code=${e.code} '
+        'message=${e.message}',
+      );
       _showAuthError(e.message);
     } on AuthApiException catch (e) {
+      debugPrint('AuthController: Apple backend auth failed: ${e.message}');
       _showAuthError(e.message);
     } catch (e, stackTrace) {
       debugPrint('APPLE SIGN IN ERROR: $e');
@@ -233,6 +270,7 @@ class AuthController extends GetxController {
 
       _showAuthError('Unable to sign in with Apple: $e');
     } finally {
+      _appleAuthInFlight = false;
       isSigningInWithApple.value = false;
     }
   }

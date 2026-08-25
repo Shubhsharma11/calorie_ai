@@ -163,12 +163,12 @@ class OnboardingRequestModel {
       throw const OnboardingPayloadException('Fitness goal is not set.');
     }
 
-    final concerns = _apiConcerns(user);
+    final concerns = _apiConcerns(user); 
 
     final activity = user.activityLevel;
     if (activity == null) {
       throw const OnboardingPayloadException('Activity level is not set.');
-    }
+    } 
 
     final age = user.age;
     final gender = user.gender;

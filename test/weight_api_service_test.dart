@@ -75,7 +75,7 @@ void main() {
             'meta': {
               'page': 1,
               'limit': 30,
-              'total': 1,
+              'total': 1, 
               'totalPages': 1,
               'period': 'today',
             },

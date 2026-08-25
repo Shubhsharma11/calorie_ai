@@ -349,10 +349,10 @@ class AuthApiService {
       return value.map((key, fieldValue) {
         final lowerKey = key.toLowerCase();
         if (lowerKey.contains('token')) {
-          return MapEntry(key, '***redacted***');
+          return MapEntry(key, '***redacted***');    
         }
         return MapEntry(key, _redactTokens(fieldValue));
-      });
+      });  
     }
 
     if (value is List) {

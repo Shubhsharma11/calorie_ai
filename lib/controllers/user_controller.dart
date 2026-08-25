@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
-
 import '../models/access_token_resolution.dart';
 import '../models/activity_level.dart';
 import '../models/avatar_upload_result.dart';
@@ -458,7 +456,6 @@ class UserController extends GetxController with WidgetsBindingObserver {
         }
         return;
       }
-
       final resumed = await waitForAppResumed();
       if (isClosed || !resumed) return;
 
@@ -663,7 +660,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
       }
     }
     if (MediaUrl.isUploadedAvatar(url)) {
-      _rememberUploadedAvatarInLoginPayload(url);
+      _rememberUploadedAvatarInLoginPayload(url);                  
     }
   }
 
@@ -713,7 +710,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     _avatarUiDirty = true;
   }
 
-  Future<String?> updateDisplayName(
+   Future<String?> updateDisplayName(
     String name, {
     bool force = false,
   }) async {
@@ -956,7 +953,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     if (!isGoalEditFromProfile) scheduleOnboardingDraftSave();
   }
 
-  void useRecommendedGoalWeight() {
+  void  useRecommendedGoalWeight() {
     final previousTarget = user.goalWeightKg;
     // Pin once for lose/gain/maintain — do not let it track live weigh-ins.
     user.pinGoalWeight(recommendedTargetKg(), goalType: user.goal);
@@ -1261,7 +1258,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   void _storeAiRecommendedGoalWeight(double kg) {
     aiRecommendedGoalWeightKg = kg.clamp(40.0, 200.0);
-    // Keep the user's onboarding target active by default.
+    // Keep the user's onboarding target active by default.ss
     if (userOnboardingGoalWeightKg != null &&
         weightTargetSource.value == WeightTargetSource.user) {
       user.pinGoalWeight(userOnboardingGoalWeightKg!);
@@ -2549,8 +2546,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
 enum WeightTargetSource { user, ai }
 
 /// In-memory checkpoint for a My Goals → Goal Setup/Amount/Weight edit journey.
-class _GoalEditCheckpoint {
-  const _GoalEditCheckpoint({
+    class _GoalEditCheckpoint {
+     const _GoalEditCheckpoint({
     required this.syncBaseline,
     required this.goal,
     required this.pinnedGoalType,

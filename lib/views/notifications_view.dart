@@ -332,7 +332,7 @@ class _NotificationCard extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) { 
     final visual = _visualFor(item.type);
     final isUnread = !item.isRead;
 
@@ -613,7 +613,7 @@ case NotificationType.dinnerReminder:
 
     // Motivation
     case NotificationType.motivational:
-      return const _NotificationVisual(
+       return const _NotificationVisual(
         Icons.favorite_rounded,
         AppColors.primary,
       );

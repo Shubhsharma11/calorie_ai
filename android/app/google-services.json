@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "950645223660-l5pcnp5vlt7rhoc3jd627n4pbhp7epk7.apps.googleusercontent.com",
+          "client_id": "950645223660-89h4coto9tqsn8439kocsh35hod93bo0.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.srhsoftwares.mycaloriepal",
-            "certificate_hash": "983e9ed7dfa21268e2f9ab0165b14c620968e719"
+            "certificate_hash": "121d6686d7b7e08d969b677f3163c6dc1352b90a"
           }
         },
         {

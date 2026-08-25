@@ -8,7 +8,7 @@ abstract final class ApiEndpoints {
       'https://fitbuddyai.s3.ap-south-1.amazonaws.com';
 
 
-// static const String baseUrl = 'https://pdt-state-secretary-manchester.trycloudflare.com';
+// static const String baseUrl = 'https://honor-sacrifice-poetry-belle.trycloudflare.com';
 
 
 
@@ -61,7 +61,7 @@ abstract final class ApiEndpoints {
         .join('&');
     return '$searchFoods?$query';
   }
-  static String mealsWithQuery({
+  static String mealsWithQuery({          
     DateTime? date,
     String? period,
     DateTime? fromDate,
@@ -213,7 +213,7 @@ abstract final class ApiEndpoints {
       url(notificationById(notificationId));
 
   static String get onboardingUrl => url(onboarding);
-  static String get nutritionPlanUrl => url(nutritionPlan);
+  static String get nutritionPlanUrl => url(nutritionPlan);   
   static String get mealsUrl => url(meals);
   static String get mealsCustomUrl => url(mealsCustom);
   static String get myMealsUrl => url(myMeals);
