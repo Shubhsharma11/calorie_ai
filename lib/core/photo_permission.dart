@@ -2,11 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'android_sdk.dart';
-
-/// Gallery on Android 12 / 12L still needs `READ_EXTERNAL_STORAGE`.
-bool galleryNeedsStoragePermission(int androidSdkInt) =>
-    androidSdkInt < android13Sdk;
+/// Always false: Android gallery uses the system Photo Picker (no storage grant).
+bool galleryNeedsStoragePermission(int _) => false;
 
 String photoPermissionDeniedMessage(ImageSource source) {
   if (source == ImageSource.camera) {
@@ -15,12 +12,11 @@ String photoPermissionDeniedMessage(ImageSource source) {
   return 'Photo access is required to choose an image.';
 }
 
-/// Requests camera or storage permission for [source] on versions that need it.
+/// Requests camera or (on iOS) photos permission for [source].
 ///
-/// Android 13+ gallery uses the system picker and does not need a grant.
+/// Android gallery uses the system Photo Picker and does not need a grant.
 Future<bool> ensureImageSourcePermission(
   ImageSource source, {
-  Future<int> Function()? androidSdkInt,
   Future<PermissionStatus> Function(Permission permission)? request,
 }) async {
   Future<PermissionStatus> requestPermission(Permission permission) {
@@ -40,14 +36,6 @@ Future<bool> ensureImageSourcePermission(
     return status.isGranted || status.isLimited;
   }
 
-  if (defaultTargetPlatform == TargetPlatform.android) {
-    final sdk = androidSdkInt != null
-        ? await androidSdkInt()
-        : await readAndroidSdkInt();
-    if (sdk == null || !galleryNeedsStoragePermission(sdk)) return true;
-    final status = await requestPermission(Permission.storage);
-    return status.isGranted;
-  }
-
+  // Android: Photo Picker — no READ_MEDIA_* / storage permission needed.
   return true;
 }

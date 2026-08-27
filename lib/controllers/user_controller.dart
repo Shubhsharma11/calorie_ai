@@ -89,6 +89,11 @@ class UserController extends GetxController with WidgetsBindingObserver {
   /// Last HTTP status from [fetchProfile] (e.g. 429 rate limit).
   int? lastProfileFetchStatusCode;
   Future<String?>? _fetchProfileInFlight;
+  DateTime? _profileFetchedAt;
+  DateTime? _profileRateLimitedUntil;
+
+  static const Duration _profileFreshnessTtl = Duration(seconds: 60);
+  static const Duration _profileRateLimitCooldown = Duration(seconds: 60);
 
   /// Bumped on login/logout so an in-flight profile fetch cannot apply to
   /// the next session (wrong calorie / weight goal after sign-in).
@@ -155,8 +160,9 @@ class UserController extends GetxController with WidgetsBindingObserver {
       }
     }
 
+    // Profile is loaded once by [resolveStartupRoute] / login — do not
+    // background-hydrate here or we double-hit GET /onboarding and trip 429s.
     if (isLoggedIn && accessToken.isNotEmpty) {
-      unawaited(hydrateProfileInBackground());
       unawaited(recoverLostAvatarIfNeeded());
     }
   }
@@ -173,14 +179,14 @@ class UserController extends GetxController with WidgetsBindingObserver {
   }
 
   /// Loads onboarding/profile from the API after the UI is already showing.
+  ///
+  /// Skips the network when a recent successful fetch or an active 429
+  /// cooldown applies (same rules as [fetchProfile]).
   Future<void> hydrateProfileInBackground({
     bool refreshGoalTarget = false,
   }) async {
     try {
-      await fetchProfile(
-        refreshGoalTarget: refreshGoalTarget,
-        maxAttempts: 3,
-      );
+      await fetchProfile(refreshGoalTarget: refreshGoalTarget);
       await refreshAvatarUrl(force: true);
     } catch (error, stackTrace) {
       debugPrint(
@@ -991,8 +997,37 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   Future<String?> fetchProfile({
     bool refreshGoalTarget = false,
-    int maxAttempts = 3,
+    bool force = false,
   }) {
+    final now = DateTime.now();
+
+    // Active 429 window — do not spend more quota (even on force).
+    if (_profileRateLimitedUntil != null &&
+        now.isBefore(_profileRateLimitedUntil!)) {
+      lastProfileFetchStatusCode = 429;
+      debugPrint(
+        'UserController: fetchProfile skipped — rate-limited until '
+        '$_profileRateLimitedUntil',
+      );
+      // Cached profile is fine for UI; only surface an error when we have nothing.
+      if (user.hasProfileBasics || _onboardingCompleted) {
+        return Future.value(null);
+      }
+      return Future.value('Too many requests, please try again later');
+    }
+
+    // Recent success — My Goals / Personal Info reuse it.
+    if (!force &&
+        lastProfileFetchStatusCode == 200 &&
+        _profileFetchedAt != null &&
+        now.difference(_profileFetchedAt!) < _profileFreshnessTtl) {
+      debugPrint(
+        'UserController: fetchProfile skipped — fresh within '
+        '${_profileFreshnessTtl.inSeconds}s',
+      );
+      return Future.value(null);
+    }
+
     if (_fetchProfileInFlight != null && _profileFetchEpoch == _sessionEpoch) {
       return _fetchProfileInFlight!;
     }
@@ -1001,7 +1036,6 @@ class UserController extends GetxController with WidgetsBindingObserver {
     _profileFetchEpoch = epoch;
     final future = _fetchProfile(
       refreshGoalTarget: refreshGoalTarget,
-      maxAttempts: maxAttempts,
       epoch: epoch,
     );
     _fetchProfileInFlight = future;
@@ -1014,7 +1048,6 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   Future<String?> _fetchProfile({
     required bool refreshGoalTarget,
-    required int maxAttempts,
     required int epoch,
   }) async {
     final token = await resolveAccessToken();
@@ -1030,6 +1063,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
     update();
 
     try {
+      // One attempt for normal / 429. Retry 502/503 once with a longer pause.
+      const maxAttempts = 2;
       OnboardingApiException? lastError;
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         if (epoch != _sessionEpoch) return 'Profile fetch cancelled.';
@@ -1039,6 +1074,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
           );
           if (epoch != _sessionEpoch) return 'Profile fetch cancelled.';
           lastProfileFetchStatusCode = 200;
+          _profileFetchedAt = DateTime.now();
+          _profileRateLimitedUntil = null;
           // Once the user has a pinned target (lose/gain/maintain), casual profile
           // refreshes must not adopt server mutations caused by weight logs
           // (goalWeight rewritten ≈ current).
@@ -1065,15 +1102,21 @@ class UserController extends GetxController with WidgetsBindingObserver {
             'UserController: fetchProfile failed '
             '(attempt $attempt/$maxAttempts): $error',
           );
-          final isRateLimited = error.statusCode == 429;
-          final isTransient = isRateLimited ||
-              error.statusCode == 503 ||
-              error.statusCode == 502;
-          if (!isTransient || attempt >= maxAttempts) {
+          if (error.statusCode == 429) {
+            _profileRateLimitedUntil =
+                DateTime.now().add(_profileRateLimitCooldown);
+            debugPrint(
+              'UserController: rate-limited — cooling down until '
+              '$_profileRateLimitedUntil',
+            );
             return error.message;
           }
-          // Back off before retry — avoids compounding API rate limits.
-          await Future<void>.delayed(Duration(milliseconds: 700 * attempt));
+          final isGateway =
+              error.statusCode == 503 || error.statusCode == 502;
+          if (!isGateway || attempt >= maxAttempts) {
+            return error.message;
+          }
+          await Future<void>.delayed(Duration(seconds: 2 * attempt));
         }
       }
       return lastError?.message ?? 'Unable to load your profile. Please try again.';
@@ -2327,7 +2370,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     debugPrint('UserController: reloading API-owned data after login');
 
     // Gate every other call on profile — this decides home vs setup.
-    await fetchProfile(refreshGoalTarget: false, maxAttempts: 4);
+    await fetchProfile(refreshGoalTarget: false, force: true);
     await refreshAvatarUrl(force: true);
 
     if (Get.isRegistered<FoodController>()) {
@@ -2513,6 +2556,9 @@ class UserController extends GetxController with WidgetsBindingObserver {
   void _clearInMemoryAuthState() {
     _sessionEpoch++;
     _fetchProfileInFlight = null;
+    lastProfileFetchStatusCode = null;
+    _profileFetchedAt = null;
+    _profileRateLimitedUntil = null;
     isLoggedIn = false;
     userId = '';
     authProvider = '';

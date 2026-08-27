@@ -52,6 +52,7 @@ class _CustomMealLogSheet extends StatefulWidget {
 class _CustomMealLogSheetState extends State<_CustomMealLogSheet> {
   late String _selectedMeal = widget.initialMeal;
   late CustomMealPreset _preset = widget.preset;
+  bool _logging = false;
 
   @override
   void initState() {
@@ -68,32 +69,47 @@ class _CustomMealLogSheetState extends State<_CustomMealLogSheet> {
     setState(() => _preset = updated);
   }
 
-  void _log() {
-    Get.find<FoodController>().logCustomMealPreset(
-      _preset,
-      meal: _selectedMeal,
-    );
-    Navigator.pop(context);
-    AppSnackbar.success(
-      '${_preset.name} added to $_selectedMeal.',
-      title: 'Logged',
-    );
+  Future<void> _log() async {
+    if (_logging) return;
+    setState(() => _logging = true);
+    try {
+      final ok = await Get.find<FoodController>().logCustomMealPreset(
+        _preset,
+        meal: _selectedMeal,
+      );
+      if (!mounted) return;
+      if (!ok) return;
+      setState(() => _logging = false);
+      Navigator.pop(context);
+      AppSnackbar.success(
+        '${_preset.name} added to $_selectedMeal.',
+        title: 'Logged',
+      );
+    } finally {
+      if (mounted && _logging) setState(() => _logging = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final foodCount = _preset.items.length;
-    return LogPreviewBody(
-      title: _preset.name,
-      subtitle: foodCount == 1 ? '1 food' : '$foodCount foods',
-      visibility: _preset.visibility,
-      calories: _preset.totalCalories,
-      items: _preset.items,
-      selectedMeal: _selectedMeal,
-      imageBytes: _preset.imageBytes,
-      imageUrl: _preset.imageUrl,
-      onMealSelected: (meal) => setState(() => _selectedMeal = meal),
-      onLog: _log,
+    return PopScope(
+      canPop: !_logging,
+      child: LogPreviewBody(
+        title: _preset.name,
+        subtitle: foodCount == 1 ? '1 food' : '$foodCount foods',
+        visibility: _preset.visibility,
+        calories: _preset.totalCalories,
+        items: _preset.items,
+        selectedMeal: _selectedMeal,
+        imageBytes: _preset.imageBytes,
+        imageUrl: _preset.imageUrl,
+        isLogging: _logging,
+        onMealSelected: _logging
+            ? (_) {}
+            : (meal) => setState(() => _selectedMeal = meal),
+        onLog: _log,
+      ),
     );
   }
 }

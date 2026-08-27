@@ -6,9 +6,10 @@ import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
 import 'app_snackbar.dart';
+import 'image_downscale.dart';
 import 'photo_permission.dart';
 
-const _maxEdge = 1280;
+const _maxEdge = kAvatarMaxEdge;
 
 /// Picks a photo already downscaled, then crops. Falls back to the
 /// resized original if the native cropper fails so the UI never hangs

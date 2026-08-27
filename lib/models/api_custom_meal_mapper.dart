@@ -11,6 +11,11 @@ abstract final class ApiCustomMealMapper {
       'name': preset.name,
       'mealTime': _mealTimeToApi(preset.meal),
       'visibility': _visibilityToApi(preset.visibility),
+      // Persist totals + per-item macros so GET after re-login is not 0 kcal.
+      'calories': preset.totalCalories,
+      'protein': _roundMacro(preset.totalProtein),
+      'carbs': _roundMacro(preset.totalCarbs),
+      'fat': _roundMacro(preset.totalFat),
       'items': preset.items.map(_itemToApiJson).toList(),
     };
     final image = MediaUrl.apiImageKey(preset.imageUrl);
@@ -19,6 +24,8 @@ abstract final class ApiCustomMealMapper {
   }
 
   /// Body for `PATCH /api/v1/my-meals/:myMealId`.
+  /// Includes [items] so removed/added foods persist (otherwise the server
+  /// keeps the old ingredient list and it reappears after update / log).
   static Map<String, dynamic> toPatchRequestBody({
     required CustomMealPreset preset,
     String? imageUrl,
@@ -31,6 +38,7 @@ abstract final class ApiCustomMealMapper {
       'protein': _roundMacro(preset.totalProtein),
       'carbs': _roundMacro(preset.totalCarbs),
       'fat': _roundMacro(preset.totalFat),
+      'items': preset.items.map(_itemToApiJson).toList(),
     };
 
     final image =
@@ -49,13 +57,19 @@ abstract final class ApiCustomMealMapper {
     final parsed = presetFromApiJson(_unwrapData(json));
     if (parsed == null) return source;
 
+    // Prefer the items we just sent on create/update. Some PATCH responses
+    // still return the previous ingredient list, which resurrected removed foods.
+    final items = source.items.isNotEmpty
+        ? source.items
+        : (parsed.items.isNotEmpty
+            ? _preserveServingMetadata(parsed.items, source.items)
+            : source.items);
+
     return source.copyWith(
       id: parsed.id,
       name: parsed.name,
       meal: parsed.meal,
-      items: parsed.items.isNotEmpty
-          ? _preserveServingMetadata(parsed.items, source.items)
-          : source.items,
+      items: items,
       visibility: parsed.visibility,
       createdAt: parsed.createdAt,
       imageUrl: parsed.imageUrl ?? source.imageUrl,
@@ -145,9 +159,12 @@ abstract final class ApiCustomMealMapper {
           mealJson['mealTime'] ?? mealJson['mealtime'] ?? mealJson['meal'],
         ) ??
         MealType.breakfast;
-    final items = _itemsFromApi(
-      mealJson['items'] ?? mealJson['foods'] ?? mealJson['mealItems'],
-      fallbackMeal: meal,
+    final items = _hydrateItemsNutritionFromMeal(
+      mealJson,
+      _itemsFromApi(
+        mealJson['items'] ?? mealJson['foods'] ?? mealJson['mealItems'],
+        fallbackMeal: meal,
+      ),
     );
 
     return CustomMealPreset(
@@ -162,6 +179,96 @@ abstract final class ApiCustomMealMapper {
       ),
       imageUrl: MediaUrl.fromJson(mealJson),
     );
+  }
+
+  /// When item rows lack macros but the meal has totals (common for older
+  /// templates), spread meal nutrition onto items so UI is not 0 kcal.
+  static List<SavedMealItem> _hydrateItemsNutritionFromMeal(
+    Map<String, dynamic> mealJson,
+    List<SavedMealItem> items,
+  ) {
+    if (items.isEmpty) return items;
+    final itemCalories = items.fold<int>(0, (sum, item) => sum + item.calories);
+    if (itemCalories > 0) return items;
+
+    final nutrients = mealJson['totalNutrients'];
+    final nutrientMap =
+        nutrients is Map ? Map<String, dynamic>.from(nutrients) : null;
+
+    final mealCalories = _readInt(
+          mealJson,
+          const ['calories', 'totalCalories', 'kcal'],
+        ) ??
+        (nutrientMap == null
+            ? null
+            : _readInt(nutrientMap, const ['calories', 'kcal'])) ??
+        0;
+    if (mealCalories <= 0) return items;
+
+    final mealProtein = _readDouble(mealJson, const ['protein']) ??
+        (nutrientMap == null
+            ? null
+            : _readDouble(nutrientMap, const ['protein'])) ??
+        0;
+    final mealCarbs = _readDouble(mealJson, const ['carbs']) ??
+        (nutrientMap == null
+            ? null
+            : _readDouble(nutrientMap, const ['carbs'])) ??
+        0;
+    final mealFat = _readDouble(mealJson, const ['fat']) ??
+        (nutrientMap == null
+            ? null
+            : _readDouble(nutrientMap, const ['fat'])) ??
+        0;
+
+    final weights = items
+        .map((item) => item.grams > 0 ? item.grams : 1)
+        .toList(growable: false);
+    final totalWeight = weights.fold<int>(0, (sum, w) => sum + w);
+    if (totalWeight <= 0) return items;
+
+    var assignedCalories = 0;
+    var assignedProtein = 0.0;
+    var assignedCarbs = 0.0;
+    var assignedFat = 0.0;
+    final hydrated = <SavedMealItem>[];
+
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      final isLast = i == items.length - 1;
+      final share = weights[i] / totalWeight;
+      final portionCalories = isLast
+          ? mealCalories - assignedCalories
+          : (mealCalories * share).round();
+      final portionProtein = isLast
+          ? mealProtein - assignedProtein
+          : mealProtein * share;
+      final portionCarbs =
+          isLast ? mealCarbs - assignedCarbs : mealCarbs * share;
+      final portionFat = isLast ? mealFat - assignedFat : mealFat * share;
+
+      assignedCalories += portionCalories;
+      assignedProtein += portionProtein;
+      assignedCarbs += portionCarbs;
+      assignedFat += portionFat;
+
+      final quantity = item.grams > 0 ? item.grams : 1;
+      final per100 = 100 / quantity;
+      hydrated.add(
+        item.copyWith(
+          food: item.food.copyWith(
+            caloriesPer100g: portionCalories > 0
+                ? (portionCalories * per100).round()
+                : 0,
+            protein: portionProtein * per100,
+            carbs: portionCarbs * per100,
+            fat: portionFat * per100,
+          ),
+        ),
+      );
+    }
+
+    return hydrated;
   }
 
   static List<dynamic>? _nestedMealList(Map<String, dynamic> map) {
@@ -218,6 +325,10 @@ abstract final class ApiCustomMealMapper {
       'name': item.food.name,
       'quantity': quantity is int ? quantity : _roundMacro(quantity.toDouble()),
       'unit': unit == 'gm' ? 'g' : unit,
+      'calories': item.calories,
+      'protein': _roundMacro(item.protein),
+      'carbs': _roundMacro(item.carbs),
+      'fat': _roundMacro(item.fat),
     };
     final image = _itemImageForApi(item.food.imageUrl);
     if (image != null) body['image'] = image;
@@ -274,10 +385,21 @@ abstract final class ApiCustomMealMapper {
         _readInt(foodMap, const ['quantity', 'grams', 'servingGrams']);
     if (quantity == null || quantity <= 0) return null;
 
-    final calories = _readInt(json, const ['calories']) ?? 0;
-    final protein = _readDouble(json, const ['protein']) ?? 0;
-    final carbs = _readDouble(json, const ['carbs']) ?? 0;
-    final fat = _readDouble(json, const ['fat']) ?? 0;
+    final protein = _readDouble(json, const ['protein']) ??
+        _readDouble(foodMap, const ['protein']) ??
+        0;
+    final carbs = _readDouble(json, const ['carbs']) ??
+        _readDouble(foodMap, const ['carbs']) ??
+        0;
+    final fat = _readDouble(json, const ['fat']) ??
+        _readDouble(foodMap, const ['fat']) ??
+        0;
+    var calories = _readInt(json, const ['calories', 'kcal']) ??
+        _readInt(foodMap, const ['calories', 'kcal']) ??
+        0;
+    if (calories <= 0 && (protein > 0 || carbs > 0 || fat > 0)) {
+      calories = (carbs * 4 + protein * 4 + fat * 9).round();
+    }
 
     final per100Factor = 100 / quantity;
     final imageUrl = MediaUrl.preferLoadable([

@@ -12,7 +12,9 @@ import '../core/media_url.dart';
 import '../core/pick_cropped_image.dart';
 import '../core/responsive.dart';
 import '../models/custom_meal_preset.dart';
+import '../services/custom_meals_api_service.dart';
 import '../services/food_api_service.dart';
+import '../services/uploads_api_service.dart';
 import '../models/food_item.dart';
 import '../models/meal_type.dart';
 import '../models/saved_meal_item.dart';
@@ -20,6 +22,7 @@ import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/app_bottom_sheet.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/confirm_delete_sheet.dart';
 import '../widgets/food_emoji_avatar.dart';
 import '../widgets/meal_type_chip_row.dart';
 import '../widgets/media_viewer.dart';
@@ -315,7 +318,7 @@ class _CreateMealViewState extends State<CreateMealView> {
       );
 
       if (logAfterSave) {
-        _food.logCustomMealPreset(savedPreset, meal: _selectedMeal);
+        await _food.logCustomMealPreset(savedPreset, meal: _selectedMeal);
       }
 
       if (!mounted) return;
@@ -329,13 +332,49 @@ class _CreateMealViewState extends State<CreateMealView> {
             : '$name saved to My Meals.',
         title: logAfterSave ? 'Saved & logged' : 'Saved',
       );
-      // Keep _isSaving true after success so a late tap cannot log again
-      // while this route is still finishing its pop.
-    } catch (_) {
+      // If pop was a no-op, clear the spinner so the UI isn't stuck.
       if (mounted) setState(() => _isSaving = false);
+    } catch (error) {
+      if (mounted) setState(() => _isSaving = false);
+      // FoodController already showed a snackbar for API / upload failures.
+      if (error is CustomMealsApiException || error is UploadsApiException) {
+        return;
+      }
       AppSnackbar.error(
         'Could not save this meal. Please try again.',
         title: 'Save failed',
+      );
+    }
+  }
+
+  Future<void> _deleteMeal() async {
+    if (!_isEditing || _editingPreset == null || _isSaving) return;
+
+    final name = _nameController.text.trim().isEmpty
+        ? _editingPreset!.name
+        : _nameController.text.trim();
+    final confirmed = await showConfirmDeleteSheet(
+      context: context,
+      title: 'Delete meal?',
+      message: 'Remove “$name” from My Meals? This cannot be undone.',
+      cancelLabel: 'Keep',
+      confirmLabel: 'Delete',
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() => _isSaving = true);
+    try {
+      await _food.removeCustomMealPreset(_editingPreset!.id);
+      if (!mounted) return;
+      Get.back<void>();
+      AppSnackbar.success('$name was removed.', title: 'Deleted');
+    } catch (error) {
+      if (mounted) setState(() => _isSaving = false);
+      AppSnackbar.error(
+        error is CustomMealsApiException
+            ? error.message
+            : 'Could not delete this meal. Please try again.',
+        title: 'Delete failed',
       );
     }
   }
@@ -345,7 +384,17 @@ class _CreateMealViewState extends State<CreateMealView> {
     final r = context.responsive;
 
     return Scaffold(
-      appBar: AppAppBar(title: _isEditing ? 'Edit meal' : 'Create meal'),
+      appBar: AppAppBar(
+        title: _isEditing ? 'Edit meal' : 'Create meal',
+        actions: [
+          if (_isEditing && !_isSaving)
+            IconButton(
+              onPressed: _deleteMeal,
+              tooltip: 'Delete meal',
+              icon: Icon(Icons.delete_outline_rounded, color: AppColors.error),
+            ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(

@@ -13,6 +13,7 @@ import '../core/app_coach_marks.dart';
 import '../core/app_snackbar.dart';
 import '../core/media_url.dart';
 import '../core/responsive.dart';
+import '../services/custom_meals_api_service.dart';
 import '../services/local_storage_service.dart';
 import '../models/custom_food_preset.dart';
 import '../models/custom_meal_preset.dart';
@@ -520,7 +521,13 @@ class _FoodBrowseList extends GetView<FoodController> {
       await controller.removeCustomMealPreset(preset.id);
       AppSnackbar.success('${preset.name} was removed.', title: 'Deleted');
     } catch (error) {
-      AppSnackbar.error(error.toString(), title: 'Delete failed');
+      AppSnackbar.error(
+        error is CustomMealsApiException
+            ? error.message
+            : error.toString(),
+        title: 'Delete failed',
+      );
+      rethrow;
     }
   }
 
@@ -717,6 +724,7 @@ class _CustomFoodCreatorState extends State<_CustomFoodCreator> {
       AppSnackbar.success('${preset.food.name} was removed.', title: 'Deleted');
     } catch (error) {
       AppSnackbar.error(error.toString(), title: 'Delete failed');
+      rethrow;
     }
   }
 
@@ -1392,11 +1400,17 @@ class _MyFoodDeleteTile extends StatefulWidget {
 class _MyFoodDeleteTileState extends State<_MyFoodDeleteTile> {
   bool _deleting = false;
 
-  Future<void> _requestDelete() async {
+  Future<void> _runDelete() async {
     if (_deleting) return;
     final confirmed = await widget.onConfirmDelete();
     if (!confirmed || !mounted) return;
+
     setState(() => _deleting = true);
+    try {
+      await widget.onPerformDelete();
+    } catch (_) {
+      if (mounted) setState(() => _deleting = false);
+    }
   }
 
   @override
@@ -1412,9 +1426,7 @@ class _MyFoodDeleteTileState extends State<_MyFoodDeleteTile> {
       movementDuration: const Duration(milliseconds: 280),
       confirmDismiss: (_) async {
         if (_deleting) return false;
-        final confirmed = await widget.onConfirmDelete();
-        if (!confirmed || !mounted) return false;
-        setState(() => _deleting = true);
+        unawaited(_runDelete());
         return false;
       },
       background: const _SwipeDeleteBackground(),
@@ -1429,9 +1441,7 @@ class _MyFoodDeleteTileState extends State<_MyFoodDeleteTile> {
               ? DeleteLottieBox(
                   height: r.scale(72),
                   size: r.scale(72),
-                  onCompleted: () {
-                    widget.onPerformDelete();
-                  },
+                  onCompleted: () {},
                 )
               : ListTile(
                   onTap: widget.onOpen,
@@ -1461,7 +1471,7 @@ class _MyFoodDeleteTileState extends State<_MyFoodDeleteTile> {
                       } else if (action == 'edit') {
                         widget.onEdit();
                       } else if (action == 'delete') {
-                        _requestDelete();
+                        unawaited(_runDelete());
                       }
                     },
                     itemBuilder: (_) => const [
@@ -1503,18 +1513,23 @@ class _MyMealDeleteTile extends StatefulWidget {
 class _MyMealDeleteTileState extends State<_MyMealDeleteTile> {
   bool _deleting = false;
 
-  Future<void> _requestDelete() async {
+  Future<void> _runDelete() async {
     if (_deleting) return;
     final confirmed = await widget.onConfirmDelete();
     if (!confirmed || !mounted) return;
+
     setState(() => _deleting = true);
+    // Hit the API immediately — don't wait for Lottie (dispose can skip it).
+    try {
+      await widget.onPerformDelete();
+    } catch (_) {
+      if (mounted) setState(() => _deleting = false);
+    }
   }
 
   Future<bool> _onConfirmDismiss(DismissDirection _) async {
     if (_deleting) return false;
-    final confirmed = await widget.onConfirmDelete();
-    if (!confirmed || !mounted) return false;
-    setState(() => _deleting = true);
+    unawaited(_runDelete());
     return false;
   }
 
@@ -1545,9 +1560,7 @@ class _MyMealDeleteTileState extends State<_MyMealDeleteTile> {
                 ? DeleteLottieBox(
                     height: r.scale(72),
                     size: r.scale(72),
-                    onCompleted: () {
-                      widget.onPerformDelete();
-                    },
+                    onCompleted: () {},
                   )
                 : Material(
                     color: Colors.transparent,
@@ -1626,7 +1639,7 @@ class _MyMealDeleteTileState extends State<_MyMealDeleteTile> {
                               ),
                               onSelected: (action) {
                                 if (action == 'delete') {
-                                  _requestDelete();
+                                  unawaited(_runDelete());
                                   return;
                                 }
                                 widget.onAction(action);

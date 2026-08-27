@@ -51,7 +51,7 @@ abstract final class ApiMealMapper {
       'protein': _roundMacro(entry.protein),
       'carbs': _roundMacro(entry.carbs),
       'fat': _roundMacro(entry.fat),
-      'mealTime': entry.meal.toLowerCase(),
+      'mealTime': _mealTimeToApi(entry.meal),
       // API quantity is grams — sending serving count breaks calorie math on GET.
       'quantity': entry.grams,
       'unit': unit.isEmpty ? 'g' : unit,
@@ -62,6 +62,18 @@ abstract final class ApiMealMapper {
       if (image.isNotEmpty) 'imageUrl': image,
       if (emoji.isNotEmpty) 'emoji': emoji,
       'date': MealEntry.dateToKey(entry.date),
+    };
+  }
+
+  /// API enum uses `snack` (singular); UI label is [MealType.snacks].
+  static String _mealTimeToApi(String meal) {
+    final normalized = meal.trim().toLowerCase();
+    return switch (normalized) {
+      'breakfast' => 'breakfast',
+      'lunch' => 'lunch',
+      'dinner' => 'dinner',
+      'snack' || 'snacks' => 'snack',
+      _ => normalized.isEmpty ? 'breakfast' : normalized,
     };
   }
 

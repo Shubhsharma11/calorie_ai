@@ -1,7 +1,7 @@
 abstract final class ApiEndpoints {
 
   
-    static const String baseUrl = 'https://fitbuddyai.srhsoftwares.com';
+    static const String baseUrl = 'https://mycaloriepal.com';
 
   /// Public S3 host for uploaded avatars (`avatars/<file>`).
   static const String s3PublicBaseUrl =

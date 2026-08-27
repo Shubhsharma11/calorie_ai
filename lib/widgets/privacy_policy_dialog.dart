@@ -2,7 +2,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_snackbar.dart';
 
-const privacyPolicyUrl = 'https://srhsoftwares.com/privacy-policy/';
+const privacyPolicyUrl = 'https://mycaloriepal.com/privacy';
 
 /// Opens the hosted Privacy Policy in an in-app browser
 /// (Safari View Controller / Chrome Custom Tabs), with a system-browser fallback.

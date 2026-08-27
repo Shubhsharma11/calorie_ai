@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -42,7 +43,7 @@ Future<void> showLogPreviewSheet(
   String? imageUrl,
   String? subtitle,
   int? calories,
-  required void Function(String meal) onLog,
+  required FutureOr<void> Function(String meal) onLog,
   String Function(String meal)? successMessage,
 }) {
   return showAppBottomSheet<void>(
@@ -100,7 +101,7 @@ class _LogPreviewSheet extends StatefulWidget {
   final String? imageUrl;
   final String? subtitle;
   final int? calories;
-  final void Function(String meal) onLog;
+  final FutureOr<void> Function(String meal) onLog;
   final String Function(String meal)? successMessage;
 
   @override
@@ -109,6 +110,7 @@ class _LogPreviewSheet extends StatefulWidget {
 
 class _LogPreviewSheetState extends State<_LogPreviewSheet> {
   late String _selectedMeal = widget.initialMeal;
+  bool _logging = false;
 
   int get _calories =>
       widget.calories ??
@@ -120,29 +122,43 @@ class _LogPreviewSheetState extends State<_LogPreviewSheet> {
     return count == 1 ? '1 food' : '$count foods';
   }
 
-  void _log() {
-    widget.onLog(_selectedMeal);
-    Navigator.pop(context);
-    AppSnackbar.success(
-      widget.successMessage?.call(_selectedMeal) ??
-          '${widget.title} added to $_selectedMeal.',
-      title: 'Logged',
-    );
+  Future<void> _log() async {
+    if (_logging) return;
+    setState(() => _logging = true);
+    try {
+      await widget.onLog(_selectedMeal);
+      if (!mounted) return;
+      setState(() => _logging = false);
+      Navigator.pop(context);
+      AppSnackbar.success(
+        widget.successMessage?.call(_selectedMeal) ??
+            '${widget.title} added to $_selectedMeal.',
+        title: 'Logged',
+      );
+    } finally {
+      if (mounted && _logging) setState(() => _logging = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return LogPreviewBody(
-      title: widget.title,
-      subtitle: _subtitle,
-      visibility: widget.visibility,
-      calories: _calories,
-      items: widget.items,
-      selectedMeal: _selectedMeal,
-      imageBytes: widget.imageBytes,
-      imageUrl: widget.imageUrl,
-      onMealSelected: (meal) => setState(() => _selectedMeal = meal),
-      onLog: _log,
+    return PopScope(
+      canPop: !_logging,
+      child: LogPreviewBody(
+        title: widget.title,
+        subtitle: _subtitle,
+        visibility: widget.visibility,
+        calories: _calories,
+        items: widget.items,
+        selectedMeal: _selectedMeal,
+        imageBytes: widget.imageBytes,
+        imageUrl: widget.imageUrl,
+        isLogging: _logging,
+        onMealSelected: _logging
+            ? (_) {}
+            : (meal) => setState(() => _selectedMeal = meal),
+        onLog: _log,
+      ),
     );
   }
 }
@@ -180,6 +196,7 @@ class _AdjustableFoodLogSheetState extends State<AdjustableFoodLogSheet> {
     widget.historyItem,
   );
   bool _favoriteBusy = false;
+  bool _logging = false;
 
   FoodController get _food => Get.find<FoodController>();
 
@@ -225,7 +242,7 @@ class _AdjustableFoodLogSheetState extends State<AdjustableFoodLogSheet> {
   }
 
   Future<void> _toggleFavorite() async {
-    if (_favoriteBusy) return;
+    if (_favoriteBusy || _logging) return;
     setState(() => _favoriteBusy = true);
     try {
       final added = await _food.toggleFavoriteFood(
@@ -243,58 +260,79 @@ class _AdjustableFoodLogSheetState extends State<AdjustableFoodLogSheet> {
     }
   }
 
-  void _log() {
-    if (widget.myFood != null) {
-      _food.logMyFood(
-        widget.myFood!,
-        meal: _selectedMeal,
-        grams: _grams,
-        servingQuantity: _servingCount,
-      );
-    } else if (food.isCompositeMeal) {
-      for (final item in _items) {
-        _food.logFromHistory(
-          item.copyWith(meal: _selectedMeal),
+  Future<void> _log() async {
+    if (_logging) return;
+    setState(() => _logging = true);
+    var ok = false;
+    try {
+      if (widget.myFood != null) {
+        ok = await _food.logMyFood(
+          widget.myFood!,
           meal: _selectedMeal,
+          grams: _grams,
+          servingQuantity: _servingCount,
         );
+      } else if (food.isCompositeMeal) {
+        ok = true;
+        for (final item in _items) {
+          final logged = await _food.logFromHistory(
+            item.copyWith(meal: _selectedMeal),
+            meal: _selectedMeal,
+          );
+          if (!logged) ok = false;
+        }
+      } else if (widget.historyItem != null) {
+        ok = await _food.logFromHistory(_items.single, meal: _selectedMeal);
+      } else {
+        ok = await _food.addToLog(food, meal: _selectedMeal, grams: _grams);
       }
-    } else if (widget.historyItem != null) {
-      _food.logFromHistory(_items.single, meal: _selectedMeal);
-    } else {
-      _food.addToLog(food, meal: _selectedMeal, grams: _grams);
+      if (!mounted) return;
+      if (!ok) return;
+      // Unlock PopScope before pop or the sheet can stay open with a spinner.
+      setState(() => _logging = false);
+      Navigator.pop(context);
+      AppSnackbar.success(
+        '${food.name} added to $_selectedMeal.',
+        title: 'Logged',
+      );
+      widget.onLogged?.call();
+    } finally {
+      if (mounted && _logging) setState(() => _logging = false);
     }
-    Navigator.pop(context);
-    AppSnackbar.success(
-      '${food.name} added to $_selectedMeal.',
-      title: 'Logged',
-    );
-    widget.onLogged?.call();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
-      _food.favoriteMeals.length;
-      final isFavorite = _food.isFavoriteFood(food, _selectedMeal);
-      return LogPreviewBody(
-        title: food.name,
-        subtitle: _subtitle,
-        calories: _calories,
-        items: _items,
-        selectedMeal: _selectedMeal,
-        imageUrl: food.imageUrl,
-        isFavorite: isFavorite,
-        onFavoriteTap: _toggleFavorite,
-        onMealSelected: (meal) => setState(() => _selectedMeal = meal),
-        onLog: _log,
-        belowItems: ServingQuantityStepper(
-          food: food,
-          quantity: _servingCount,
-          dense: true,
-          onChanged: (value) => setState(() => _servingCount = value),
-        ),
-      );
-    });
+    return PopScope(
+      canPop: !_logging,
+      child: Obx(() {
+        _food.favoriteMeals.length;
+        final isFavorite = _food.isFavoriteFood(food, _selectedMeal);
+        return LogPreviewBody(
+          title: food.name,
+          subtitle: _subtitle,
+          calories: _calories,
+          items: _items,
+          selectedMeal: _selectedMeal,
+          imageUrl: food.imageUrl,
+          isFavorite: isFavorite,
+          isLogging: _logging,
+          onFavoriteTap: _logging ? null : _toggleFavorite,
+          onMealSelected: _logging
+              ? (_) {}
+              : (meal) => setState(() => _selectedMeal = meal),
+          onLog: _log,
+          belowItems: ServingQuantityStepper(
+            food: food,
+            quantity: _servingCount,
+            dense: true,
+            onChanged: _logging
+                ? (_) {}
+                : (value) => setState(() => _servingCount = value),
+          ),
+        );
+      }),
+    );
   }
 }
 
@@ -315,6 +353,7 @@ class LogPreviewBody extends StatelessWidget {
     this.isFavorite,
     this.onFavoriteTap,
     this.belowItems,
+    this.isLogging = false,
   });
 
   final String title;
@@ -330,6 +369,7 @@ class LogPreviewBody extends StatelessWidget {
   final bool? isFavorite;
   final VoidCallback? onFavoriteTap;
   final Widget? belowItems;
+  final bool isLogging;
 
   @override
   Widget build(BuildContext context) {
@@ -471,6 +511,7 @@ class LogPreviewBody extends StatelessWidget {
             SizedBox(height: r.scale(16)),
             AppSheetPrimaryButton(
               label: 'Log to $selectedMeal',
+              isLoading: isLogging,
               onPressed: onLog,
             ),
           ],

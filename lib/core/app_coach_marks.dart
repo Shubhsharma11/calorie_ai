@@ -284,8 +284,13 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
   bool _starting = false;
   bool _busy = false;
   bool _ready = false;
+  /// Bumped on every present so an in-flight polish can't drop the next step.
+  int _presentGeneration = 0;
 
   List<CoachMarkStep> get _steps => widget.steps ?? AppCoachMarks.steps;
+
+  bool get _canAdvance =>
+      _ready && (!_busy || _displayStep == _step);
 
   @override
   void initState() {
@@ -301,6 +306,7 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
     if (widget.bindReplayHandler && AppCoachMarks.replayHandler == _replay) {
       AppCoachMarks.replayHandler = null;
     }
+    _presentGeneration++;
     _removeOverlay();
     super.dispose();
   }
@@ -311,6 +317,7 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
     _active = false;
     _busy = false;
     _ready = false;
+    _presentGeneration++;
     _step = 0;
     _displayStep = 0;
     await widget.storage.saveCoachMarksSeen(seen: false);
@@ -353,18 +360,24 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
     await WidgetsBinding.instance.endOfFrame;
   }
 
+  bool _isCurrentPresent(int generation) =>
+      mounted && _active && generation == _presentGeneration;
+
   Future<void> _presentStep({bool isFirst = false}) async {
-    if (!mounted || !_active || _busy) return;
+    if (!mounted || !_active) return;
+    // Always take over — never silently drop Continue during scroll polish.
+    final generation = ++_presentGeneration;
     _busy = true;
+    _insertOrRebuildOverlay();
     try {
       await _prepareStep(_step);
-      if (!mounted || !_active) return;
+      if (!_isCurrentPresent(generation)) return;
 
       if (isFirst) {
         await _ensureStepVisible(_step);
-        if (!mounted || !_active) return;
+        if (!_isCurrentPresent(generation)) return;
         await WidgetsBinding.instance.endOfFrame;
-        if (!mounted || !_active) return;
+        if (!_isCurrentPresent(generation)) return;
         if (!_targetOk(_step)) {
           await _skipMissingTargets();
           return;
@@ -373,7 +386,7 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
         _ready = true;
         _insertOrRebuildOverlay();
         await WidgetsBinding.instance.endOfFrame;
-        if (!mounted || !_active) return;
+        if (!_isCurrentPresent(generation)) return;
         _insertOrRebuildOverlay();
         return;
       }
@@ -381,8 +394,9 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
       // Switch tip + spotlight together, then scroll while they animate.
       if (!_targetOk(_step)) {
         await _ensureStepVisible(_step);
-        if (!mounted || !_active) return;
+        if (!_isCurrentPresent(generation)) return;
         await WidgetsBinding.instance.endOfFrame;
+        if (!_isCurrentPresent(generation)) return;
         if (!_targetOk(_step)) {
           await _skipMissingTargets();
           return;
@@ -398,12 +412,15 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
         _ensureStepVisible(_step),
         Future<void>.delayed(const Duration(milliseconds: 720)),
       ]);
-      if (!mounted || !_active) return;
+      if (!_isCurrentPresent(generation)) return;
       await WidgetsBinding.instance.endOfFrame;
-      if (!mounted || !_active) return;
+      if (!_isCurrentPresent(generation)) return;
       _insertOrRebuildOverlay();
     } finally {
-      _busy = false;
+      if (generation == _presentGeneration) {
+        _busy = false;
+        if (mounted && _active) _insertOrRebuildOverlay();
+      }
     }
   }
 
@@ -417,7 +434,6 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
   Future<void> _skipMissingTargets() async {
     if (_step + 1 < _steps.length) {
       _step += 1;
-      _busy = false;
       await _presentStep();
       return;
     }
@@ -438,7 +454,7 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
           stepCount: _steps.length,
           step: _steps[i],
           ready: _ready,
-          canAdvance: _ready && (!_busy || _displayStep == _step),
+          canAdvance: _canAdvance,
           onSkip: _skipTour,
           onNext: _next,
         );
@@ -520,6 +536,8 @@ class _CoachMarkHostState extends State<CoachMarkHost> {
     if (!_active) return;
     _active = false;
     _ready = false;
+    _busy = false;
+    _presentGeneration++;
     _insertOrRebuildOverlay();
     await Future<void>.delayed(const Duration(milliseconds: 180));
     _removeOverlay();

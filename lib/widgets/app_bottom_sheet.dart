@@ -220,10 +220,12 @@ class AppSheetPrimaryButton extends StatelessWidget {
     super.key,
     required this.label,
     required this.onPressed,
+    this.isLoading = false,
   });
 
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -232,18 +234,32 @@ class AppSheetPrimaryButton extends StatelessWidget {
     return SizedBox(
       height: r.scale(52),
       child: FilledButton(
-        onPressed: onPressed,
+        onPressed: isLoading ? null : onPressed,
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
+          disabledBackgroundColor: AppColors.primary,
+          disabledForegroundColor: AppColors.onPrimary,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(28),
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(fontSize: r.scale(16), fontWeight: FontWeight.w700),
-        ),
+        child: isLoading
+            ? SizedBox(
+                width: r.scale(22),
+                height: r.scale(22),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: AppColors.onPrimary,
+                ),
+              )
+            : Text(
+                label,
+                style: TextStyle(
+                  fontSize: r.scale(16),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
       ),
     );
   }

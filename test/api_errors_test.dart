@@ -25,9 +25,9 @@ void main() {
     );
   });
 
-  test('galleryNeedsStoragePermission is true on Android 12 and false on 13+', () {
-    expect(galleryNeedsStoragePermission(31), isTrue);
-    expect(galleryNeedsStoragePermission(32), isTrue);
+  test('galleryNeedsStoragePermission is always false with Photo Picker', () {
+    expect(galleryNeedsStoragePermission(31), isFalse);
+    expect(galleryNeedsStoragePermission(32), isFalse);
     expect(galleryNeedsStoragePermission(33), isFalse);
     expect(galleryNeedsStoragePermission(35), isFalse);
   });
@@ -40,32 +40,13 @@ void main() {
     expect(34 >= androidHealthConnectMinSdk, isTrue);
   });
 
-  test('ensureImageSourcePermission requests storage on Android 12 gallery', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
-
-    Permission? requested;
-    final allowed = await ensureImageSourcePermission(
-      ImageSource.gallery,
-      androidSdkInt: () async => 31,
-      request: (permission) async {
-        requested = permission;
-        return PermissionStatus.granted;
-      },
-    );
-
-    expect(allowed, isTrue);
-    expect(requested, Permission.storage);
-  });
-
-  test('ensureImageSourcePermission skips storage on Android 13 gallery', () async {
+  test('ensureImageSourcePermission skips storage on Android gallery', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
     var requested = false;
     final allowed = await ensureImageSourcePermission(
       ImageSource.gallery,
-      androidSdkInt: () async => 33,
       request: (_) async {
         requested = true;
         return PermissionStatus.denied;
@@ -83,7 +64,6 @@ void main() {
     Permission? requested;
     final allowed = await ensureImageSourcePermission(
       ImageSource.camera,
-      androidSdkInt: () async => 33,
       request: (permission) async {
         requested = permission;
         return PermissionStatus.granted;

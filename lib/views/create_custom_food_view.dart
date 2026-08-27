@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -11,6 +13,8 @@ import '../core/pick_cropped_image.dart';
 import '../core/responsive.dart';
 import '../models/custom_food_preset.dart';
 import '../models/food_item.dart';
+import '../services/my_foods_api_service.dart';
+import '../services/uploads_api_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/app_bottom_sheet.dart';
@@ -239,7 +243,7 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
         isUpdate: _isEditing,
       );
       if (logAfterSave) {
-        _food.logMyFood(saved, meal: _selectedMeal);
+        unawaited(_food.logMyFood(saved, meal: _selectedMeal));
       }
       if (!mounted) return;
       Get.back<void>();
@@ -248,6 +252,15 @@ class _CreateCustomFoodViewState extends State<CreateCustomFoodView> {
             ? '$name saved and logged to $_selectedMeal.'
             : '$name saved to My Food.',
         title: logAfterSave ? 'Saved & logged' : 'Saved',
+      );
+    } catch (error) {
+      // FoodController already showed a snackbar for API / upload failures.
+      if (error is MyFoodsApiException || error is UploadsApiException) {
+        return;
+      }
+      AppSnackbar.error(
+        'Could not save this food. Please try again.',
+        title: 'Save failed',
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);

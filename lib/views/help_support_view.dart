@@ -25,7 +25,7 @@ class HelpSupportView extends StatefulWidget {
 }
 
 class _HelpSupportViewState extends State<HelpSupportView> {
-  static const _supportEmail = 'support@srhsoftwares.com';
+  static const _supportEmail = 'support@mycaloriepal.com';
   static const _appVersion = '1.0.0';
 
   int? _expandedIndex;

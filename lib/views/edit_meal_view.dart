@@ -35,6 +35,8 @@ class _EditMealViewState extends State<EditMealView> {
   late String _meal;
   bool _deleting = false;
   bool _saving = false;
+  /// Separate from button spinners — must be false before Get.back or PopScope blocks it.
+  bool _navLocked = false;
 
   @override
   void initState() {
@@ -96,12 +98,14 @@ class _EditMealViewState extends State<EditMealView> {
     final calories = _food.caloriesForGrams(_grams);
     final category = _food.category?.trim();
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_navLocked,
+      child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppAppBar(
         title: 'Edit Food',
         actions: [
-          if (!_deleting)
+          if (!_deleting && !_saving)
             IconButton(
               onPressed: _startDelete,
               tooltip: 'Remove from diary',
@@ -209,18 +213,22 @@ class _EditMealViewState extends State<EditMealView> {
                   SizedBox(height: r.scale(8)),
                   MealTypeChipRow(
                     selectedMeal: _meal,
-                    onSelected: (meal) => setState(() => _meal = meal),
+                    onSelected: _saving
+                        ? (_) {}
+                        : (meal) => setState(() => _meal = meal),
                   ),
                   SizedBox(height: r.scale(24)),
                   ServingQuantityStepper(
                     food: _food,
                     quantity: _servingCount,
-                    onChanged: (value) {
-                      setState(() {
-                        _servingCount = value;
-                        _grams = _food.gramsForServings(value);
-                      });
-                    },
+                    onChanged: _saving
+                        ? (_) {}
+                        : (value) {
+                            setState(() {
+                              _servingCount = value;
+                              _grams = _food.gramsForServings(value);
+                            });
+                          },
                   ),
                   SizedBox(height: r.scale(32)),
                   PrimaryButton(
@@ -232,12 +240,17 @@ class _EditMealViewState extends State<EditMealView> {
                 ],
               ),
       ),
+    ),
     );
   }
 
   Future<void> _save() async {
-    if (_saving) return;
-    setState(() => _saving = true);
+    if (_saving || _deleting) return;
+    setState(() {
+      _saving = true;
+      _navLocked = true;
+    });
+    _syncEntryFromController();
     final ok = await _controller.updateEntry(
       _entry,
       grams: _grams,
@@ -245,7 +258,10 @@ class _EditMealViewState extends State<EditMealView> {
       food: _food,
     );
     if (!mounted) return;
-    setState(() => _saving = false);
+    setState(() {
+      _saving = false;
+      _navLocked = false;
+    });
     if (ok) Get.back();
   }
 
@@ -262,17 +278,34 @@ class _EditMealViewState extends State<EditMealView> {
     );
     if (!confirmed || !mounted) return;
 
-    setState(() => _deleting = true);
+    setState(() {
+      _deleting = true;
+      _navLocked = true;
+    });
+    _syncEntryFromController();
 
     final ok = await _controller.deleteMealEntry(_entry);
     if (!mounted) return;
 
     if (ok) {
+      // Unlock pop while keep showing the trash animation until the route goes.
+      setState(() => _navLocked = false);
       Get.back();
       return;
     }
 
-    setState(() => _deleting = false);
+    setState(() {
+      _deleting = false;
+      _navLocked = false;
+    });
+  }
+
+  /// Sync may have replaced the local epoch id while this screen was open.
+  void _syncEntryFromController() {
+    final live = _controller.liveEntryFor(_entry);
+    if (live != null && live.id != _entry.id) {
+      _entry = live;
+    }
   }
 }
 

@@ -27,6 +27,7 @@ class _FoodDetailsViewState extends State<FoodDetailsView> {
   late final FoodController _controller = Get.find<FoodController>();
   FoodItem? _food;
   double _servingCount = 1;
+  bool _logging = false;
 
   @override
   void initState() {
@@ -43,6 +44,41 @@ class _FoodDetailsViewState extends State<FoodDetailsView> {
 
   List<SavedMealItem> get _displayIngredients =>
       _food?.ingredientsForPortions(_servingCount) ?? const [];
+
+  Future<void> _addToLog(FoodItem food) async {
+    if (_logging) return;
+    setState(() => _logging = true);
+    try {
+      final meal = _controller.selectedMeal.value;
+      var ok = true;
+      if (food.isCompositeMeal) {
+        for (final item in food.ingredientsForPortions(_servingCount)) {
+          final logged = await _controller.logFromHistory(
+            item.copyWith(meal: meal),
+            meal: meal,
+          );
+          if (!logged) ok = false;
+        }
+      } else {
+        ok = await _controller.addToLog(food, grams: _grams);
+      }
+      if (!mounted || !ok) return;
+
+      // Clear loading before pop — PopScope(canPop: !_logging) can block navigation.
+      setState(() => _logging = false);
+      AppSnackbar.success(
+        '${food.name} added to $meal.',
+        title: 'Logged',
+      );
+      if (Get.previousRoute == AppRoutes.addFood) {
+        Get.close(2);
+      } else {
+        Get.back();
+      }
+    } finally {
+      if (mounted && _logging) setState(() => _logging = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +99,9 @@ class _FoodDetailsViewState extends State<FoodDetailsView> {
     final kcal = food.totalCaloriesForPortions(_servingCount);
     final category = food.category?.trim();
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_logging,
+      child: Scaffold(
       appBar: AppAppBar(
         title: food.name,
         actions: [
@@ -163,42 +201,30 @@ class _FoodDetailsViewState extends State<FoodDetailsView> {
             Obx(
               () => MealTypeChipRow(
                 selectedMeal: _controller.selectedMeal.value,
-                onSelected: _controller.setSelectedMeal,
+                onSelected: _logging
+                    ? (_) {}
+                    : _controller.setSelectedMeal,
               ),
             ),
             const SizedBox(height: 24),
             ServingQuantityStepper(
               food: food,
               quantity: _servingCount,
-              onChanged: (value) => setState(() => _servingCount = value),
+              onChanged: _logging
+                  ? (_) {}
+                  : (value) => setState(() => _servingCount = value),
             ),
             const SizedBox(height: 32),
             PrimaryButton(
               label: 'Add to Log',
-              onPressed: () {
-                final meal = _controller.selectedMeal.value;
-                if (food.isCompositeMeal) {
-                  for (final item in food.ingredientsForPortions(_servingCount)) {
-                    _controller.logFromHistory(
-                      item.copyWith(meal: meal),
-                      meal: meal,
-                    );
-                  }
-                } else {
-                  _controller.addToLog(food, grams: grams);
-                }
-
-                if (Get.previousRoute == AppRoutes.addFood) {
-                  Get.close(2);
-                } else {
-                  Get.back();
-                }
-              },
+              isLoading: _logging,
+              onPressed: () => _addToLog(food),
             ),
             SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
           ],
         ),
       ),
+    ),
     );
   }
 }

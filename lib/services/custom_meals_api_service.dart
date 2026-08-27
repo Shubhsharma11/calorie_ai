@@ -54,7 +54,7 @@ class CustomMealsApiService {
   /// POST `/api/v1/my-meals` — create a meal template.
   Future<CustomMealPreset> createCustomMeal({
     required String accessToken,
-    required CustomMealPreset preset,s
+    required CustomMealPreset preset,
   }) async {
     final body = ApiCustomMealMapper.toCreateRequestBody(preset);
 

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -130,7 +129,7 @@ class AuthController extends GetxController {
         await user.markOnboardingComplete();
         MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);
-        unawaited(user.fetchProfile(refreshGoalTarget: false, maxAttempts: 4));
+        // Do not refetch while rate-limited — cooldown in UserController owns the next try.
       } else {
         await user.restoreOnboardingProgress();
         final resumeRoute = await user.resolveSetupResumeRoute();

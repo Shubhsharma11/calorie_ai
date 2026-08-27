@@ -16,12 +16,16 @@
         android:name="android.permission.VIBRATE"/>
     <uses-permission
         android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <!-- Gallery on Android 12 and below. Android 13+ uses the system photo picker. -->
+    <!-- Gallery uses the Android Photo Picker — no READ_MEDIA_* / storage grants. -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove"/>
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove"/>
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32"/>
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_IMAGES"/>
+        tools:node="remove"/>
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false"/>

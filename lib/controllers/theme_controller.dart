@@ -21,6 +21,7 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
   /// Settings (etc.) is open — covered tabs stay frozen via [MainView].
   int _localThemeOverlayDepth = 0;
   bool _publishScheduled = false;
+  bool _themeModeSyncScheduled = false;
 
   bool get isLocalThemeOverlayActive => _localThemeOverlayDepth > 0;
 
@@ -61,8 +62,12 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
       AppColors.setOverlayBrightnessResolver(null);
       _publishAppliedBrightness();
       AppColors.syncWithBrightness(effectiveBrightness);
-      _syncGetMaterialThemeMode();
-      update();
+      // Always defer — Settings dispose runs while Flutter is finalizing the
+      // tree; sync Get.changeThemeMode then crashes GetMaterialController.
+      _syncGetMaterialThemeMode(forceDefer: true);
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!isClosed) update();
+      });
     }
   }
 
@@ -74,7 +79,7 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
     AppColors.syncWithBrightness(effectiveBrightness);
     _publishAppliedBrightness();
     _syncGetMaterialThemeMode();
-    update();
+    _safeUpdate();
   }
 
   Future<void> loadTheme() async {
@@ -84,7 +89,7 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
       _publishAppliedBrightness();
       AppColors.syncWithBrightness(effectiveBrightness);
       _syncGetMaterialThemeMode();
-      update();
+      _safeUpdate();
       return;
     }
 
@@ -110,7 +115,7 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
     _publishAppliedBrightness();
     _syncGetMaterialThemeMode();
     // Rebuild GetBuilder listeners (Settings) without Obx wrapping Theme.
-    update();
+    _safeUpdate();
 
     if (persist) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -119,9 +124,40 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
     }
   }
 
-  void _syncGetMaterialThemeMode() {
-    if (!Get.isRegistered<GetMaterialController>()) return;
-    Get.changeThemeMode(themeMode.value);
+  /// Push ThemeMode into GetMaterialApp without setState during a locked tree.
+  void _syncGetMaterialThemeMode({bool forceDefer = false}) {
+    void apply() {
+      _themeModeSyncScheduled = false;
+      if (isClosed) return;
+      if (!Get.isRegistered<GetMaterialController>()) return;
+      Get.changeThemeMode(themeMode.value);
+    }
+
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    final canApplyNow = !forceDefer &&
+        (phase == SchedulerPhase.idle ||
+            phase == SchedulerPhase.postFrameCallbacks);
+
+    if (canApplyNow) {
+      apply();
+      return;
+    }
+    if (_themeModeSyncScheduled) return;
+    _themeModeSyncScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) => apply());
+  }
+
+  void _safeUpdate() {
+    if (isClosed) return;
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.idle ||
+        phase == SchedulerPhase.postFrameCallbacks) {
+      update();
+      return;
+    }
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!isClosed) update();
+    });
   }
 
   /// Publish after the current frame so no Obx/Theme rebuild races DefaultTextStyle.

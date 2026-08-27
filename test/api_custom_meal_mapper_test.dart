@@ -36,15 +36,21 @@ void main() {
 
     final body = ApiCustomMealMapper.toCreateRequestBody(preset);
 
-    expect(body, {
-      'name': 'Protein Bowl',
-      'mealTime': 'lunch',
-      'visibility': 'private',
-      'items': [
-        {'name': 'chicken breast', 'quantity': 150, 'unit': 'g'},
-        {'name': 'rice', 'quantity': 100, 'unit': 'g'},
-      ],
-    });
+    expect(body['name'], 'Protein Bowl');
+    expect(body['mealTime'], 'lunch');
+    expect(body['visibility'], 'private');
+    expect(body['calories'], preset.totalCalories);
+    expect(body['protein'], isA<num>());
+    expect(body['carbs'], isA<num>());
+    expect(body['fat'], isA<num>());
+    expect(body['items'], hasLength(2));
+    expect(body['items'][0]['name'], 'chicken breast');
+    expect(body['items'][0]['quantity'], 150);
+    expect(body['items'][0]['unit'], 'g');
+    expect(body['items'][0]['calories'], preset.items[0].calories);
+    expect(body['items'][0]['protein'], isA<num>());
+    expect(body['items'][1]['name'], 'rice');
+    expect(body['items'][1]['calories'], preset.items[1].calories);
   });
 
   test('ApiCustomMealMapper builds PATCH /api/v1/my-meals/:id body', () {
@@ -88,7 +94,62 @@ void main() {
     expect(body['protein'], isA<num>());
     expect(body['carbs'], isA<num>());
     expect(body['fat'], isA<num>());
-    expect(body.containsKey('items'), isFalse);
+    expect(body['items'], hasLength(2));
+    expect(body['items'][0]['name'], 'chicken breast');
+    expect(body['items'][0]['calories'], preset.items[0].calories);
+    expect(body['items'][1]['name'], 'rice');
+    expect(body['items'][1]['calories'], preset.items[1].calories);
+  });
+
+  test('ApiCustomMealMapper hydrates 0-kcal items from meal totals', () {
+    final presets = ApiCustomMealMapper.presetsFromResponse({
+      'data': [
+        {
+          'id': 'custom-1',
+          'name': 'Oat Meal',
+          'mealTime': 'breakfast',
+          'calories': 389,
+          'protein': 13,
+          'carbs': 66,
+          'fat': 7,
+          'items': [
+            {'name': 'oats', 'quantity': 100, 'unit': 'g'},
+          ],
+        },
+      ],
+    });
+
+    expect(presets, hasLength(1));
+    expect(presets.first.totalCalories, 389);
+    expect(presets.first.items.single.calories, 389);
+  });
+
+  test('ApiCustomMealMapper hydrates from totalNutrients when items omit macros',
+      () {
+    final presets = ApiCustomMealMapper.presetsFromResponse({
+      'data': [
+        {
+          'id': 'custom-2',
+          'name': 'Bowl',
+          'mealTime': 'lunch',
+          'totalNutrients': {
+            'calories': 400,
+            'protein': 30,
+            'carbs': 40,
+            'fat': 10,
+          },
+          'items': [
+            {'name': 'chicken', 'quantity': 100, 'unit': 'g'},
+            {'name': 'rice', 'quantity': 100, 'unit': 'g'},
+          ],
+        },
+      ],
+    });
+
+    expect(presets, hasLength(1));
+    expect(presets.first.totalCalories, 400);
+    expect(presets.first.items[0].calories, greaterThan(0));
+    expect(presets.first.items[1].calories, greaterThan(0));
   });
 
   test('ApiCustomMealMapper omits empty image from PATCH body', () {
@@ -594,14 +655,11 @@ void main() {
     );
 
     final body = ApiCustomMealMapper.toCreateRequestBody(preset);
-    expect(body['items'], [
-      {
-        'name': 'rice',
-        'quantity': 100,
-        'unit': 'g',
-        'image': 'uploads/rice.png',
-      },
-    ]);
+    expect(body['items'][0]['name'], 'rice');
+    expect(body['items'][0]['quantity'], 100);
+    expect(body['items'][0]['unit'], 'g');
+    expect(body['items'][0]['calories'], 130);
+    expect(body['items'][0]['image'], 'uploads/rice.png');
   });
 
   test('ApiCustomMealMapper sends catalog item photo URL on create', () {

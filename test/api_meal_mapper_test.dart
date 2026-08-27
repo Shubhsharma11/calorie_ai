@@ -181,6 +181,23 @@ void main() {
     );
   });
 
+  test('ApiMealMapper.toCreateRequestBody sends snack not snacks', () {
+    final entry = MealEntry(
+      food: const FoodItem(
+        name: 'Almonds',
+        caloriesPer100g: 579,
+        protein: 21,
+        carbs: 22,
+        fat: 50,
+      ),
+      grams: 50,
+      meal: MealType.snacks,
+      date: DateTime(2026, 6, 23),
+    );
+
+    expect(ApiMealMapper.toCreateRequestBody(entry)['mealTime'], 'snack');
+  });
+
   test('ApiMealMapper.mergeCreateResponse keeps local food when id only', () {
     final source = MealEntry(
       id: 'local-1',

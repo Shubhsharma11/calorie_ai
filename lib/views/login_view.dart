@@ -221,7 +221,7 @@ class LoginView extends GetView<AuthController> {
                   child: _TermsFooter(
                     compact: compact,
                     includeApple: Platform.isIOS,
-                    onTermsTap: () => showTermsOfServiceDialog(context),
+                    onTermsTap: openTermsOfService,
                     onPrivacyTap: openPrivacyPolicy,
                   ),
                 ),

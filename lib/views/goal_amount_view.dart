@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -33,10 +34,13 @@ class GoalAmountView extends StatefulWidget {
 class _GoalAmountViewState extends State<GoalAmountView> {
   final UserController _user = Get.find<UserController>();
   final SettingsController _settings = Get.find<SettingsController>();
+  final GlobalKey _weeklyRateKey = GlobalKey(debugLabel: 'weekly_rate_focus');
+  Timer? _focusTimer;
 
   late bool _useKg;
   late double _amountDisplay;
-  late int _weeks;
+  /// Null until the user picks a preset, slider value, or custom date.
+  int? _weeks;
   DateTime? _pickedTargetDate;
   bool _customTimeframe = false;
   String? _errorText;
@@ -49,7 +53,8 @@ class _GoalAmountViewState extends State<GoalAmountView> {
   static const double _maxWeightKg = 200;
   static const int _minWeeks = 1;
   static const int _maxWeeks = 52;
-  static const int _defaultWeeks = 10;
+  /// Model default is today + 90 days; treat that as "not chosen yet".
+  static const int _unsetDefaultDays = 90;
 
   static const List<double> _amountPresetsKg = [2, 5, 8, 12];
 
@@ -80,6 +85,12 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     }
   }
 
+  @override
+  void dispose() {
+    _focusTimer?.cancel();
+    super.dispose();
+  }
+
   void _bootstrapFromUser() {
     final u = _user.user;
     final currentKg = _currentKg;
@@ -88,6 +99,10 @@ class _GoalAmountViewState extends State<GoalAmountView> {
         ? _fromKg(diffKg.clamp(_minChangeKg, _maxChangeKg))
         : _fromKg(_defaultChangeKg);
 
+    _weeks = null;
+    _pickedTargetDate = null;
+    _customTimeframe = false;
+
     final today = _today;
     final savedDate = DateTime(
       u.targetDate.year,
@@ -95,20 +110,21 @@ class _GoalAmountViewState extends State<GoalAmountView> {
       u.targetDate.day,
     );
     final days = savedDate.difference(today).inDays;
-    if (days >= _minWeeks * 7) {
-      _weeks = (days / 7).round().clamp(_minWeeks, _maxWeeks);
-      final weekBasedDate = today.add(Duration(days: _weeks * 7));
-      if (_isSameDay(savedDate, weekBasedDate)) {
-        _pickedTargetDate = null;
-        _customTimeframe = ![1, 2, 4].contains(_weeks);
-      } else {
-        _pickedTargetDate = savedDate;
-        _customTimeframe = true;
-      }
-    } else {
-      _weeks = _defaultWeeks;
+    if (days < _minWeeks * 7) return;
+
+    // Skip the stock +90 day default so onboarding starts with no selection.
+    // Restore when editing from profile, or when the user already picked a date.
+    final looksUnset = (days - _unsetDefaultDays).abs() <= 1;
+    if (!RouteArgs.isEditingFromProfile && looksUnset) return;
+
+    _weeks = (days / 7).round().clamp(_minWeeks, _maxWeeks);
+    final weekBasedDate = today.add(Duration(days: _weeks! * 7));
+    if (_isSameDay(savedDate, weekBasedDate)) {
       _pickedTargetDate = null;
-      _customTimeframe = false;
+      _customTimeframe = ![1, 2, 4].contains(_weeks);
+    } else {
+      _pickedTargetDate = savedDate;
+      _customTimeframe = true;
     }
   }
 
@@ -120,15 +136,20 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     return DateTime(now.year, now.month, now.day);
   }
 
-  DateTime get _targetDate {
-    if (_pickedTargetDate != null) return _pickedTargetDate!;
-    return _today.add(Duration(days: _weeks * 7));
+  DateTime? get _targetDate {
+    if (_pickedTargetDate != null) return _pickedTargetDate;
+    final weeks = _weeks;
+    if (weeks == null) return null;
+    return _today.add(Duration(days: weeks * 7));
   }
 
   double get _amountKg => _toKg(_amountDisplay);
 
-  double get _paceKgPerWeek =>
-      _weeks <= 0 ? 0 : (_amountKg / _weeks).clamp(0, 5);
+  double get _paceKgPerWeek {
+    final weeks = _weeks;
+    if (weeks == null || weeks <= 0) return 0;
+    return (_amountKg / weeks).clamp(0, 5);
+  }
 
   double get _minChangeDisplay =>
       _useKg ? _minChangeKg : _minChangeKg * BodyMeasurementUnits.kgToLb;
@@ -161,7 +182,10 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     final current = _currentKg;
     final target = _isLose ? current - amountKg : current + amountKg;
     _user.user.pinGoalWeight(target.clamp(_minWeightKg, _maxWeightKg));
-    _user.user.targetDate = _targetDate;
+    final targetDate = _targetDate;
+    if (targetDate != null) {
+      _user.user.targetDate = targetDate;
+    }
     _user.scheduleOnboardingDraftSave();
   }
 
@@ -175,7 +199,40 @@ class _GoalAmountViewState extends State<GoalAmountView> {
 
   void _stepAmount(double delta) => _setAmount(_amountDisplay + delta);
 
-  void _setWeeks(int weeks) {
+  void _scheduleFocusWeeklyRate() {
+    _focusTimer?.cancel();
+    // Debounce so preset + slider-end don't stack scrolls.
+    _focusTimer = Timer(const Duration(milliseconds: 40), () async {
+      if (!mounted) return;
+      final first = _weeklyRateKey.currentContext;
+      if (first == null || !first.mounted) return;
+
+      // Scroll in parallel with the expand for a continuous feel.
+      unawaited(
+        Scrollable.ensureVisible(
+          first,
+          duration: const Duration(milliseconds: 700),
+          curve: Curves.easeInOutCubic,
+          alignment: 0.18,
+        ),
+      );
+
+      // Soft settle once the block has mostly finished expanding.
+      await Future<void>.delayed(const Duration(milliseconds: 520));
+      if (!mounted) return;
+      final settled = _weeklyRateKey.currentContext;
+      if (settled == null || !settled.mounted) return;
+      await Scrollable.ensureVisible(
+        settled,
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeInOutCubic,
+        alignment: 0.18,
+      );
+    });
+  }
+
+  void _setWeeks(int weeks, {bool focusScreen = false}) {
+    final firstReveal = _weeks == null;
     setState(() {
       _weeks = weeks.clamp(_minWeeks, _maxWeeks);
       _pickedTargetDate = null;
@@ -183,12 +240,15 @@ class _GoalAmountViewState extends State<GoalAmountView> {
       _errorText = null;
     });
     _persistDraft();
+    if (firstReveal || focusScreen) {
+      _scheduleFocusWeeklyRate();
+    }
   }
 
   Future<void> _pickCustomDate() async {
     final minDate = _today.add(Duration(days: _minWeeks * 7));
     final maxDate = _today.add(Duration(days: _maxWeeks * 7));
-    var initial = _pickedTargetDate ?? _targetDate;
+    var initial = _pickedTargetDate ?? _targetDate ?? minDate;
     if (initial.isBefore(minDate)) initial = minDate;
     if (initial.isAfter(maxDate)) initial = maxDate;
 
@@ -221,9 +281,14 @@ class _GoalAmountViewState extends State<GoalAmountView> {
       _errorText = null;
     });
     _persistDraft();
+    _scheduleFocusWeeklyRate();
   }
 
   String? _validate() {
+    if (_weeks == null || _targetDate == null) {
+      return 'Choose a timeframe for your goal';
+    }
+
     if (_amountDisplay < _minChangeDisplay || _amountDisplay > _maxChangeDisplay) {
       return 'Use a value between ${_formatAmount(_minChangeDisplay)} and '
           '${_formatAmount(_maxChangeDisplay)} $_unitShort';
@@ -277,7 +342,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     final current = _currentKg;
     final target = _isLose ? current - _amountKg : current + _amountKg;
     _user.setGoalWeight(target, manual: true);
-    _user.user.targetDate = _targetDate;
+    _user.user.targetDate = _targetDate!;
     _user.update();
 
     if (fromProfile) {
@@ -370,6 +435,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
                 minWeeks: _minWeeks,
                 maxWeeks: _maxWeeks,
                 onWeeksChanged: _setWeeks,
+                onWeeksChangeEnd: (_) => _scheduleFocusWeeklyRate(),
               ),
               SizedBox(height: r.scale(12)),
               _PresetRow(
@@ -377,35 +443,44 @@ class _GoalAmountViewState extends State<GoalAmountView> {
                   _PresetOption(
                     label: '1 wk',
                     selected: !_customTimeframe && _weeks == 1,
-                    onTap: () => _setWeeks(1),
+                    onTap: () => _setWeeks(1, focusScreen: true),
                   ),
                   _PresetOption(
                     label: '2 wk',
                     selected: !_customTimeframe && _weeks == 2,
-                    onTap: () => _setWeeks(2),
+                    onTap: () => _setWeeks(2, focusScreen: true),
                   ),
                   _PresetOption(
                     label: '1 mo',
                     selected: !_customTimeframe && _weeks == 4,
-                    onTap: () => _setWeeks(4),
+                    onTap: () => _setWeeks(4, focusScreen: true),
                   ),
                   _PresetOption(
-                    label: _customTimeframe
-                        ? DateFormat('MMM d').format(_targetDate)
+                    label: _customTimeframe && _targetDate != null
+                        ? DateFormat('MMM d').format(_targetDate!)
                         : 'Custom',
                     selected: _customTimeframe,
                     onTap: _pickCustomDate,
                   ),
                 ],
               ),
-              SizedBox(height: r.scale(compact ? 18 : 22)),
-              const _SectionHeader(label: 'Weekly rate'),
-              SizedBox(height: r.scale(10)),
-              _PaceCard(
-                paceKgPerWeek: _paceKgPerWeek,
-                weeks: _weeks,
-                useKg: _useKg,
-                isLose: _isLose,
+              AnimatedSize(
+                duration: const Duration(milliseconds: 560),
+                curve: Curves.easeInOutCubic,
+                alignment: Alignment.topCenter,
+                child: _weeks == null
+                    ? const SizedBox.shrink()
+                    : KeyedSubtree(
+                        key: _weeklyRateKey,
+                        child: _AnimatedWeeklyRateSection(
+                          key: const ValueKey('weekly-rate'),
+                          compact: compact,
+                          paceKgPerWeek: _paceKgPerWeek,
+                          weeks: _weeks!,
+                          useKg: _useKg,
+                          isLose: _isLose,
+                        ),
+                      ),
               ),
               if (_errorText != null) ...[
                 SizedBox(height: r.scale(12)),
@@ -726,18 +801,75 @@ class _TimeframeCard extends StatelessWidget {
     required this.minWeeks,
     required this.maxWeeks,
     required this.onWeeksChanged,
+    this.onWeeksChangeEnd,
   });
 
-  final int weeks;
-  final DateTime targetDate;
+  final int? weeks;
+  final DateTime? targetDate;
   final int minWeeks;
   final int maxWeeks;
   final ValueChanged<int> onWeeksChanged;
+  final ValueChanged<int>? onWeeksChangeEnd;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final dateLabel = DateFormat('MMM d, yyyy').format(targetDate);
+    final selectedWeeks = weeks;
+    final selectedDate = targetDate;
+
+    if (selectedWeeks == null || selectedDate == null) {
+      return Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: r.scale(16),
+          vertical: r.scale(20),
+        ),
+        decoration: _goalCardDecoration(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Choose a timeframe',
+              style: TextStyle(
+                fontSize: r.scale(16, tablet: 17),
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: r.scale(6)),
+            Text(
+              'Pick a preset below, drag the slider, or set a custom date.',
+              style: TextStyle(
+                fontSize: r.scale(13),
+                color: AppColors.textSecondary,
+                height: 1.35,
+              ),
+            ),
+            SizedBox(height: r.scale(8)),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 4,
+                activeTrackColor: AppColors.border,
+                inactiveTrackColor: AppColors.border,
+                thumbColor: AppColors.card,
+                overlayColor: AppColors.primary.withValues(alpha: 0.12),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
+              ),
+              child: Slider(
+                value: minWeeks.toDouble(),
+                min: minWeeks.toDouble(),
+                max: maxWeeks.toDouble(),
+                divisions: maxWeeks - minWeeks,
+                onChanged: (v) => onWeeksChanged(v.round()),
+                onChangeEnd: (v) => onWeeksChangeEnd?.call(v.round()),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final dateLabel = DateFormat('MMM d, yyyy').format(selectedDate);
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -754,7 +886,7 @@ class _TimeframeCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '$weeks wk',
+                '$selectedWeeks wk',
                 style: TextStyle(
                   fontSize: r.scale(18, tablet: 19),
                   fontWeight: FontWeight.w800,
@@ -795,15 +927,230 @@ class _TimeframeCard extends StatelessWidget {
               overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
             ),
             child: Slider(
-              value: weeks.toDouble(),
+              value: selectedWeeks.toDouble(),
               min: minWeeks.toDouble(),
               max: maxWeeks.toDouble(),
               divisions: maxWeeks - minWeeks,
               onChanged: (v) => onWeeksChanged(v.round()),
+              onChangeEnd: (v) => onWeeksChangeEnd?.call(v.round()),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Staggered entrance for the weekly-rate block after a timeframe is chosen.
+class _AnimatedWeeklyRateSection extends StatefulWidget {
+  const _AnimatedWeeklyRateSection({
+    super.key,
+    required this.compact,
+    required this.paceKgPerWeek,
+    required this.weeks,
+    required this.useKg,
+    required this.isLose,
+  });
+
+  final bool compact;
+  final double paceKgPerWeek;
+  final int weeks;
+  final bool useKg;
+  final bool isLose;
+
+  @override
+  State<_AnimatedWeeklyRateSection> createState() =>
+      _AnimatedWeeklyRateSectionState();
+}
+
+class _AnimatedWeeklyRateSectionState extends State<_AnimatedWeeklyRateSection>
+    with TickerProviderStateMixin {
+  late final AnimationController _entrance;
+  late final AnimationController _pulse;
+
+  late final Animation<double> _headerFade;
+  late final Animation<Offset> _headerSlide;
+  late final Animation<double> _cardFade;
+  late final Animation<double> _cardScale;
+  late final Animation<Offset> _cardSlide;
+  late final Animation<double> _glow;
+  late final Animation<double> _iconPop;
+  late final Animation<double> _copyFade;
+  late final Animation<Offset> _copySlide;
+
+  @override
+  void initState() {
+    super.initState();
+    _entrance = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 640),
+    );
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    );
+
+    _headerFade = CurvedAnimation(
+      parent: _entrance,
+      curve: const Interval(0.0, 0.45, curve: Curves.easeOutCubic),
+    );
+    _headerSlide = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _entrance,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _cardFade = CurvedAnimation(
+      parent: _entrance,
+      curve: const Interval(0.1, 0.65, curve: Curves.easeOutCubic),
+    );
+    _cardScale = Tween<double>(begin: 0.97, end: 1).animate(
+      CurvedAnimation(
+        parent: _entrance,
+        curve: const Interval(0.1, 0.75, curve: Curves.easeOutCubic),
+      ),
+    );
+    _cardSlide = Tween<Offset>(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _entrance,
+        curve: const Interval(0.1, 0.75, curve: Curves.easeOutCubic),
+      ),
+    );
+    _glow = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0, end: 0.7).chain(
+          CurveTween(curve: Curves.easeOutCubic),
+        ),
+        weight: 45,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.7, end: 0).chain(
+          CurveTween(curve: Curves.easeInOutCubic),
+        ),
+        weight: 55,
+      ),
+    ]).animate(
+      CurvedAnimation(
+        parent: _entrance,
+        curve: const Interval(0.15, 1.0),
+      ),
+    );
+
+    _iconPop = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.86, end: 1.05).chain(
+          CurveTween(curve: Curves.easeOutCubic),
+        ),
+        weight: 55,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.05, end: 1).chain(
+          CurveTween(curve: Curves.easeInOutCubic),
+        ),
+        weight: 45,
+      ),
+    ]).animate(
+      CurvedAnimation(
+        parent: _entrance,
+        curve: const Interval(0.22, 0.8),
+      ),
+    );
+
+    _copyFade = CurvedAnimation(
+      parent: _entrance,
+      curve: const Interval(0.32, 0.9, curve: Curves.easeOutCubic),
+    );
+    _copySlide = Tween<Offset>(
+      begin: const Offset(0, 0.06),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _entrance,
+        curve: const Interval(0.32, 0.95, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _entrance.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedWeeklyRateSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.weeks != widget.weeks ||
+        oldWidget.paceKgPerWeek != widget.paceKgPerWeek) {
+      _pulse.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([_entrance, _pulse]),
+      builder: (context, _) {
+        // Soft scale when rate changes: 1 → 1.02 → 1
+        final updateScale = _pulse.value == 0 || _pulse.value == 1
+            ? 1.0
+            : 1.0 + 0.02 * math.sin(_pulse.value * math.pi);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: r.scale(widget.compact ? 18 : 22)),
+            FadeTransition(
+              opacity: _headerFade,
+              child: SlideTransition(
+                position: _headerSlide,
+                child: const _SectionHeader(label: 'Weekly rate'),
+              ),
+            ),
+            SizedBox(height: r.scale(10)),
+            FadeTransition(
+              opacity: _cardFade,
+              child: SlideTransition(
+                position: _cardSlide,
+                child: ScaleTransition(
+                  scale: _cardScale,
+                  alignment: Alignment.topCenter,
+                  child: Transform.scale(
+                    scale: updateScale,
+                    alignment: Alignment.center,
+                    child: _PaceCard(
+                      paceKgPerWeek: widget.paceKgPerWeek,
+                      weeks: widget.weeks,
+                      useKg: widget.useKg,
+                      isLose: widget.isLose,
+                      glowStrength: _glow.value,
+                      iconScale: _iconPop.value *
+                          (1 + 0.04 * math.sin(_pulse.value * math.pi)),
+                      copyFade: _copyFade.value,
+                      copySlide: _copySlide.value,
+                      contentKey: ValueKey(
+                        '${widget.weeks}_${widget.paceKgPerWeek.toStringAsFixed(3)}',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -814,6 +1161,11 @@ class _PaceCard extends StatelessWidget {
     required this.weeks,
     required this.useKg,
     required this.isLose,
+    this.glowStrength = 0,
+    this.iconScale = 1,
+    this.copyFade = 1,
+    this.copySlide = Offset.zero,
+    this.contentKey,
   });
 
   static const _starIconAsset = 'assets/image/star.svg';
@@ -822,6 +1174,11 @@ class _PaceCard extends StatelessWidget {
   final int weeks;
   final bool useKg;
   final bool isLose;
+  final double glowStrength;
+  final double iconScale;
+  final double copyFade;
+  final Offset copySlide;
+  final Key? contentKey;
 
   String _timeframeLabel() {
     if (weeks <= 1) return '1 week';
@@ -906,49 +1263,115 @@ class _PaceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = context.responsive;
     final copy = _paceCopy();
+    final glow = glowStrength.clamp(0.0, 1.0);
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeInOutCubic,
       padding: EdgeInsets.all(r.scale(16)),
-      decoration: _goalCardDecoration(),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Color.lerp(
+                AppColors.border.withValues(alpha: 0.7),
+                AppColors.primary,
+                glow * 0.4,
+              ) ??
+              AppColors.border,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+          if (glow > 0.01)
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.1 * glow),
+              blurRadius: 16 + 8 * glow,
+              offset: const Offset(0, 6),
+              spreadRadius: -2,
+            ),
+        ],
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            padding: EdgeInsets.all(r.scale(7)),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: SvgPicture.asset(
-              _starIconAsset,
-              fit: BoxFit.contain,
+          Transform.scale(
+            scale: iconScale,
+            child: Container(
+              width: 44,
+              height: 44,
+              padding: EdgeInsets.all(r.scale(7)),
+              decoration: BoxDecoration(
+                color: Color.lerp(
+                  AppColors.surface,
+                  AppColors.primary.withValues(alpha: 0.1),
+                  glow,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SvgPicture.asset(
+                _starIconAsset,
+                fit: BoxFit.contain,
+              ),
             ),
           ),
           SizedBox(width: r.scale(14)),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  copy.title,
-                  style: TextStyle(
-                    fontSize: r.scale(15, tablet: 16),
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primaryDark,
+            child: Opacity(
+              opacity: copyFade.clamp(0.0, 1.0),
+              child: Transform.translate(
+                offset: Offset(
+                  copySlide.dx * r.scale(12),
+                  copySlide.dy * r.scale(12),
+                ),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 380),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    final curved = CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    );
+                    return FadeTransition(
+                      opacity: curved,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.08),
+                          end: Offset.zero,
+                        ).animate(curved),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: Column(
+                    key: contentKey,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        copy.title,
+                        style: TextStyle(
+                          fontSize: r.scale(15, tablet: 16),
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryDark,
+                        ),
+                      ),
+                      SizedBox(height: r.scale(4)),
+                      Text(
+                        copy.description,
+                        style: TextStyle(
+                          fontSize: r.scale(12),
+                          color: AppColors.textSecondary,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(height: r.scale(4)),
-                Text(
-                  copy.description,
-                  style: TextStyle(
-                    fontSize: r.scale(12),
-                    color: AppColors.textSecondary,
-                    height: 1.35,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],

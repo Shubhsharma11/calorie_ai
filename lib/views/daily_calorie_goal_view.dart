@@ -50,8 +50,6 @@ class DailyCalorieGoalView extends GetView<UserController> {
             final r = context.responsive;
             final planController = Get.find<NutritionPlanController>();
             final goal = user.dailyCalorieGoal;
-            final canDecrease = goal > UserController.minDailyCalories;
-            final canIncrease = goal < UserController.maxDailyCalories;
 
             return Obx(() {
               planController.revision.value;
@@ -103,15 +101,6 @@ class DailyCalorieGoalView extends GetView<UserController> {
                             user.goal ?? GoalType.maintainWeight,
                             user.weightKg?.toDouble() ?? 0,
                             user.goalWeightKg,
-                          ),
-                          showAdjusters: editing,
-                          canDecrease: canDecrease,
-                          canIncrease: canIncrease,
-                          onDecrease: () => controller.adjustCalorieGoal(
-                            -UserController.calorieStep,
-                          ),
-                          onIncrease: () => controller.adjustCalorieGoal(
-                            UserController.calorieStep,
                           ),
                         ),
                         if (refreshing)
@@ -572,11 +561,6 @@ class _DailyCaloriesCard extends StatelessWidget {
     required this.currentWeightKg,
     required this.targetWeightKg,
     required this.goalExplanation,
-    required this.showAdjusters,
-    required this.canDecrease,
-    required this.canIncrease,
-    required this.onDecrease,
-    required this.onIncrease,
   });
 
   final int goal;
@@ -584,11 +568,6 @@ class _DailyCaloriesCard extends StatelessWidget {
   final double currentWeightKg;
   final double targetWeightKg;
   final String goalExplanation;
-  final bool showAdjusters;
-  final bool canDecrease;
-  final bool canIncrease;
-  final VoidCallback onDecrease;
-  final VoidCallback onIncrease;
 
   IconData get _goalIcon => switch (goalType) {
         GoalType.loseWeight => Icons.trending_down_rounded,
@@ -729,22 +708,6 @@ class _DailyCaloriesCard extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
-                if (showAdjusters) ...[
-                  SizedBox(height: r.scale(14)),
-                  Row(
-                    children: [
-                      _MiniAdjustButton(
-                        icon: Icons.remove_rounded,
-                        onPressed: canDecrease ? onDecrease : null,
-                      ),
-                      SizedBox(width: r.scale(8)),
-                      _MiniAdjustButton(
-                        icon: Icons.add_rounded,
-                        onPressed: canIncrease ? onIncrease : null,
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),
@@ -866,41 +829,6 @@ class _SparkDot extends StatelessWidget {
             blurRadius: 6,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _MiniAdjustButton extends StatelessWidget {
-  const _MiniAdjustButton({required this.icon, required this.onPressed});
-
-  final IconData icon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: DailyCalorieGoalView._pageBg,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: 34,
-          height: 34,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Icon(
-            icon,
-            size: 18,
-            color: onPressed == null
-                ? AppColors.textSecondary.withValues(alpha: 0.35)
-                : AppColors.textPrimary,
-          ),
-        ),
       ),
     );
   }

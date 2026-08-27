@@ -16,7 +16,7 @@ Future<String> resolveStartupRoute({
   await user.loadAuthSession();
 
   if (user.isLoggedIn && user.accessToken.isNotEmpty) {
-    await user.fetchProfile(refreshGoalTarget: true, maxAttempts: 3);
+    await user.fetchProfile(refreshGoalTarget: true,);
     final status = user.lastProfileFetchStatusCode;
     if (status == 401 || status == 403) {
       await user.clearInvalidSession();

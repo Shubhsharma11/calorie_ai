@@ -101,7 +101,7 @@ class ProfileView extends GetView<UserController> {
                       _ProfileMenuRow(
                         icon: Icons.description_outlined,
                         title: 'Terms of Service',
-                        onTap: () => showTermsOfServiceDialog(context),
+                        onTap: openTermsOfService,
                       ),
                       _ProfileMenuRow(
                         icon: Icons.share_outlined,

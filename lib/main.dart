@@ -1,15 +1,17 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_performance/firebase_performance.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:image_picker_android/image_picker_android.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 
 import 'bindings/home_binding.dart';
 import 'bindings/initial_binding.dart';
@@ -35,6 +37,7 @@ Future<void> main() async {
   installPlatformHttpOverrides();
   // Keep the native splash up until startup finishes (no second Flutter splash).
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  _enableAndroidPhotoPicker();
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
@@ -71,6 +74,15 @@ Future<void> main() async {
   } finally {
     FlutterNativeSplash.remove();
     await startupTrace.stop();
+  }
+}
+
+/// Prefer the Android Photo Picker so we never need READ_MEDIA_* permissions.
+void _enableAndroidPhotoPicker() {
+  if (kIsWeb) return;
+  final implementation = ImagePickerPlatform.instance;
+  if (implementation is ImagePickerAndroid) {
+    implementation.useAndroidPhotoPicker = true;
   }
 }
 
