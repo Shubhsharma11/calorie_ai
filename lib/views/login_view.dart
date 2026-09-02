@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
@@ -17,8 +18,6 @@ class LoginView extends GetView<AuthController> {
   static const _logoAsset = 'assets/image/logo1.21.svg';
   static const _googleAsset = 'assets/image/google.svg';
   static const _appleAsset = 'assets/image/apple.svg';
-
-  void _continue() => controller.login();
 
   @override
   Widget build(BuildContext context) {
@@ -127,15 +126,38 @@ class LoginView extends GetView<AuthController> {
                                     ),
                                     SizedBox(height: r.scale(10)),
                                     Text(
-                                      'Log in to continue your health journey',
+                                      'Enter your mobile number to continue',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         fontSize: r.scale(14, tablet: 15),
-                                        color: AppColors.textSecondaryOf(context),
+                                        color: AppColors.textSecondaryOf(
+                                          context,
+                                        ),
                                         height: 1.4,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
+                                    SizedBox(height: sectionGap),
+                                    _PhoneNumberField(
+                                      height: buttonHeight,
+                                      isDark: isDark,
+                                    ),
+                                    SizedBox(height: buttonGap),
+                                    Obx(() {
+                                      final sending =
+                                          controller.isSendingPhoneOtp.value;
+                                      final anyLoading = controller.isSigningIn;
+                                      return _PrimaryContinueButton(
+                                        height: buttonHeight,
+                                        label: sending
+                                            ? 'Sending code...'
+                                            : 'Continue',
+                                        isLoading: anyLoading,
+                                        onPressed: controller.sendPhoneOtp,
+                                      );
+                                    }),
+                                    SizedBox(height: sectionGap),
+                                    _OrDivider(compact: compact),
                                     SizedBox(height: sectionGap),
                                     Obx(() {
                                       final googleLoading =
@@ -167,11 +189,12 @@ class LoginView extends GetView<AuthController> {
                                         onPressed: controller.loginWithGoogle,
                                       );
                                     }),
-                                    SizedBox(height: buttonGap),
-                                    if (Platform.isIOS)
+                                    if (Platform.isIOS) ...[
+                                      SizedBox(height: buttonGap),
                                       Obx(() {
-                                        final appleLoading =
-                                            controller.isSigningInWithApple.value;
+                                        final appleLoading = controller
+                                            .isSigningInWithApple
+                                            .value;
                                         final anyLoading =
                                             controller.isSigningIn;
                                         return _SocialLoginButton(
@@ -201,6 +224,7 @@ class LoginView extends GetView<AuthController> {
                                           onPressed: controller.loginWithApple,
                                         );
                                       }),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -220,7 +244,6 @@ class LoginView extends GetView<AuthController> {
                   ),
                   child: _TermsFooter(
                     compact: compact,
-                    includeApple: Platform.isIOS,
                     onTermsTap: openTermsOfService,
                     onPrivacyTap: openPrivacyPolicy,
                   ),
@@ -230,6 +253,231 @@ class LoginView extends GetView<AuthController> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PhoneNumberField extends StatelessWidget {
+  const _PhoneNumberField({
+    required this.height,
+    required this.isDark,
+  });
+
+  final double height;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.find<AuthController>();
+    final background = isDark ? const Color(0xFF1F1F1F) : Colors.white;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : const Color(0xFFE8E8ED);
+    final radius = height / 2;
+    final muted = AppColors.textSecondaryOf(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: borderColor),
+        ),
+        alignment: Alignment.center,
+        child: TextField(
+          controller: controller.phoneController,
+          enabled: !controller.isSigningIn,
+          keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.done,
+          textAlignVertical: TextAlignVertical.center,
+          maxLength: 10,
+          onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+          onSubmitted: (_) => controller.sendPhoneOtp(),
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(10),
+          ],
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.4,
+            height: 1.2,
+            color: AppColors.textPrimaryOf(context),
+          ),
+          cursorColor: AppColors.primary,
+          decoration: InputDecoration(
+            hintText: 'Mobile number',
+            hintStyle: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              height: 1.2,
+              color: muted.withValues(alpha: 0.85),
+            ),
+            prefixIcon: Padding(
+              padding: const EdgeInsets.only(left: 18, right: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '🇮🇳',
+                    style: TextStyle(fontSize: height < 54 ? 17 : 18),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '+91',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimaryOf(context),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Container(
+                      width: 1,
+                      height: 18,
+                      color: muted.withValues(alpha: isDark ? 0.35 : 0.28),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 0,
+              minHeight: 0,
+            ),
+            counterText: '',
+            filled: false,
+            fillColor: Colors.transparent,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            contentPadding: const EdgeInsets.only(right: 18),
+            isDense: true,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrimaryContinueButton extends StatelessWidget {
+  const _PrimaryContinueButton({
+    required this.label,
+    required this.onPressed,
+    this.height = 52,
+    this.isLoading = false,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final double height;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = height / 2;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isLoading ? null : onPressed,
+        borderRadius: BorderRadius.circular(radius),
+        child: Ink(
+          height: height,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(radius),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 22),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  child: isLoading && label.contains('...')
+                      ? Row(
+                          key: ValueKey(label),
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: height < 54 ? 15 : 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          label,
+                          key: ValueKey(label),
+                          style: TextStyle(
+                            fontSize: height < 54 ? 15 : 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                ),
+                const Align(
+                  alignment: Alignment.centerRight,
+                  child: Icon(
+                    Icons.arrow_forward_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OrDivider extends StatelessWidget {
+  const _OrDivider({this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final lineColor = AppColors.isDark(context)
+        ? Colors.white.withValues(alpha: 0.12)
+        : AppColors.lightBorder;
+
+    return Row(
+      children: [
+        Expanded(child: Divider(color: lineColor, thickness: 1)),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 14),
+          child: Text(
+            'or',
+            style: TextStyle(
+              fontSize: compact ? 12 : 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textSecondaryOf(context),
+            ),
+          ),
+        ),
+        Expanded(child: Divider(color: lineColor, thickness: 1)),
+      ],
     );
   }
 }
@@ -317,12 +565,12 @@ class _AppLogo extends StatelessWidget {
         ],
       ),
       child: Center(
-      child: SvgPicture.asset(
-  LoginView._logoAsset,
-  width: iconSize,
-  height: iconSize,
-  fit: BoxFit.contain,
-),
+        child: SvgPicture.asset(
+          LoginView._logoAsset,
+          width: iconSize,
+          height: iconSize,
+          fit: BoxFit.contain,
+        ),
       ),
     );
   }
@@ -350,8 +598,8 @@ class _SocialLoginButton extends StatelessWidget {
     final radius = height / 2;
     final background = isDark ? const Color(0xFF1F1F1F) : Colors.white;
     final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : AppColors.lightBorder.withValues(alpha: 0.85);
+        ? Colors.white.withValues(alpha: 0.08)
+        : const Color(0xFFE8E8ED);
 
     return Material(
       color: Colors.transparent,
@@ -362,17 +610,8 @@ class _SocialLoginButton extends StatelessWidget {
           height: height,
           decoration: BoxDecoration(
             color: background,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(radius),
             border: Border.all(color: borderColor),
-            boxShadow: isDark
-                ? null
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 22),
@@ -510,13 +749,11 @@ class _TermsFooter extends StatelessWidget {
   const _TermsFooter({
     required this.onTermsTap,
     required this.onPrivacyTap,
-    this.includeApple = false,
     this.compact = false,
   });
 
   final VoidCallback onTermsTap;
   final VoidCallback onPrivacyTap;
-  final bool includeApple;
   final bool compact;
 
   @override
@@ -532,17 +769,14 @@ class _TermsFooter extends StatelessWidget {
       color: AppColors.primary,
       fontWeight: FontWeight.w600,
       height: 1.55,
+      decoration: TextDecoration.none,
     );
-
-    final continueWith = includeApple
-        ? 'By continuing with Google or Apple, you agree to'
-        : 'By continuing with Google, you agree to';
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          continueWith,
+          'By continuing, you agree to our',
           textAlign: TextAlign.center,
           style: baseStyle,
         ),
@@ -550,7 +784,6 @@ class _TermsFooter extends StatelessWidget {
           TextSpan(
             style: baseStyle,
             children: [
-              const TextSpan(text: 'our '),
               TextSpan(
                 text: 'Terms of Service',
                 style: linkStyle,
@@ -570,4 +803,3 @@ class _TermsFooter extends StatelessWidget {
     );
   }
 }
-

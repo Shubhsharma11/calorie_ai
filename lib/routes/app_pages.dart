@@ -33,6 +33,7 @@ import '../views/main_view.dart';
 import '../views/nutrition_plan_loading_view.dart';
 import '../views/notifications_view.dart';
 import '../views/onboarding_view.dart';
+import '../views/otp_verify_view.dart';
 
 import '../views/splash_view.dart';
 import '../views/personal_details_view.dart';
@@ -62,6 +63,15 @@ abstract final class AppPages {
       name: AppRoutes.login,
       page: () => const LoginView(),
       binding: BindingsBuilder(() => Get.lazyPut(AuthController.new)),
+    ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.otpVerify,
+      page: () => const OtpVerifyView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<AuthController>()) {
+          Get.lazyPut(AuthController.new);
+        }
+      }),
     ),
    
     AppPageTransitions.getPage(

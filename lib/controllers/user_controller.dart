@@ -560,7 +560,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   Future<void> _uploadAvatarBytes(Uint8List bytes) async {
     if (isClosed || isUploadingAvatar || bytes.isEmpty) return;
-
+    
     final token = await resolveAccessToken();
     if (token == null || token.isEmpty || isClosed) return;
 

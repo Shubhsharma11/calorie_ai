@@ -33,7 +33,4 @@ abstract final class AppRoutes {
   static const notifications = '/notifications';
   static const helpSupport = '/help-support';
   static const otpVerify = '/otp-verify';
-
-
-
 }

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -16,23 +18,48 @@ class AuthController extends GetxController {
   AuthController({AuthApiService? authApi})
     : _authApi = authApi ?? AuthApiService();
 
+  static const indiaDialCode = '+91';
+
+  /// Temporary: skip Firebase phone auth until billing is enabled.
+  /// Set to `false` to restore real OTP sending/verification.
+  static const bypassPhoneAuth = true;
+
   final AuthApiService _authApi;
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final nameController = TextEditingController();
+  final phoneController = TextEditingController();
+  final otpController = TextEditingController();
 
   final isSigningInWithGoogle = false.obs;
   final isSigningInWithApple = false.obs;
+  final isSendingPhoneOtp = false.obs;
+  final isVerifyingPhoneOtp = false.obs;
+  final phoneNumber = ''.obs;
+  final canResendOtp = false.obs;
+  final resendCountdown = 0.obs;
 
   /// Sync lock so rapid taps cannot re-enter before Obx rebuilds.
   bool _googleAuthInFlight = false;
   bool _appleAuthInFlight = false;
+  bool _phoneAuthInFlight = false;
+  String? _phoneVerificationId;
+  int? _phoneResendToken;
+  Timer? _resendTimer;
 
   bool get isSigningIn =>
       isSigningInWithGoogle.value ||
       isSigningInWithApple.value ||
+      isSendingPhoneOtp.value ||
+      isVerifyingPhoneOtp.value ||
       _googleAuthInFlight ||
-      _appleAuthInFlight;
+      _appleAuthInFlight ||
+      _phoneAuthInFlight;
+
+  String get formattedPhoneNumber {
+    final digits = phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
+    return '$indiaDialCode$digits';
+  }
 
   void login() {
     final user = Get.find<UserController>();
@@ -57,17 +84,19 @@ class AuthController extends GetxController {
       return;
     }
 
+    // Sync lock only — don't show loading while the account picker is open.
     _googleAuthInFlight = true;
-    isSigningInWithGoogle.value = true;
 
     try {
       debugPrint('AuthController: starting Google sign-in');
-      // Startup init is fire-and-forget; ensure it finished before authenticate.
       await GoogleSignIn.instance.initialize(
         serverClientId:
             '950645223660-73fq24ua6hn9h7u92bc9nhtg22rjag1d.apps.googleusercontent.com',
       );
       final googleUser = await GoogleSignIn.instance.authenticate();
+
+      // Account chosen — now show loading for backend auth.
+      isSigningInWithGoogle.value = true;
 
       debugPrint('AuthController: Google sign-in returned ${googleUser.email}');
 
@@ -165,8 +194,8 @@ class AuthController extends GetxController {
       return;
     }
 
+    // Sync lock only — don't show loading while the system sheet is open.
     _appleAuthInFlight = true;
-    isSigningInWithApple.value = true;
 
     try {
       debugPrint('AuthController: starting Apple sign-in');
@@ -177,6 +206,9 @@ class AuthController extends GetxController {
           AppleIDAuthorizationScopes.fullName,
         ],
       );
+
+      // Account chosen — now show loading for backend auth.
+      isSigningInWithApple.value = true;
 
       final identityToken = credential.identityToken;
 
@@ -274,6 +306,234 @@ class AuthController extends GetxController {
     }
   }
 
+  Future<void> sendPhoneOtp({bool isResend = false}) async {
+    if (_phoneAuthInFlight || isSigningIn) {
+      debugPrint('AuthController: ignoring phone OTP send (already in progress)');
+      return;
+    }
+
+    final digits = phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
+    if (digits.length != 10) {
+      _showAuthError('Enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    final e164 = '$indiaDialCode$digits';
+    _phoneAuthInFlight = true;
+    isSendingPhoneOtp.value = true;
+    phoneNumber.value = e164;
+
+    if (bypassPhoneAuth) {
+      debugPrint(
+        'AuthController: phone auth bypass enabled — opening OTP screen for $e164',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      _phoneVerificationId = 'bypass-verification-id';
+      _phoneAuthInFlight = false;
+      isSendingPhoneOtp.value = false;
+      otpController.clear();
+      _startResendCountdown();
+      if (!isResend) {
+        Get.toNamed(AppRoutes.otpVerify);
+      } else {
+        AppSnackbar.success(
+          'A new code was sent to $e164',
+          title: 'Code resent',
+        );
+      }
+      return;
+    }
+
+    try {
+      debugPrint('AuthController: sending phone OTP to $e164');
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: e164,
+        forceResendingToken: isResend ? _phoneResendToken : null,
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (credential) async {
+          debugPrint('AuthController: phone auto-verification completed');
+          await _completePhoneSignIn(credential);
+        },
+        verificationFailed: (error) {
+          debugPrint(
+            'AuthController: phone verification failed '
+            'code=${error.code} message=${error.message}',
+          );
+          _phoneAuthInFlight = false;
+          isSendingPhoneOtp.value = false;
+          _showAuthError(error.message ?? 'Unable to send verification code.');
+        },
+        codeSent: (verificationId, resendToken) {
+          debugPrint('AuthController: phone OTP sent verificationId=$verificationId');
+          _phoneVerificationId = verificationId;
+          _phoneResendToken = resendToken;
+          _phoneAuthInFlight = false;
+          isSendingPhoneOtp.value = false;
+          otpController.clear();
+          _startResendCountdown();
+          if (!isResend) {
+            Get.toNamed(AppRoutes.otpVerify);
+          } else {
+            AppSnackbar.success(
+              'A new code was sent to $e164',
+              title: 'Code resent',
+            );
+          }
+        },
+        codeAutoRetrievalTimeout: (verificationId) {
+          _phoneVerificationId = verificationId;
+          _phoneAuthInFlight = false;
+          isSendingPhoneOtp.value = false;
+        },
+      );
+    } catch (e, stackTrace) {
+      debugPrint('PHONE OTP SEND ERROR: $e');
+      debugPrint('$stackTrace');
+      _phoneAuthInFlight = false;
+      isSendingPhoneOtp.value = false;
+      _showAuthError('Unable to send verification code: $e');
+    }
+  }
+
+  Future<void> verifyPhoneOtp() async {
+    if (_phoneAuthInFlight || isSigningIn) {
+      debugPrint('AuthController: ignoring OTP verify (already in progress)');
+      return;
+    }
+
+    final smsCode = otpController.text.trim();
+    if (smsCode.length < 6) {
+      _showAuthError('Enter the 6-digit verification code.');
+      return;
+    }
+
+    if (bypassPhoneAuth) {
+      debugPrint('AuthController: phone auth bypass — skipping OTP verify');
+      _phoneAuthInFlight = true;
+      isVerifyingPhoneOtp.value = true;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      _phoneAuthInFlight = false;
+      isVerifyingPhoneOtp.value = false;
+      Get.offAllNamed(AppRoutes.personalDetails);
+      return;
+    }
+
+    final verificationId = _phoneVerificationId;
+    if (verificationId == null || verificationId.isEmpty) {
+      _showAuthError('Verification expired. Please request a new code.');
+      return;
+    }
+
+    _phoneAuthInFlight = true;
+    isVerifyingPhoneOtp.value = true;
+
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      await _completePhoneSignIn(credential);
+    } on FirebaseAuthException catch (e) {
+      debugPrint(
+        'AuthController: OTP verify failed code=${e.code} message=${e.message}',
+      );
+      _showAuthError(e.message ?? 'Invalid verification code.');
+    } catch (e, stackTrace) {
+      debugPrint('PHONE OTP VERIFY ERROR: $e');
+      debugPrint('$stackTrace');
+      _showAuthError('Unable to verify code: $e');
+    } finally {
+      _phoneAuthInFlight = false;
+      isVerifyingPhoneOtp.value = false;
+    }
+  }
+
+  Future<void> resendPhoneOtp() async {
+    if (!canResendOtp.value || isSigningIn) return;
+    await sendPhoneOtp(isResend: true);
+  }
+
+  Future<void> _completePhoneSignIn(PhoneAuthCredential credential) async {
+    try {
+      debugPrint('AuthController: completing phone Firebase sign-in');
+      final userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+      final firebaseUser = userCredential.user;
+      if (firebaseUser == null) {
+        throw const AuthApiException('Phone sign-in did not return a user.');
+      }
+
+      final idToken = await firebaseUser.getIdToken();
+      if (idToken == null || idToken.isEmpty) {
+        throw const AuthApiException('Phone ID token was not returned.');
+      }
+
+      debugPrint('AuthController: sending phone ID token to backend');
+      final backendResponse = await _authApi.loginWithPhoneIdToken(idToken);
+      final accessToken = _readBackendString(backendResponse, 'accessToken');
+      final refreshToken = _readBackendString(backendResponse, 'refreshToken');
+      if (accessToken.isEmpty) {
+        throw const AuthApiException(
+          'Backend phone login did not return an access token.',
+        );
+      }
+
+      final claims = _decodeJwtClaims(accessToken);
+      final user = Get.find<UserController>();
+      await user.saveGoogleLoginDetails(
+        userId: _claimString(claims, 'sub'),
+        provider: _claimString(claims, 'provider') ?? 'phone',
+        email: _claimString(claims, 'email') ?? firebaseUser.email ?? '',
+        name: firebaseUser.displayName ?? '',
+        accessToken: accessToken,
+        refreshToken: refreshToken.isEmpty ? null : refreshToken,
+        backendResponse: backendResponse,
+      );
+      await _logAuthAnalytics(user: user, method: 'phone');
+
+      if (user.user.hasProfileBasics || user.isSetupComplete) {
+        await user.markOnboardingComplete();
+        MainController.resetHomeTabIfRegistered();
+        Get.offAllNamed(AppRoutes.main);
+      } else if (user.lastProfileFetchStatusCode == 429 &&
+          (UserController.readEmailVerified(backendResponse) ||
+              user.isLikelyExistingBackendUser)) {
+        await user.markOnboardingComplete();
+        MainController.resetHomeTabIfRegistered();
+        Get.offAllNamed(AppRoutes.main);
+      } else {
+        await user.restoreOnboardingProgress();
+        final resumeRoute = await user.resolveSetupResumeRoute();
+        Get.offAllNamed(resumeRoute);
+      }
+    } on AuthApiException catch (e) {
+      debugPrint('AuthController: phone backend auth failed: ${e.message}');
+      _showAuthError(e.message);
+    } catch (e, stackTrace) {
+      debugPrint('PHONE SIGN IN ERROR: $e');
+      debugPrint('$stackTrace');
+      _showAuthError('Unable to sign in with phone: $e');
+    } finally {
+      _phoneAuthInFlight = false;
+      isSendingPhoneOtp.value = false;
+      isVerifyingPhoneOtp.value = false;
+    }
+  }
+
+  void _startResendCountdown({int seconds = 45}) {
+    _resendTimer?.cancel();
+    canResendOtp.value = false;
+    resendCountdown.value = seconds;
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (resendCountdown.value <= 1) {
+        timer.cancel();
+        resendCountdown.value = 0;
+        canResendOtp.value = true;
+        return;
+      }
+      resendCountdown.value = resendCountdown.value - 1;
+    });
+  }
 
   Future<void> _logAuthAnalytics({
     required UserController user,
@@ -353,9 +613,12 @@ class AuthController extends GetxController {
 
   @override
   void onClose() {
+    _resendTimer?.cancel();
     emailController.dispose();
     passwordController.dispose();
     nameController.dispose();
+    phoneController.dispose();
+    otpController.dispose();
     super.onClose();
   }
 }
