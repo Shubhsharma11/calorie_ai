@@ -21,6 +21,46 @@ class LoginView extends GetView<AuthController> {
 
   @override
   Widget build(BuildContext context) {
+    return _LoginPhoneHintBootstrap(
+      child: _LoginScaffold(controller: controller),
+    );
+  }
+}
+
+class _LoginPhoneHintBootstrap extends StatefulWidget {
+  const _LoginPhoneHintBootstrap({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_LoginPhoneHintBootstrap> createState() =>
+      _LoginPhoneHintBootstrapState();
+}
+
+class _LoginPhoneHintBootstrapState extends State<_LoginPhoneHintBootstrap> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Get.find<AuthController>().maybePrefillPhoneNumber();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+class _LoginScaffold extends StatelessWidget {
+  const _LoginScaffold({required this.controller});
+
+  final AuthController controller;
+
+  static const _logoAsset = LoginView._logoAsset;
+  static const _googleAsset = LoginView._googleAsset;
+  static const _appleAsset = LoginView._appleAsset;
+
+  @override
+  Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
     final isDark = AppColors.isDark(context);
     final r = context.responsive;
@@ -394,55 +434,44 @@ class _PrimaryContinueButton extends StatelessWidget {
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 22),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: isLoading && label.contains('...')
-                      ? Row(
-                          key: ValueKey(label),
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.2,
-                                color: Colors.white,
-                              ),
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: isLoading && label.contains('...')
+                    ? Row(
+                        key: ValueKey(label),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: Colors.white,
                             ),
-                            const SizedBox(width: 10),
-                            Text(
-                              label,
-                              style: TextStyle(
-                                fontSize: height < 54 ? 15 : 16,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        )
-                      : Text(
-                          label,
-                          key: ValueKey(label),
-                          style: TextStyle(
-                            fontSize: height < 54 ? 15 : 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            letterSpacing: -0.1,
                           ),
+                          const SizedBox(width: 10),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: height < 54 ? 15 : 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        label,
+                        key: ValueKey(label),
+                        style: TextStyle(
+                          fontSize: height < 54 ? 15 : 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: -0.1,
                         ),
-                ),
-                const Align(
-                  alignment: Alignment.centerRight,
-                  child: Icon(
-                    Icons.arrow_forward_rounded,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
-              ],
+                      ),
+              ),
             ),
           ),
         ),
@@ -566,7 +595,7 @@ class _AppLogo extends StatelessWidget {
       ),
       child: Center(
         child: SvgPicture.asset(
-          LoginView._logoAsset,
+          _LoginScaffold._logoAsset,
           width: iconSize,
           height: iconSize,
           fit: BoxFit.contain,

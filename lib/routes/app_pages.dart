@@ -45,6 +45,7 @@ import '../views/streak_view.dart';
 import '../views/calories_burn_view.dart';
 import '../views/water_tracker_view.dart';
 import '../views/weight_tracker_view.dart';
+import '../views/weekly_meal_plan_view.dart';
 import '../core/app_page_transitions.dart';
 import 'app_routes.dart';
 
@@ -237,6 +238,11 @@ abstract final class AppPages {
     AppPageTransitions.getPage(
       name: AppRoutes.aiNutritionPlan,
       page: () => const AiNutritionPlanView(),
+      binding: HomeBinding(),
+    ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.weeklyMealPlan,
+      page: () => const WeeklyMealPlanView(),
       binding: HomeBinding(),
     ),
     AppPageTransitions.getPage(

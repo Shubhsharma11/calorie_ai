@@ -28,28 +28,26 @@ class OtpVerifyView extends GetView<AuthController> {
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             horizontal,
-            r.scale(4),
+            r.scale(8),
             horizontal,
-            r.scale(compact ? 12 : 18),
+            r.scale(compact ? 16 : 20),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Align(
+              IconButton(
                 alignment: Alignment.centerLeft,
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 40,
-                    minHeight: 40,
-                  ),
-                  icon: Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    size: 20,
-                    color: AppColors.textPrimaryOf(context),
-                  ),
-                  onPressed: () => Get.back(),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 40,
+                  minHeight: 40,
                 ),
+                icon: Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  size: 20,
+                  color: AppColors.textPrimaryOf(context),
+                ),
+                onPressed: () => Get.back(),
               ),
               Expanded(
                 child: Center(
@@ -64,7 +62,7 @@ class OtpVerifyView extends GetView<AuthController> {
                           Center(
                             child: _OtpLogo(size: logoSize, isDark: isDark),
                           ),
-                          SizedBox(height: r.scale(compact ? 22 : 28)),
+                          SizedBox(height: r.scale(compact ? 24 : 28)),
                           Text(
                             'Verify your number',
                             textAlign: TextAlign.center,
@@ -87,31 +85,28 @@ class OtpVerifyView extends GetView<AuthController> {
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          SizedBox(height: r.scale(6)),
+                          SizedBox(height: r.scale(8)),
                           Obx(
                             () => Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Flexible(
-                                  child: Text(
-                                    _formatPhone(controller.phoneNumber.value),
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: r.scale(16, tablet: 17),
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textPrimaryOf(context),
-                                      letterSpacing: 0.2,
-                                    ),
+                                Text(
+                                  _formatPhone(controller.phoneNumber.value),
+                                  style: TextStyle(
+                                    fontSize: r.scale(16, tablet: 17),
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimaryOf(context),
+                                    letterSpacing: 0.2,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 10),
                                 InkWell(
                                   onTap: () => Get.back(),
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(6),
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 4,
-                                      vertical: 2,
+                                      vertical: 4,
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -125,7 +120,7 @@ class OtpVerifyView extends GetView<AuthController> {
                                           ),
                                         ),
                                         const SizedBox(width: 3),
-                                        Icon(
+                                        const Icon(
                                           Icons.edit_rounded,
                                           size: 14,
                                           color: AppColors.primary,
@@ -137,13 +132,13 @@ class OtpVerifyView extends GetView<AuthController> {
                               ],
                             ),
                           ),
-                          SizedBox(height: r.scale(compact ? 28 : 36)),
+                          SizedBox(height: r.scale(compact ? 32 : 36)),
                           _OtpBoxes(
                             controller: controller.otpController,
                             isDark: isDark,
                             onCompleted: controller.verifyPhoneOtp,
                           ),
-                          SizedBox(height: r.scale(18)),
+                          SizedBox(height: r.scale(20)),
                           Obx(() {
                             final canResend = controller.canResendOtp.value;
                             final countdown = controller.resendCountdown.value;
@@ -178,7 +173,7 @@ class OtpVerifyView extends GetView<AuthController> {
                                   : controller.resendPhoneOtp,
                               child: Text(
                                 sending ? 'Sending...' : 'Resend OTP',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.primary,
@@ -186,7 +181,7 @@ class OtpVerifyView extends GetView<AuthController> {
                               ),
                             );
                           }),
-                          SizedBox(height: r.scale(compact ? 22 : 28)),
+                          SizedBox(height: r.scale(compact ? 28 : 32)),
                           Obx(() {
                             final verifying =
                                 controller.isVerifyingPhoneOtp.value;
@@ -295,38 +290,25 @@ class _VerifyButton extends StatelessWidget {
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 22),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (isLoading)
-                  const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.3,
-                      color: Colors.white,
+            child: Center(
+              child: isLoading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.3,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      'Verify & Continue',
+                      style: TextStyle(
+                        fontSize: height < 54 ? 15 : 16,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: -0.1,
+                      ),
                     ),
-                  )
-                else
-                  Text(
-                    'Verify & Continue',
-                    style: TextStyle(
-                      fontSize: height < 54 ? 15 : 16,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: -0.1,
-                    ),
-                  ),
-                if (!isLoading)
-                  const Align(
-                    alignment: Alignment.centerRight,
-                    child: Icon(
-                      Icons.arrow_forward_rounded,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-              ],
             ),
           ),
         ),
@@ -414,15 +396,6 @@ class _OtpBoxesState extends State<_OtpBoxes> {
                                 : const Color(0xFFE5E5EA)),
                         width: isActive ? 1.8 : 1.2,
                       ),
-                      boxShadow: isActive && !widget.isDark
-                          ? [
-                              BoxShadow(
-                                color: AppColors.primary.withValues(alpha: 0.16),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ]
-                          : null,
                     ),
                     child: Text(
                       digit ?? '-',

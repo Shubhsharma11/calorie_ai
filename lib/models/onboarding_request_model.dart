@@ -173,7 +173,7 @@ class OnboardingRequestModel {
     final age = user.age;
     final gender = user.gender;
     final heightCm = user.heightCm;
-    final weightKg = user.weightKg;
+    final weightKg = user.weightKg; 
     if (age == null ||
         gender == null ||
         gender.trim().isEmpty ||

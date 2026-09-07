@@ -11,6 +11,7 @@ import '../routes/app_routes.dart';
 import '../core/app_snackbar.dart';
 import '../services/analytics_service.dart';
 import '../services/auth_api_service.dart';
+import '../services/phone_hint_service.dart';
 import 'main_controller.dart';
 import 'user_controller.dart';
 
@@ -20,9 +21,8 @@ class AuthController extends GetxController {
 
   static const indiaDialCode = '+91';
 
-  /// Temporary: skip Firebase phone auth until billing is enabled.
-  /// Set to `false` to restore real OTP sending/verification.
-  static const bypassPhoneAuth = true;
+  /// Set to `true` only for UI testing without Firebase SMS (no real OTP).
+  static const bypassPhoneAuth = false;
 
   final AuthApiService _authApi;
   final emailController = TextEditingController();
@@ -43,6 +43,7 @@ class AuthController extends GetxController {
   bool _googleAuthInFlight = false;
   bool _appleAuthInFlight = false;
   bool _phoneAuthInFlight = false;
+  bool _phoneHintRequested = false;
   String? _phoneVerificationId;
   int? _phoneResendToken;
   Timer? _resendTimer;
@@ -59,6 +60,22 @@ class AuthController extends GetxController {
   String get formattedPhoneNumber {
     final digits = phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
     return '$indiaDialCode$digits';
+  }
+
+  /// Android: shows Google's SIM phone picker once and pre-fills the field.
+  Future<void> maybePrefillPhoneNumber() async {
+    if (_phoneHintRequested) return;
+    if (phoneController.text.trim().isNotEmpty) return;
+
+    _phoneHintRequested = true;
+
+    final hint = await PhoneHintService.requestHint();
+    final local = PhoneHintService.extractIndiaLocalDigits(hint);
+    if (local == null) return;
+    if (phoneController.text.trim().isNotEmpty) return;
+
+    phoneController.text = local;
+    debugPrint('AuthController: pre-filled phone from SIM hint ending ${local.substring(6)}');
   }
 
   void login() {
@@ -344,6 +361,24 @@ class AuthController extends GetxController {
       return;
     }
 
+    // Safety: if Firebase never calls back (Play Integrity hang), unlock UI.
+    Timer? sendWatchdog;
+    sendWatchdog = Timer(const Duration(seconds: 45), () {
+      if (!_phoneAuthInFlight && !isSendingPhoneOtp.value) return;
+      debugPrint('AuthController: phone OTP send timed out for $e164');
+      _phoneAuthInFlight = false;
+      isSendingPhoneOtp.value = false;
+      _showAuthError(
+        'OTP request timed out. Use a Firebase test number while developing, '
+        'or check Phone auth + Blaze billing in Firebase Console.',
+      );
+    });
+
+    void clearSendWatchdog() {
+      sendWatchdog?.cancel();
+      sendWatchdog = null;
+    }
+
     try {
       debugPrint('AuthController: sending phone OTP to $e164');
       await FirebaseAuth.instance.verifyPhoneNumber(
@@ -351,20 +386,25 @@ class AuthController extends GetxController {
         forceResendingToken: isResend ? _phoneResendToken : null,
         timeout: const Duration(seconds: 60),
         verificationCompleted: (credential) async {
+          clearSendWatchdog();
           debugPrint('AuthController: phone auto-verification completed');
           await _completePhoneSignIn(credential);
         },
         verificationFailed: (error) {
+          clearSendWatchdog();
           debugPrint(
             'AuthController: phone verification failed '
             'code=${error.code} message=${error.message}',
           );
           _phoneAuthInFlight = false;
           isSendingPhoneOtp.value = false;
-          _showAuthError(error.message ?? 'Unable to send verification code.');
+          _showAuthError(_phoneAuthErrorMessage(error));
         },
         codeSent: (verificationId, resendToken) {
-          debugPrint('AuthController: phone OTP sent verificationId=$verificationId');
+          clearSendWatchdog();
+          debugPrint(
+            'AuthController: phone OTP sent verificationId=$verificationId',
+          );
           _phoneVerificationId = verificationId;
           _phoneResendToken = resendToken;
           _phoneAuthInFlight = false;
@@ -381,12 +421,16 @@ class AuthController extends GetxController {
           }
         },
         codeAutoRetrievalTimeout: (verificationId) {
+          // Keep verificationId; do not treat this as a send failure.
           _phoneVerificationId = verificationId;
-          _phoneAuthInFlight = false;
-          isSendingPhoneOtp.value = false;
+          debugPrint(
+            'AuthController: SMS auto-retrieval timed out '
+            'verificationId=$verificationId',
+          );
         },
       );
     } catch (e, stackTrace) {
+      clearSendWatchdog();
       debugPrint('PHONE OTP SEND ERROR: $e');
       debugPrint('$stackTrace');
       _phoneAuthInFlight = false;
@@ -437,7 +481,7 @@ class AuthController extends GetxController {
       debugPrint(
         'AuthController: OTP verify failed code=${e.code} message=${e.message}',
       );
-      _showAuthError(e.message ?? 'Invalid verification code.');
+      _showAuthError(_phoneAuthErrorMessage(e));
     } catch (e, stackTrace) {
       debugPrint('PHONE OTP VERIFY ERROR: $e');
       debugPrint('$stackTrace');
@@ -557,6 +601,47 @@ class AuthController extends GetxController {
 
   void _showAuthError(String message) {
     AppSnackbar.error(message, title: 'Sign-in failed');
+  }
+
+  String _phoneAuthErrorMessage(FirebaseAuthException error) {
+    final message = (error.message ?? '').toLowerCase();
+
+    if (message.contains('billing') || error.code == 'billing-not-enabled') {
+      return 'Firebase billing is not enabled. Upgrade to the Blaze plan, '
+          'or add a Phone test number in Firebase Console for development.';
+    }
+    if (message.contains('play_integrity') ||
+        message.contains('play integrity') ||
+        message.contains('app not authorized') ||
+        message.contains('invalid app info') ||
+        error.code == 'invalid-app-credential') {
+      return 'Android app verification failed (Play Integrity). '
+          'While learning: add a test phone number in Firebase Console '
+          '(Authentication → Phone → Phone numbers for testing). '
+          'Also confirm SHA-1/SHA-256 are added for this debug keystore.';
+    }
+
+    switch (error.code) {
+      case 'invalid-phone-number':
+        return 'Enter a valid 10-digit Indian mobile number.';
+      case 'too-many-requests':
+        return 'Too many attempts. Wait a few minutes, then try again.';
+      case 'quota-exceeded':
+        return 'SMS quota exceeded. Use a Firebase test number while developing.';
+      case 'invalid-verification-code':
+        return 'Incorrect code. Check the SMS and try again.';
+      case 'session-expired':
+      case 'code-expired':
+        return 'Code expired. Tap Resend OTP to get a new one.';
+      case 'network-request-failed':
+        return 'Network error. Check your connection and try again.';
+      case 'missing-client-identifier':
+        return 'App verification missing. Add SHA-1/SHA-256 in Firebase '
+            'and wait a few minutes after saving.';
+      default:
+        return error.message ??
+            'Unable to send OTP (${error.code}). Check Firebase Phone auth setup.';
+    }
   }
 
   String _readBackendString(Map<String, dynamic> response, String key) {

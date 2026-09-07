@@ -17,6 +17,7 @@ import '../models/daily_nutrition.dart';
 import '../models/nutrition_trend_metric.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/ai_meal_plan_card.dart';
 import '../widgets/calorie_overview_card.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/macro_nutrition_card.dart';
@@ -86,6 +87,8 @@ class DashboardView extends GetView<DashboardController> {
             // const _StreakSection(),
             // SizedBox(height: r.scale(20)),
             const _CalorieSection(),
+            SizedBox(height: r.scale(12)),
+            const AiMealPlanCard(),
             SizedBox(height: r.scale(12)),
             WaterIntakeBanner(coachKey: AppCoachMarks.waterKey),
             SizedBox(height: r.scale(12)),

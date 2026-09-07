@@ -28,6 +28,7 @@ abstract final class AppRoutes {
   static const progress = '/progress';
   static const dailySummary = '/daily-summary';
   static const aiNutritionPlan = '/ai-nutrition-plan';
+  static const weeklyMealPlan = '/weekly-meal-plan';
   static const streak = '/streak';
   static const settings = '/settings';
   static const notifications = '/notifications';
