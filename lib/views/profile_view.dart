@@ -93,6 +93,14 @@ class ProfileView extends GetView<UserController> {
                         title: 'Settings',
                         onTap: () => Get.toNamed(AppRoutes.settings),
                       ),
+                      if (Platform.isIOS)
+                        _ProfileMenuRow(
+                          icon: Icons.menu_book_outlined,
+                          title: 'Health Information & Sources',
+                          subtitle: 'Citations and medical disclaimer',
+                          onTap: () =>
+                              Get.toNamed(AppRoutes.healthInformationSources),
+                        ),
                       _ProfileMenuRow(
                         icon: Icons.privacy_tip_outlined,
                         title: 'Privacy Policy',

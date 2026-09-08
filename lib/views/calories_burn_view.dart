@@ -5,6 +5,7 @@ import '../controllers/tracker_controller.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/health_sources_link.dart';
 import '../widgets/responsive_page.dart';
 
 class CaloriesBurnView extends GetView<TrackerController> {
@@ -102,6 +103,10 @@ class CaloriesBurnView extends GetView<TrackerController> {
                         height: 1.35,
                       ),
                     ),
+                    if (HealthSourcesLink.isSupported) ...[
+                      SizedBox(height: r.scale(6)),
+                      const HealthSourcesLink(compact: true),
+                    ],
                   ],
                 ),
               ),

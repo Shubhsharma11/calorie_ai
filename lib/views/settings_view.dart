@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 
 import 'package:get/get.dart';
@@ -5,6 +7,7 @@ import 'package:get/get.dart';
 import '../controllers/settings_controller.dart';
 import '../controllers/theme_controller.dart';
 import '../core/responsive.dart';
+import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 
@@ -182,12 +185,22 @@ class _SettingsViewState extends State<SettingsView> {
                   _SettingsGroup(
                     key: ValueKey<String>('settings-about-$brightness'),
                     title: 'About',
-                    children: const [
-                      _SettingsInfoTile(
+                    children: [
+                      const _SettingsInfoTile(
                         icon: Icons.info_outline_rounded,
                         title: 'App Version',
                         value: '1.0.0',
                       ),
+                      if (Platform.isIOS)
+                        _SettingsActionTile(
+                          icon: Icons.menu_book_outlined,
+                          title: 'Health Information & Sources',
+                          subtitle:
+                              'Citations for calorie and nutrition estimates',
+                          onTap: () => Get.toNamed(
+                            AppRoutes.healthInformationSources,
+                          ),
+                        ),
                     ],
                   ),
                   SizedBox(

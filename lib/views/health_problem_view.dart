@@ -16,6 +16,7 @@ import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/app_bottom_sheet.dart';
+import '../widgets/health_sources_link.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
@@ -483,10 +484,28 @@ class _HealthProblemViewState extends State<HealthProblemView> {
                 ],
               ),
             ),
-            action: PrimaryButton(
-              label: actionLabel,
-              isLoading: _isSaving,
-              onPressed: _isSaving ? null : () => unawaited(_continue()),
+            action: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (HealthSourcesLink.isSupported) ...[
+                  Text(
+                    'Used only to personalize tracking — not for diagnosis or treatment.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: r.scale(12),
+                      height: 1.35,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const HealthSourcesLink(compact: true),
+                  SizedBox(height: r.scale(8)),
+                ],
+                PrimaryButton(
+                  label: actionLabel,
+                  isLoading: _isSaving,
+                  onPressed: _isSaving ? null : () => unawaited(_continue()),
+                ),
+              ],
             ),
           ),
         ),

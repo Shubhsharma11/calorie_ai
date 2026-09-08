@@ -11,6 +11,7 @@ import '../core/dashboard_actions.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/health_sources_link.dart';
 import '../widgets/past_date_banner.dart';
 import '../widgets/rotating_motivation_text.dart';
 
@@ -442,6 +443,10 @@ class _SmartInsightsSection extends GetView<DailySummaryController> {
               },
             ),
           ),
+        if (HealthSourcesLink.isSupported) ...[
+          const SizedBox(height: 8),
+          const Center(child: HealthSourcesLink(compact: true)),
+        ],
       ],
     );
   }

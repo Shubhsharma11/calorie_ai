@@ -13,6 +13,7 @@ import '../models/user_model.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/health_sources_link.dart';
 import '../widgets/profile_ui.dart';
 import '../widgets/responsive_page.dart';
 
@@ -277,6 +278,8 @@ class _MyGoalsViewState extends State<MyGoalsView> {
                                 arguments: RouteArgs.fromProfileMap,
                               ),
                             ),
+                            SizedBox(height: r.scale(8)),
+                            const HealthSourcesLink(compact: true),
                             SizedBox(height: r.scale(12)),
                             ProfileGoalProgressCard(
                               progress: progress,

@@ -13,6 +13,7 @@ import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
 import '../views/activity_level_view.dart';
 import '../views/ai_nutrition_plan_view.dart';
+import '../views/health_information_sources_view.dart';
 import '../views/help_support_view.dart';
 import '../views/add_food_view.dart';
 import '../views/daily_calorie_goal_view.dart';
@@ -244,6 +245,11 @@ abstract final class AppPages {
     AppPageTransitions.getPage(
       name: AppRoutes.helpSupport,
       page: () => const HelpSupportView(),
+    ),
+    // iOS App Review Guideline 1.4.1 — citations screen (UI gated to iOS).
+    AppPageTransitions.getPage(
+      name: AppRoutes.healthInformationSources,
+      page: () => const HealthInformationSourcesView(),
     ),
   ];
 }

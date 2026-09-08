@@ -11,6 +11,7 @@ import '../models/goal_type.dart';
 import '../models/user_model.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/health_sources_link.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
@@ -191,6 +192,20 @@ class DailyCalorieGoalView extends GetView<UserController> {
                       goalLabel: user.goal?.summaryLabel ?? 'Maintenance',
                       activityLabel: _activityLabel(user.activityLevel),
                     ),
+                    if (HealthSourcesLink.isSupported) ...[
+                      SizedBox(height: r.scale(12)),
+                      Text(
+                        'Estimates only — not medical advice. '
+                        'Consult a healthcare professional for personal guidance.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: r.scale(12),
+                          height: 1.4,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const HealthSourcesLink(compact: true),
+                    ],
                   ],
                 ),
                 action: PrimaryButton(

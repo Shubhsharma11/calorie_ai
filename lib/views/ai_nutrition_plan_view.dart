@@ -12,6 +12,7 @@ import '../models/goal_type.dart';
 import '../models/user_model.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/health_sources_link.dart';
 import '../widgets/responsive_page.dart';
 
 class AiNutritionPlanView extends StatefulWidget {
@@ -104,6 +105,19 @@ class _AiNutritionPlanViewState extends State<AiNutritionPlanView> {
                 _TipsEmptyState(isLoading: isLoading)
               else
                 _AiTipsCard(tips: tips),
+              if (HealthSourcesLink.isSupported) ...[
+                SizedBox(height: r.scale(8)),
+                Text(
+                  'Tips and targets are general wellness estimates, not medical advice.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: r.scale(12),
+                    height: 1.4,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const HealthSourcesLink(compact: true),
+              ],
               SizedBox(height: r.scale(14)),
               SizedBox(
                 height: 50,

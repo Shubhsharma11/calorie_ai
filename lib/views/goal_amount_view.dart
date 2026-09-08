@@ -17,6 +17,7 @@ import '../models/onboarding_request_model.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/health_sources_link.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/responsive_page.dart';
 
@@ -522,12 +523,21 @@ class _GoalAmountViewState extends State<GoalAmountView> {
               ],
             ],
           ),
-          action: PrimaryButton(
-            label: fromProfile ? 'Save' : 'Continue',
-            isLoading: _isSaving,
-            onPressed: _isSaving
-                ? null
-                : () => _onContinue(fromProfile: fromProfile),
+          action: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (HealthSourcesLink.isSupported) ...[
+                const HealthSourcesLink(compact: true),
+                SizedBox(height: r.scale(8)),
+              ],
+              PrimaryButton(
+                label: fromProfile ? 'Save' : 'Continue',
+                isLoading: _isSaving,
+                onPressed: _isSaving
+                    ? null
+                    : () => _onContinue(fromProfile: fromProfile),
+              ),
+            ],
           ),
         ),
       ),

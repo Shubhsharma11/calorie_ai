@@ -30,52 +30,72 @@ class _HelpSupportViewState extends State<HelpSupportView> {
 
   int? _expandedIndex;
 
-  static const _faqs = [
-    (
-      question: 'How do I log my meals?',
-      answer:
-          'Tap Add Food on the Home or Diary tab, search for a food item, '
-          'select your portion size, and save it to your daily log. You can '
-          'also use the Scan tab to log packaged foods by barcode.',
-    ),
-    (
-      question: 'How is my daily calorie goal calculated?',
-      answer:
-          'Your goal is estimated from your age, height, weight, gender, '
-          'activity level, and fitness goal (lose, maintain, or gain weight). '
-          'Update body details in Profile → Personal Information and your '
-          'goal in Profile → My Goals.',
-    ),
-    (
-      question: 'Can I track water intake?',
-      answer:
-          'Yes. Use the Water Intake banner on Home, or open Water Tracker '
-          'from Stats. Log water with quick-add buttons '
-          '(+250 ml, +500 ml, or a custom amount) and track progress toward '
-          'your daily goal, which you can change in Settings.',
-    ),
-    (
-      question: 'How does food scanning work?',
-      answer:
-          'Open the Scan tab and point your camera at a product barcode. '
-          'MyCaloriePal looks up nutrition data from Open Food Facts and lets '
-          'you add it to your log.',
-    ),
-    (
-      question: 'Why can\'t I find a food in search?',
-      answer:
-          'Search uses a curated Indian foods database. If your item is not '
-          'listed, try a similar dish, or scan the barcode on packaged products.',
-    ),
-    (
-      question: 'How do I change my weight or goals?',
-      answer:
-          'Go to Profile → Personal Information to update age, height, '
-          'weight, and activity level. Use Profile → My Goals to change '
-          'your fitness goal, target weight, and calorie target. Your '
-          'calorie and macro targets will recalculate automatically.',
-    ),
-  ];
+  List<({String question, String answer})> get _faqs {
+    final calorieAnswer = Platform.isIOS
+        ? 'Your goal is estimated from your age, height, weight, gender, '
+            'activity level, and fitness goal (lose, maintain, or gain weight), '
+            'using established equations such as Mifflin–St Jeor and public '
+            'health guidance on calories and macronutrients. '
+            'See Profile → Health Information & Sources for citations and links. '
+            'Update body details in Profile → Personal Information and your '
+            'goal in Profile → My Goals.'
+        : 'Your goal is estimated from your age, height, weight, gender, '
+            'activity level, and fitness goal (lose, maintain, or gain weight). '
+            'Update body details in Profile → Personal Information and your '
+            'goal in Profile → My Goals.';
+
+    return [
+      (
+        question: 'How do I log my meals?',
+        answer:
+            'Tap Add Food on the Home or Diary tab, search for a food item, '
+            'select your portion size, and save it to your daily log. You can '
+            'also use the Scan tab to log packaged foods by barcode.',
+      ),
+      (
+        question: 'How is my daily calorie goal calculated?',
+        answer: calorieAnswer,
+      ),
+      if (Platform.isIOS)
+        (
+          question: 'Where do health and nutrition recommendations come from?',
+          answer:
+              'MyCaloriePal shows general wellness estimates and tips for '
+              'informational purposes only—not medical advice. Open '
+              'Profile → Health Information & Sources (or Settings → About) for '
+              'scientific citations, source links, and our medical disclaimer.',
+        ),
+      (
+        question: 'Can I track water intake?',
+        answer:
+            'Yes. Use the Water Intake banner on Home, or open Water Tracker '
+            'from Stats. Log water with quick-add buttons '
+            '(+250 ml, +500 ml, or a custom amount) and track progress toward '
+            'your daily goal, which you can change in Settings.',
+      ),
+      (
+        question: 'How does food scanning work?',
+        answer:
+            'Open the Scan tab and point your camera at a product barcode. '
+            'MyCaloriePal looks up nutrition data from Open Food Facts and lets '
+            'you add it to your log.',
+      ),
+      (
+        question: 'Why can\'t I find a food in search?',
+        answer:
+            'Search uses a curated Indian foods database. If your item is not '
+            'listed, try a similar dish, or scan the barcode on packaged products.',
+      ),
+      (
+        question: 'How do I change my weight or goals?',
+        answer:
+            'Go to Profile → Personal Information to update age, height, '
+            'weight, and activity level. Use Profile → My Goals to change '
+            'your fitness goal, target weight, and calorie target. Your '
+            'calorie and macro targets will recalculate automatically.',
+      ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -186,6 +206,28 @@ class _HelpSupportViewState extends State<HelpSupportView> {
                 ),
               );
             }),
+            if (Platform.isIOS) ...[
+              SizedBox(height: r.scale(24)),
+              Text(
+                'HEALTH INFORMATION',
+                style: TextStyle(
+                  fontSize: r.scale(12),
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondaryOf(context),
+                  letterSpacing: 0.6,
+                ),
+              ),
+              SizedBox(height: r.scale(12)),
+              _ContactCard(
+                icon: Icons.menu_book_outlined,
+                title: 'Health Information & Sources',
+                subtitle: 'Citations, source links, and disclaimer',
+                detail: 'Required references for calorie & nutrition info',
+                actionLabel: 'View sources',
+                onAction: () =>
+                    Get.toNamed(AppRoutes.healthInformationSources),
+              ),
+            ],
             SizedBox(height: r.scale(24)),
             Text(
               'APP TOUR',

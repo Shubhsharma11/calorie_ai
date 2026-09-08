@@ -32,6 +32,7 @@ abstract final class AppRoutes {
   static const settings = '/settings';
   static const notifications = '/notifications';
   static const helpSupport = '/help-support';
+  static const healthInformationSources = '/health-information-sources';
   static const otpVerify = '/otp-verify';
 
 

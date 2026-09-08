@@ -14,6 +14,7 @@ import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/responsive_page.dart';
 import '../widgets/app_app_bar.dart';
+import '../widgets/health_sources_link.dart';
 import '../widgets/weight_ruler_slider.dart';
 
 class GoalWeightView extends StatefulWidget {
@@ -124,19 +125,35 @@ class _GoalWeightViewState extends State<GoalWeightView> {
   }
 
   void _showCalorieInfo() {
+    final isIos = HealthSourcesLink.isSupported;
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Estimated daily calories'),
-        content: const SingleChildScrollView(
+        content: SingleChildScrollView(
           child: Text(
-            'This number is calculated from your age, height, weight, '
-            'activity level, and goal type. You can fine-tune it later on '
-            'the daily calorie goal screen.',
-            style: TextStyle(height: 1.45),
+            isIos
+                ? 'This number is calculated from your age, height, weight, '
+                    'activity level, and goal type using established equations '
+                    '(such as Mifflin–St Jeor) and public-health guidance. '
+                    'It is an estimate for wellness tracking—not medical advice. '
+                    'You can fine-tune it later on the daily calorie goal screen.\n\n'
+                    'Open Health Information & Sources for citations and links.'
+                : 'This number is calculated from your age, height, weight, '
+                    'activity level, and goal type. You can fine-tune it later on '
+                    'the daily calorie goal screen.',
+            style: const TextStyle(height: 1.45),
           ),
         ),
         actions: [
+          if (isIos)
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Get.toNamed(AppRoutes.healthInformationSources);
+              },
+              child: const Text('View sources'),
+            ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Got it'),
