@@ -33,6 +33,10 @@ abstract final class DashboardActions {
     Get.toNamed(AppRoutes.notifications);
   }
 
+  static void openBuddyGifts() {
+    Get.toNamed(AppRoutes.buddyGifts);
+  }
+
   static bool get hasNotificationBadge {
     if (!Get.isRegistered<NotificationsController>()) return false;
     return Get.find<NotificationsController>().unreadCount.value > 0;

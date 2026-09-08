@@ -46,6 +46,7 @@ import '../views/calories_burn_view.dart';
 import '../views/water_tracker_view.dart';
 import '../views/weight_tracker_view.dart';
 import '../views/weekly_meal_plan_view.dart';
+import '../views/buddy_gifts_view.dart';
 import '../core/app_page_transitions.dart';
 import 'app_routes.dart';
 
@@ -80,11 +81,11 @@ abstract final class AppPages {
       page: () => const RegisterView(),
       binding: BindingsBuilder(() => Get.lazyPut(AuthController.new)),
     ),
-    AppPageTransitions.getPage(
+    AppPageTransitions.onboardingPage(
       name: AppRoutes.goalSetup,
       page: () => const GoalSetupView(),
     ),
-    AppPageTransitions.getPage(
+    AppPageTransitions.onboardingPage(
       name: AppRoutes.goalAmount,
       page: () => const GoalAmountView(),
     ),
@@ -92,7 +93,7 @@ abstract final class AppPages {
       name: AppRoutes.myGoals,
       page: () => const MyGoalsView(),
     ),
-    AppPageTransitions.getPage(
+    AppPageTransitions.onboardingPage(
       name: AppRoutes.personalDetails,
       page: () => const PersonalDetailsView(),
     ),
@@ -100,11 +101,11 @@ abstract final class AppPages {
       name: AppRoutes.personalInformation,
       page: () => const PersonalInformationView(),
     ),
-    AppPageTransitions.getPage(
+    AppPageTransitions.onboardingPage(
       name: AppRoutes.goalWeight,
       page: () => const GoalWeightView(),
     ),
-    AppPageTransitions.getPage(
+    AppPageTransitions.onboardingPage(
       name: AppRoutes.activityLevel,
       page: () => const ActivityLevelView(),
       binding: BindingsBuilder(() {
@@ -113,7 +114,7 @@ abstract final class AppPages {
         }
       }),
     ),
-    AppPageTransitions.getPage(
+    AppPageTransitions.onboardingPage(
       name: AppRoutes.healthProblem,
       page: () => const HealthProblemView(),
       binding: BindingsBuilder(() {
@@ -226,6 +227,10 @@ abstract final class AppPages {
       binding: BindingsBuilder(() {
         HomeBinding().dependencies();
       }),
+    ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.buddyGifts,
+      page: () => const BuddyGiftsView(),
     ),
     AppPageTransitions.getPage(
       name: AppRoutes.dailySummary,

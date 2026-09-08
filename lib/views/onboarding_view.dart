@@ -11,8 +11,7 @@ import '../routes/app_routes.dart';
 import '../services/local_storage_service.dart';
 import '../theme/app_colors.dart';
 
-/// Welcome carousel matching the FitBuddy onboarding design:
-/// hero → logo → title → body → 3 feature columns → dots → Next.
+/// Welcome carousel: Fitness Buddy → AI meal plan → streak gifts.
 class OnboardingView extends StatefulWidget {
   const OnboardingView({super.key});
 
@@ -28,75 +27,54 @@ class _OnboardingViewState extends State<OnboardingView> {
 
   static const List<_OnboardPage> _pages = [
     _OnboardPage(
-      image: 'assets/image/onborading1_white.png',
-      darkImage: 'assets/image/onbording1_dark.png',
-      title: 'Eat Healthy',
-      titleAccent: 'Live Healthy',
-      body: 'Track meals and build better eating habits every day.',
+      image: 'assets/image/buddy/buddy_hero.png',
+      title: 'Meet Your',
+      titleAccent: 'Fitness Buddy',
+      body: 'Your friendly coach for healthier, happier days.',
+      featureStyle: _FeatureStyle.outlineIcons,
+      features: [
+        _FeatureItem(title: 'Personalized', icon: Icons.person_outline_rounded),
+        _FeatureItem(title: 'Daily Tips', icon: Icons.lightbulb_outline_rounded),
+        _FeatureItem(title: 'Motivation', icon: Icons.star_outline_rounded),
+      ],
+    ),
+    _OnboardPage(
+      image: 'assets/image/buddy/buddy_meal_plan.png',
+      title: 'AI Meal Plan',
+      titleAccent: 'Made For You',
+      body:
+          'Get a weekly plan that matches your calories, macros, and goals.',
+      featureStyle: _FeatureStyle.chips,
       features: [
         _FeatureItem(
-          asset: 'assets/image/profile_heart.png',
-          darkAsset: 'assets/image/profile_heart_dark.png',
-          title: 'Personalized',
+          title: 'Weekly Plan',
+          icon: Icons.calendar_today_outlined,
         ),
         _FeatureItem(
-          asset: 'assets/image/run.png',
-          darkAsset: 'assets/image/run_dark.png',
-          title: 'Activity Tracking',
+          title: 'Smart Meals',
+          icon: Icons.lightbulb_outline_rounded,
         ),
         _FeatureItem(
-          asset: 'assets/image/drop_water.png',
-          darkAsset: 'assets/image/drop_water_dark.png',
-          title: 'Hydration',
+          title: 'Easy Logging',
+          icon: Icons.check_circle_outline_rounded,
         ),
       ],
     ),
     _OnboardPage(
-      image: 'assets/image/onboarding2_white.png',
-      darkImage: 'assets/image/onboarding2_dark.png',
-      title: 'AI-Powered',
-      titleAccent: 'Tracking',
-      body: 'Scan a barcode or search — MyCaloriePal fills in calories for you.',
-      features: [
-        _FeatureItem(
-          asset: 'assets/image/barcode.png',
-          darkAsset: 'assets/image/barcode_dark.png',
-          title: 'Scan & Log',
-        ),
-        _FeatureItem(
-          asset: 'assets/image/search.png',
-          darkAsset: 'assets/image/search_dark.png',
-          title: 'Smart Search',
-        ),
-        _FeatureItem(
-          asset: 'assets/image/progress.png',
-          darkAsset: 'assets/image/progress_dark.png',
-          title: 'Track Progress',
-        ),
+      image: 'assets/image/buddy/buddy_streak.png',
+      title: 'Stay Consistent',
+      titleAccent: 'Earn Gifts',
+      body:
+          'Log meals every day. Hit big streaks and we gift you real rewards.',
+      featureStyle: _FeatureStyle.tags,
+      giftHighlights: [
+        _GiftHighlight(label: '50 days', value: 'Gym Shaker'),
+        _GiftHighlight(label: '100 days', value: 'T-Shirt'),
       ],
-    ),
-    _OnboardPage(
-      image: 'assets/image/onboarding3_white.png',
-      darkImage: 'assets/image/onboarding3_dark.png',
-      title: 'Personalized',
-      titleAccent: 'For You',
-      body: 'Goals, macros, and reminders tailored to your lifestyle.',
       features: [
-        _FeatureItem(
-          asset: 'assets/image/nutrition.png',
-          darkAsset: 'assets/image/nutrition_dark.png',
-          title: 'Nutrition Tracking',
-        ),
-        _FeatureItem(
-          asset: 'assets/image/Weight_progress.png',
-          darkAsset: 'assets/image/Weight_progress_dark.png',
-          title: 'Weight Progress',
-        ),
-        _FeatureItem(
-          asset: 'assets/image/drop_water.png',
-          darkAsset: 'assets/image/drop_water_dark.png',
-          title: 'Water Reminder',
-        ),
+        _FeatureItem(title: 'Streaks'),
+        _FeatureItem(title: 'Gym Shaker'),
+        _FeatureItem(title: 'Free T-Shirt'),
       ],
     ),
   ];
@@ -171,11 +149,16 @@ class _OnboardingViewState extends State<OnboardingView> {
                     itemCount: _pages.length,
                     onPageChanged: _controller.goToPage,
                     itemBuilder: (_, index) {
-                      return _OnboardSlide(
-                        page: _pages[index],
-                        responsive: r,
-                        short: short,
-                      );
+                      return Obx(() {
+                        final active =
+                            _controller.pageIndex.value == index;
+                        return _OnboardSlide(
+                          page: _pages[index],
+                          responsive: r,
+                          short: short,
+                          isActive: active,
+                        );
+                      });
                     },
                   ),
                 ),
@@ -228,7 +211,7 @@ class _OnboardingViewState extends State<OnboardingView> {
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
-                              r.scale(16, tablet: 18),
+                              r.scale(28, tablet: 30),
                             ),
                           ),
                         ),
@@ -270,8 +253,13 @@ class _SkipButton extends StatelessWidget {
               vertical: r.scale(7),
             ),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : const Color(0xFFF2F2F7),
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark
+                    ? AppColors.darkBorder
+                    : const Color(0xFFE5E5EA),
+              ),
             ),
             child: Text(
               'Skip',
@@ -290,24 +278,209 @@ class _SkipButton extends StatelessWidget {
   }
 }
 
-class _OnboardSlide extends StatelessWidget {
+class _OnboardSlide extends StatefulWidget {
   const _OnboardSlide({
     required this.page,
     required this.responsive,
     required this.short,
+    required this.isActive,
   });
 
   final _OnboardPage page;
   final Responsive responsive;
   final bool short;
+  final bool isActive;
+
+  @override
+  State<_OnboardSlide> createState() => _OnboardSlideState();
+}
+
+class _OnboardSlideState extends State<_OnboardSlide>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _enter;
+  late final Animation<double> _imageScale;
+  late final Animation<double> _imageFade;
+  late final Animation<Offset> _imageSlide;
+  late final Animation<double> _contentFade;
+  late final Animation<Offset> _contentSlide;
+
+  @override
+  void initState() {
+    super.initState();
+    _enter = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+
+    // Pop-up: grow from small with a spring bounce.
+    _imageScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 1.08)
+            .chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 70,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.08, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 30,
+      ),
+    ]).animate(_enter);
+
+    _imageFade = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _enter,
+        curve: const Interval(0, 0.35, curve: Curves.easeOut),
+      ),
+    );
+
+    // Tiny settle upward so it feels like it pops into place.
+    _imageSlide = Tween<Offset>(
+      begin: const Offset(0, 0.06),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _enter,
+        curve: const Interval(0, 0.7, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _contentFade = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _enter,
+        curve: const Interval(0.45, 1, curve: Curves.easeOut),
+      ),
+    );
+    _contentSlide = Tween<Offset>(
+      begin: const Offset(0, 0.06),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _enter,
+        curve: const Interval(0.45, 1, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    if (widget.isActive) {
+      _enter.forward();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _OnboardSlide oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _enter.forward(from: 0);
+    } else if (!widget.isActive && oldWidget.isActive) {
+      _enter.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _enter.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
-    final r = responsive;
+    final r = widget.responsive;
+    final page = widget.page;
+    final short = widget.short;
     final isDark = AppColors.isDark(context);
     final titleSize = r.scale(short ? 28 : 32, tablet: 36, desktop: 40);
     final bodySize = r.scale(short ? 14 : 15, tablet: 16, desktop: 17);
+
+    final titleBlock = Text.rich(
+      TextSpan(
+        style: TextStyle(
+          fontSize: titleSize,
+          fontWeight: FontWeight.w800,
+          color: isDark
+              ? AppColors.textPrimaryOf(context)
+              : const Color(0xFF1A1F2C),
+          height: 1.18,
+          letterSpacing: -0.5,
+        ),
+        children: [
+          TextSpan(text: '${page.title}\n'),
+          TextSpan(
+            text: page.titleAccent,
+            style: const TextStyle(color: AppColors.primary),
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+    );
+
+    final bodyBlock = Padding(
+      padding: EdgeInsets.symmetric(horizontal: r.scale(12)),
+      child: Text(
+        page.body,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: bodySize,
+          fontWeight: FontWeight.w400,
+          height: 1.4,
+          color: isDark
+              ? AppColors.darkTextSecondary
+              : AppColors.textSecondaryOf(context),
+        ),
+      ),
+    );
+
+    final imageBlock = Expanded(
+      flex: page.titleFirst ? 11 : 14,
+      child: FadeTransition(
+        opacity: _imageFade,
+        child: SlideTransition(
+          position: _imageSlide,
+          child: ScaleTransition(
+            alignment: Alignment.center,
+            scale: _imageScale,
+            child: _OnboardImage(
+              assetPath:
+                  isDark ? (page.darkImage ?? page.image) : page.image,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final giftsBlock = page.giftHighlights.isEmpty
+        ? null
+        : Row(
+            children: [
+              for (var i = 0; i < page.giftHighlights.length; i++) ...[
+                if (i > 0) SizedBox(width: r.scale(10)),
+                Expanded(
+                  child: _GiftHighlightCard(
+                    highlight: page.giftHighlights[i],
+                  ),
+                ),
+              ],
+            ],
+          );
+
+    final featuresBlock = _FeaturesRow(
+      features: page.features,
+      style: page.featureStyle,
+      compact: short,
+    );
+
+    final content = Column(
+      children: [
+        titleBlock,
+        SizedBox(height: r.scale(8, tablet: 10)),
+        bodyBlock,
+        if (giftsBlock != null) ...[
+          SizedBox(height: r.scale(short ? 10 : 14)),
+          giftsBlock,
+        ],
+        SizedBox(height: r.scale(short ? 14 : 18)),
+        featuresBlock,
+      ],
+    );
 
     return Center(
       child: ConstrainedBox(
@@ -316,68 +489,51 @@ class _OnboardSlide extends StatelessWidget {
         ),
         child: Column(
           children: [
-            const Spacer(flex: 2),
-            Expanded(
-              flex: 14,
-              child: _OnboardImage(
-                assetPath:
-                    isDark ? (page.darkImage ?? page.image) : page.image,
-              ),
-            ),
-            const Spacer(flex: 2),
-            Text.rich(
-              TextSpan(
-                style: TextStyle(
-                  fontSize: titleSize,
-                  fontWeight: FontWeight.w800,
-                  color: isDark
-                      ? AppColors.textPrimaryOf(context)
-                      : const Color(0xFF1A1F2C),
-                  height: 1.18,
-                  letterSpacing: -0.5,
-                ),
-                children: [
-                  TextSpan(text: '${page.title}\n'),
-                  TextSpan(
-                    text: page.titleAccent,
-                    style: const TextStyle(color: AppColors.primary),
+            const Spacer(flex: 1),
+            if (page.titleFirst) ...[
+              FadeTransition(
+                opacity: _contentFade,
+                child: SlideTransition(
+                  position: _contentSlide,
+                  child: Column(
+                    children: [
+                      titleBlock,
+                      SizedBox(height: r.scale(8, tablet: 10)),
+                      bodyBlock,
+                    ],
                   ),
-                ],
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: r.scale(8, tablet: 10)),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: r.scale(12)),
-              child: Text(
-                page.body,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: bodySize,
-                  fontWeight: FontWeight.w400,
-                  height: 1.4,
-                  color: isDark
-                      ? AppColors.darkTextSecondary
-                      : AppColors.textSecondaryOf(context),
                 ),
               ),
-            ),
-            const Spacer(flex: 2),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < page.features.length; i++) ...[
-                  if (i > 0) SizedBox(width: r.scale(10)),
-                  Expanded(
-                    child: _FeatureColumn(
-                      item: page.features[i],
-                      compact: short,
-                    ),
+              SizedBox(height: r.scale(short ? 10 : 14)),
+              imageBlock,
+              FadeTransition(
+                opacity: _contentFade,
+                child: SlideTransition(
+                  position: _contentSlide,
+                  child: Column(
+                    children: [
+                      if (giftsBlock != null) ...[
+                        SizedBox(height: r.scale(short ? 10 : 14)),
+                        giftsBlock,
+                      ],
+                      SizedBox(height: r.scale(short ? 10 : 12)),
+                      featuresBlock,
+                    ],
                   ),
-                ],
-              ],
-            ),
-            const Spacer(flex: 2),
+                ),
+              ),
+            ] else ...[
+              imageBlock,
+              const Spacer(flex: 1),
+              FadeTransition(
+                opacity: _contentFade,
+                child: SlideTransition(
+                  position: _contentSlide,
+                  child: content,
+                ),
+              ),
+            ],
+            const Spacer(flex: 1),
           ],
         ),
       ),
@@ -385,8 +541,99 @@ class _OnboardSlide extends StatelessWidget {
   }
 }
 
-class _FeatureColumn extends StatelessWidget {
-  const _FeatureColumn({required this.item, required this.compact});
+class _GiftHighlightCard extends StatelessWidget {
+  const _GiftHighlightCard({required this.highlight});
+
+  final _GiftHighlight highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    final isDark = AppColors.isDark(context);
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: r.scale(10),
+        vertical: r.scale(12),
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : const Color(0xFFE5E5EA),
+        ),
+      ),
+      child: Text.rich(
+        TextSpan(
+          style: TextStyle(
+            fontSize: r.scale(13),
+            fontWeight: FontWeight.w600,
+            color: isDark
+                ? AppColors.darkTextPrimary
+                : const Color(0xFF1A1F2C),
+          ),
+          children: [
+            TextSpan(text: '${highlight.label} → '),
+            TextSpan(
+              text: highlight.value,
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+enum _FeatureStyle { outlineIcons, chips, tags }
+
+class _FeaturesRow extends StatelessWidget {
+  const _FeaturesRow({
+    required this.features,
+    required this.style,
+    required this.compact,
+  });
+
+  final List<_FeatureItem> features;
+  final _FeatureStyle style;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < features.length; i++) ...[
+          if (i > 0) SizedBox(width: r.scale(style == _FeatureStyle.chips ? 8 : 10)),
+          Expanded(
+            child: switch (style) {
+              _FeatureStyle.outlineIcons => _OutlineFeature(
+                  item: features[i],
+                  compact: compact,
+                ),
+              _FeatureStyle.chips => _ChipFeature(
+                  item: features[i],
+                  compact: compact,
+                ),
+              _FeatureStyle.tags => _TagFeature(item: features[i]),
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _OutlineFeature extends StatelessWidget {
+  const _OutlineFeature({required this.item, required this.compact});
 
   final _FeatureItem item;
   final bool compact;
@@ -395,24 +642,16 @@ class _FeatureColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = context.responsive;
     final isDark = AppColors.isDark(context);
-    final iconBox = r.scale(compact ? 48 : 52, tablet: 56);
-    final asset = isDark ? (item.darkAsset ?? item.asset) : item.asset;
+    final color = isDark
+        ? AppColors.darkTextPrimary
+        : const Color(0xFF3A3A3C);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Center(
-          child: SizedBox(
-            width: iconBox,
-            height: iconBox,
-            child: Image.asset(
-              asset,
-              width: iconBox,
-              height: iconBox,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
-            ),
-          ),
+        Icon(
+          item.icon ?? Icons.star_outline_rounded,
+          size: r.scale(compact ? 26 : 28),
+          color: color,
         ),
         SizedBox(height: r.scale(compact ? 8 : 10)),
         Text(
@@ -424,9 +663,7 @@ class _FeatureColumn extends StatelessWidget {
             fontSize: r.scale(compact ? 11 : 12, tablet: 13),
             fontWeight: FontWeight.w600,
             height: 1.25,
-            color: isDark
-                ? AppColors.darkTextPrimary
-                : AppColors.textPrimaryOf(context),
+            color: color,
           ),
         ),
       ],
@@ -434,16 +671,122 @@ class _FeatureColumn extends StatelessWidget {
   }
 }
 
+class _ChipFeature extends StatelessWidget {
+  const _ChipFeature({required this.item, required this.compact});
+
+  final _FeatureItem item;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    final isDark = AppColors.isDark(context);
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: r.scale(8),
+        vertical: r.scale(compact ? 10 : 12),
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+        ],
+        border: isDark
+            ? Border.all(color: AppColors.darkBorder)
+            : null,
+      ),
+      child: Column(
+        children: [
+          Icon(
+            item.icon ?? Icons.star_outline_rounded,
+            size: r.scale(compact ? 18 : 20),
+            color: isDark
+                ? AppColors.darkTextPrimary
+                : const Color(0xFF1C1C1E),
+          ),
+          SizedBox(height: r.scale(6)),
+          Text(
+            item.title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: r.scale(compact ? 10 : 11, tablet: 12),
+              fontWeight: FontWeight.w600,
+              height: 1.2,
+              color: isDark
+                  ? AppColors.darkTextPrimary
+                  : const Color(0xFF1C1C1E),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TagFeature extends StatelessWidget {
+  const _TagFeature({required this.item});
+
+  final _FeatureItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    final isDark = AppColors.isDark(context);
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: r.scale(8),
+        vertical: r.scale(8),
+      ),
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : const Color(0xFFE5E5EA),
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        item.title,
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: r.scale(11, tablet: 12),
+          fontWeight: FontWeight.w600,
+          color: isDark
+              ? AppColors.darkTextPrimary
+              : const Color(0xFF3A3A3C),
+        ),
+      ),
+    );
+  }
+}
+
 class _FeatureItem {
   const _FeatureItem({
     required this.title,
-    required this.asset,
-    this.darkAsset,
+    this.icon,
   });
 
-  final String asset;
-  final String? darkAsset;
+  final IconData? icon;
   final String title;
+}
+
+class _GiftHighlight {
+  const _GiftHighlight({required this.label, required this.value});
+
+  final String label;
+  final String value;
 }
 
 class _OnboardPage {
@@ -454,6 +797,9 @@ class _OnboardPage {
     required this.body,
     required this.features,
     this.darkImage,
+    this.giftHighlights = const [],
+    this.featureStyle = _FeatureStyle.outlineIcons,
+    this.titleFirst = false,
   });
 
   final String image;
@@ -462,6 +808,9 @@ class _OnboardPage {
   final String titleAccent;
   final String body;
   final List<_FeatureItem> features;
+  final List<_GiftHighlight> giftHighlights;
+  final _FeatureStyle featureStyle;
+  final bool titleFirst;
 }
 
 /// Renders PNG assets normally, and SVG assets that may wrap an embedded PNG.
@@ -521,6 +870,7 @@ class _OnboardImageState extends State<_OnboardImage> {
         height: double.infinity,
         alignment: Alignment.center,
         filterQuality: FilterQuality.high,
+        gaplessPlayback: true,
       );
     }
 

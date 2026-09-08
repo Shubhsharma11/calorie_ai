@@ -20,14 +20,14 @@ abstract final class WeightGoalCalculator {
     return switch (goal) {
       null || GoalType.maintainWeight => _roundKg(current),
       GoalType.loseWeight => () {
-          const minKg = 40.0;
+          const minKg = 30.0;
           final ceiling = current - 0.5;
           if (ceiling < minKg) return _roundKg(current);
           final target = (current - _defaultLossKg).clamp(minKg, ceiling);
           return _roundKg(target);
         }(),
       GoalType.gainWeight => () {
-          const maxKg = 200.0;
+          const maxKg = 300.0;
           final floor = current + 0.5;
           if (floor > maxKg) return _roundKg(current);
           final target = (current + _defaultGainKg).clamp(floor, maxKg);

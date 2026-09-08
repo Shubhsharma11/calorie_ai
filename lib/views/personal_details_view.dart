@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
 import '../controllers/settings_controller.dart';
@@ -13,8 +11,9 @@ import '../models/onboarding_request_model.dart';
 import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
-import '../widgets/primary_button.dart';
-import '../widgets/responsive_page.dart';
+import '../widgets/onboarding_step_scaffold.dart';
+
+enum _PersonalStep { gender, age, height }
 
 class PersonalDetailsView extends StatefulWidget {
   const PersonalDetailsView({super.key});
@@ -26,345 +25,243 @@ class PersonalDetailsView extends StatefulWidget {
 class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   late final UserController _user = Get.find<UserController>();
   late final SettingsController _settings = Get.find<SettingsController>();
-  late final TextEditingController _ageCtrl;
-  late final TextEditingController _heightCmCtrl;
-  late final TextEditingController _heightFeetCtrl;
-  late final TextEditingController _heightInchesCtrl;
-  late final TextEditingController _weightCtrl;
-  late String _gender;
   late ProfileSyncSnapshot _baseline;
 
-  final _ageFocus = FocusNode();
-  final _genderFocus = FocusNode();
-  final _heightFocus = FocusNode();
-  final _weightFocus = FocusNode();
-
-  bool _heightUseCm = true;
-  bool _weightUseKg = true;
-
-  String? _ageError;
-  String? _genderError;
-  String? _heightError;
-  String? _weightError;
-
   static const _genders = ['Male', 'Female', 'Other'];
-  static const _ageIconAsset = 'assets/image/age.svg';
-  static const _genderIconAsset = 'assets/image/gemder.svg';
-  static const _heightIconAsset = 'assets/image/height.svg';
-  static const _weightIconAsset = 'assets/image/gym.svg';
+  static final _ages = [for (var i = 13; i <= 100; i++) i];
+  static final _heightsCm = [for (var i = 100; i <= 275; i++) i];
+
+  static const _stepOutDuration = Duration(milliseconds: 220);
+  static const _stepInDuration = Duration(milliseconds: 280);
+
+  late final FixedExtentScrollController _ageCtrl;
+  late final FixedExtentScrollController _heightCtrl;
+
+  late _PersonalStep _step;
+  bool _heightUseCm = true;
+  String? _stepError;
+  bool _saving = false;
+  bool _transitioning = false;
+  double _contentOpacity = 1;
+  Offset _contentSlide = Offset.zero;
+
+  late String _gender;
+  late int _age;
+  late int _heightCm;
+
+  bool get _fromProfile => RouteArgs.isEditingFromProfile;
 
   @override
   void initState() {
     super.initState();
-    final fromProfile = RouteArgs.isEditingFromProfile;
-    _weightUseKg = _settings.useMetricUnits.value;
+    _heightUseCm = _settings.useMetricUnits.value;
 
-    if (fromProfile || _user.personalDetailsComplete) {
-      _seedPersonalFieldsFromUser(requireAll: true);
-    } else {
+    if (!_fromProfile && !_user.personalDetailsComplete) {
       if (!_user.hasOnboardingDraft) {
         _user.resetPersonalDetailsForOnboarding();
       }
-      _seedPersonalFieldsFromUser(requireAll: false);
     }
 
-    _ageCtrl.addListener(_onFieldChanged);
-    _heightCmCtrl.addListener(_onFieldChanged);
-    _heightFeetCtrl.addListener(_onFieldChanged);
-    _heightInchesCtrl.addListener(_onFieldChanged);
-    _weightCtrl.addListener(_onFieldChanged);
+    final u = _user.user;
+    _gender = _genders.contains(u.gender) ? u.gender! : _genders.first;
+    _age = (u.age != null && u.age! >= 13 && u.age! <= 100) ? u.age! : 25;
+    _heightCm = (u.heightCm != null &&
+            BodyMeasurementUnits.isValidCm(u.heightCm!))
+        ? u.heightCm!
+        : 170;
+
+    _ageCtrl = FixedExtentScrollController(
+      initialItem: _ages.indexOf(_age).clamp(0, _ages.length - 1),
+    );
+    _heightCtrl = FixedExtentScrollController(
+      initialItem: _heightIndexForCm(_heightCm),
+    );
+
+    _step = switch (RouteArgs.onboardingStartStep) {
+      RouteArgs.stepHeight => _PersonalStep.height,
+      RouteArgs.stepAge => _PersonalStep.age,
+      _ => _PersonalStep.gender,
+    };
 
     _baseline = _user.captureProfileSyncSnapshot();
   }
 
-  void _seedPersonalFieldsFromUser({required bool requireAll}) {
-    final u = _user.user;
-    final gender = u.gender?.trim() ?? '';
-    final age = u.age;
-    final heightCm = u.heightCm;
-    final weightKg = u.weightKg;
-    _gender = requireAll || gender.isNotEmpty ? gender : '';
-    _ageCtrl = TextEditingController(
-      text: requireAll || (age != null && age > 0) ? '${age ?? ''}' : '',
-    );
-    _heightCmCtrl = TextEditingController(
-      text: requireAll || (heightCm != null && heightCm > 0)
-          ? '${heightCm ?? ''}'
-          : '',
-    );
-    if (requireAll || (heightCm != null && heightCm > 0)) {
-      final feetInches = BodyMeasurementUnits.feetInchesFromCm(heightCm!);
-      _heightFeetCtrl = TextEditingController(text: '${feetInches.feet}');
-      _heightInchesCtrl = TextEditingController(text: '${feetInches.inches}');
-    } else {
-      _heightFeetCtrl = TextEditingController();
-      _heightInchesCtrl = TextEditingController();
+  int get _progressIndex => switch (_step) {
+        _PersonalStep.gender => OnboardingFlowProgress.gender,
+        _PersonalStep.age => OnboardingFlowProgress.age,
+        _PersonalStep.height => OnboardingFlowProgress.height,
+      };
+
+  int _heightIndexForCm(int cm) {
+    if (_heightUseCm) {
+      return _heightsCm.indexOf(cm).clamp(0, _heightsCm.length - 1);
     }
-    _weightCtrl = TextEditingController(
-      text: requireAll || (weightKg != null && weightKg > 0)
-          ? _weightUseKg
-              ? '${weightKg ?? ''}'
-              : '${BodyMeasurementUnits.lbsFromKg(weightKg!)}'
-          : '',
-    );
+    final fi = BodyMeasurementUnits.feetInchesFromCm(cm);
+    final labels = _heightFtLabels;
+    final label = "${fi.feet}'${fi.inches}\"";
+    final idx = labels.indexOf(label);
+    return idx >= 0 ? idx : labels.length ~/ 2;
   }
 
-  void _onFieldChanged() {
-    _clearAgeError();
-    _clearHeightError();
-    _clearWeightError();
-    _syncDraftFromFields();
-  }
-
-  void _syncDraftFromFields() {
-    if (RouteArgs.isEditingFromProfile) return;
-
-    final ageText = _ageCtrl.text.trim();
-    if (ageText.isEmpty) {
-      _user.user.age = null;
-    } else {
-      final age = int.tryParse(ageText);
-      if (age != null) _user.user.age = age;
+  List<String> get _heightFtLabels {
+    final out = <String>[];
+    for (var feet = 3; feet <= 9; feet++) {
+      for (var inches = 0; inches <= 11; inches++) {
+        if (feet == 3 && inches < 3) continue;
+        if (feet == 9 && inches > 0) continue;
+        out.add("$feet'$inches\"");
+      }
     }
-
-    _user.user.gender = _gender.trim().isEmpty ? null : _gender;
-
-    final height = _parseHeightCm();
-    _user.user.heightCm = height;
-
-    final weight = _parseWeightKg();
-    _user.user.weightKg = weight?.round();
-
-    _user.scheduleOnboardingDraftSave();
-  }
-
-  void _clearAgeError() {
-    if (_ageError != null) setState(() => _ageError = null);
-  }
-
-  void _clearHeightError() {
-    if (_heightError != null) setState(() => _heightError = null);
-  }
-
-  void _clearWeightError() {
-    if (_weightError != null) setState(() => _weightError = null);
+    return out;
   }
 
   @override
   void dispose() {
-    _ageFocus.dispose();
-    _genderFocus.dispose();
-    _heightFocus.dispose();
-    _weightFocus.dispose();
     _ageCtrl.dispose();
-    _heightCmCtrl.dispose();
-    _heightFeetCtrl.dispose();
-    _heightInchesCtrl.dispose();
-    _weightCtrl.dispose();
+    _heightCtrl.dispose();
     super.dispose();
   }
 
-  void _toggleHeightUnit(bool useCm) {
-    if (useCm == _heightUseCm) return;
-
-    if (useCm) {
-      final feet = int.tryParse(_heightFeetCtrl.text.trim());
-      final inches = int.tryParse(_heightInchesCtrl.text.trim());
-      if (feet != null &&
-          inches != null &&
-          _heightFeetCtrl.text.trim().isNotEmpty &&
-          _heightInchesCtrl.text.trim().isNotEmpty) {
-        _heightCmCtrl.text =
-            '${BodyMeasurementUnits.cmFromFeetInches(feet, inches)}';
-      } else {
-        _heightCmCtrl.clear();
-      }
-    } else {
-      final cm = int.tryParse(_heightCmCtrl.text.trim());
-      if (cm != null && _heightCmCtrl.text.trim().isNotEmpty) {
-        final converted = BodyMeasurementUnits.feetInchesFromCm(cm);
-        _heightFeetCtrl.text = '${converted.feet}';
-        _heightInchesCtrl.text = '${converted.inches}';
-      } else {
-        _heightFeetCtrl.clear();
-        _heightInchesCtrl.clear();
-      }
-    }
-
-    setState(() {
-      _heightUseCm = useCm;
-      _heightError = null;
-    });
-    _syncDraftFromFields();
+  void _syncDraft() {
+    if (_fromProfile) return;
+    final u = _user.user;
+    u.gender = _gender;
+    u.age = _age;
+    u.heightCm = _heightCm;
+    _user.scheduleOnboardingDraftSave();
   }
 
-  void _toggleWeightUnit(bool useKg) {
-    if (useKg == _weightUseKg) return;
-
-    final text = _weightCtrl.text.trim();
-    if (text.isNotEmpty) {
-      final parsed = int.tryParse(text);
-      if (parsed != null) {
-        _weightCtrl.text = useKg
-            ? '${BodyMeasurementUnits.kgFromLbs(parsed.toDouble())}'
-            : '${BodyMeasurementUnits.lbsFromKg(parsed)}';
-      }
-    }
-
-    setState(() {
-      _weightUseKg = useKg;
-      _weightError = null;
-    });
-    _syncDraftFromFields();
-  }
-
-  Future<void> _selectWeightUnit(bool useKg) async {
-    _toggleWeightUnit(useKg);
-    await _settings.toggleUseMetricUnits(useKg);
-  }
-
-  int? _parseHeightCm() {
-    if (_heightUseCm) {
-      return int.tryParse(_heightCmCtrl.text.trim());
-    }
-
-    final feet = int.tryParse(_heightFeetCtrl.text.trim());
-    final inches = int.tryParse(_heightInchesCtrl.text.trim());
-    if (feet == null || inches == null) return null;
-    return BodyMeasurementUnits.cmFromFeetInches(feet, inches);
-  }
-
-  int? _parseWeightKg() {
-    final parsed = int.tryParse(_weightCtrl.text.trim());
-    if (parsed == null) return null;
-    return _weightUseKg
-        ? parsed
-        : BodyMeasurementUnits.kgFromLbs(parsed.toDouble());
-  }
-
-  bool _validateFields() {
-    final ageText = _ageCtrl.text.trim();
-
-    String? ageError;
-    String? genderError;
-    String? heightError;
-    String? weightError;
-
-    if (ageText.isEmpty) {
-      ageError = 'Enter your age';
-    } else {
-      final age = int.tryParse(ageText);
-      if (age == null || age < 13 || age > 100) {
-        ageError = 'Use an age between 13 and 100';
-      }
-    }
-
-    if (_gender.isEmpty) {
-      genderError = 'Select your gender';
-    }
-
-    if (_heightUseCm) {
-      final heightText = _heightCmCtrl.text.trim();
-      if (heightText.isEmpty) {
-        heightError = 'Enter your height';
-      } else {
-        final height = int.tryParse(heightText);
-        if (height == null || !BodyMeasurementUnits.isValidCm(height)) {
-          heightError = 'Use a height between 100 and 250 cm';
+  bool _validateCurrentStep() {
+    String? error;
+    switch (_step) {
+      case _PersonalStep.gender:
+        if (!_genders.contains(_gender)) error = 'Select your gender';
+      case _PersonalStep.age:
+        if (_age < 13 || _age > 100) {
+          error = 'Use an age between 13 and 100';
         }
-      }
-    } else {
-      final feetText = _heightFeetCtrl.text.trim();
-      final inchesText = _heightInchesCtrl.text.trim();
-      if (feetText.isEmpty || inchesText.isEmpty) {
-        heightError = 'Enter your height in feet and inches';
-      } else {
-        final feet = int.tryParse(feetText);
-        final inches = int.tryParse(inchesText);
-        if (feet == null ||
-            inches == null ||
-            !BodyMeasurementUnits.isValidFeetInches(feet, inches)) {
-          heightError = 'Use a valid height (e.g. 5 ft 7 in)';
+      case _PersonalStep.height:
+        if (!BodyMeasurementUnits.isValidCm(_heightCm)) {
+          error = 'Use a height between 100 and 275 cm';
         }
-      }
     }
+    setState(() => _stepError = error);
+    return error == null;
+  }
 
-    final weightText = _weightCtrl.text.trim();
-    if (weightText.isEmpty) {
-      weightError = 'Enter your weight';
-    } else {
-      final weight = int.tryParse(weightText);
-      if (weight == null) {
-        weightError = _weightUseKg
-            ? 'Use a weight between 30 and 300 kg'
-            : 'Use a weight between 66 and 661 lb';
-      } else if (_weightUseKg) {
-        if (!BodyMeasurementUnits.isValidKg(weight)) {
-          weightError = 'Use a weight between 30 and 300 kg';
-        }
-      } else if (!BodyMeasurementUnits.isValidLbs(weight)) {
-        weightError = 'Use a weight between 66 and 661 lb';
-      }
-    }
-
+  Future<void> _onGenderSelected(String gender) async {
+    if (_transitioning) return;
     setState(() {
-      _ageError = ageError;
-      _genderError = genderError;
-      _heightError = heightError;
-      _weightError = weightError;
+      _gender = gender;
+      _stepError = null;
     });
-
-    return ageError == null &&
-        genderError == null &&
-        heightError == null &&
-        weightError == null;
+    _syncDraft();
   }
 
-  void _scrollToFirstError() {
-    final focusNode = _ageError != null
-        ? _ageFocus
-        : _genderError != null
-            ? _genderFocus
-            : _heightError != null
-                ? _heightFocus
-                : _weightError != null
-                    ? _weightFocus
-                    : null;
+  Future<void> _onContinue() async {
+    if (_transitioning) return;
+    if (!_validateCurrentStep()) return;
+    _syncDraft();
 
-    if (focusNode == null) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      focusNode.requestFocus();
-      final context = focusNode.context;
-      if (context == null) return;
-      Scrollable.ensureVisible(
-        context,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        alignment: 0.12,
-      );
-    });
-  }
-
-  Future<void> _save() async {
-    if (!_validateFields()) {
-      _scrollToFirstError();
+    if (_fromProfile) {
+      if (_step != _PersonalStep.height) {
+        await _transitionTo(
+          _PersonalStep.values[_step.index + 1],
+          forward: true,
+        );
+        return;
+      }
+      await _saveProfile();
       return;
     }
 
-    final age = int.parse(_ageCtrl.text.trim());
-    final height = _parseHeightCm()!;
-    final weight = _parseWeightKg()!;
+    // Onboarding: gender → age → goal → height → weight goal
+    if (_step == _PersonalStep.gender) {
+      await _transitionTo(_PersonalStep.age, forward: true);
+      return;
+    }
+    if (_step == _PersonalStep.age) {
+      await _user.persistOnboardingStep(AppRoutes.goalSetup);
+      Get.offNamed(AppRoutes.goalSetup);
+      return;
+    }
+
+    // Height → weight goal screen (Current / Goal).
+    _user.markPersonalDetailsComplete();
+    _user.onProfileUpdated();
+    await _user.persistOnboardingStep(AppRoutes.goalAmount);
+    Get.offNamed(AppRoutes.goalAmount);
+  }
+
+  Future<void> _onBack() async {
+    if (_transitioning) return;
+
+    if (_fromProfile) {
+      if (_step == _PersonalStep.gender) {
+        Get.back();
+        return;
+      }
+      await _transitionTo(
+        _PersonalStep.values[_step.index - 1],
+        forward: false,
+      );
+      return;
+    }
+
+    if (_step == _PersonalStep.gender) {
+      Get.back();
+      return;
+    }
+    if (_step == _PersonalStep.age) {
+      await _transitionTo(_PersonalStep.gender, forward: false);
+      return;
+    }
+    // Height → goal
+    await _user.persistOnboardingStep(AppRoutes.goalSetup);
+    Get.offNamed(AppRoutes.goalSetup);
+  }
+
+  Future<void> _transitionTo(
+    _PersonalStep next, {
+    required bool forward,
+  }) async {
+    _transitioning = true;
+
+    setState(() {
+      _contentOpacity = 0;
+      _contentSlide = Offset(0, forward ? -0.035 : 0.035);
+      _stepError = null;
+    });
+    await Future<void>.delayed(_stepOutDuration);
+    if (!mounted) return;
+
+    setState(() {
+      _step = next;
+      _contentSlide = Offset(0, forward ? 0.035 : -0.035);
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    if (!mounted) return;
+
+    setState(() {
+      _contentOpacity = 1;
+      _contentSlide = Offset.zero;
+    });
+    await Future<void>.delayed(_stepInDuration);
+    if (!mounted) return;
+
+    _transitioning = false;
+  }
+
+  Future<void> _saveProfile() async {
+    if (_saving) return;
+    setState(() => _saving = true);
 
     final u = _user.user;
-    u.age = age;
+    u.age = _age;
     u.gender = _gender;
-    u.heightCm = height;
-    u.weightKg = weight;
-    await _settings.toggleUseMetricUnits(_weightUseKg);
+    u.heightCm = _heightCm;
 
-    if (RouteArgs.isEditingFromProfile) {
+    try {
       final patch = OnboardingPatchModel.personalDetailsDiff(u, _baseline);
       if (patch.isEmpty) {
         AppSnackbar.info('No changes to save.', title: 'Nothing changed');
@@ -380,593 +277,224 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
 
       _baseline = _user.captureProfileSyncSnapshot();
       _user.onProfileUpdated();
-      _user.syncWeightFromProfile();
       Get.back();
       AppSnackbar.success('Personal details updated.');
-    } else {
-      _user.markPersonalDetailsComplete();
-      _user.onProfileUpdated();
-      _user.syncWeightFromProfile();
-      await _user.persistOnboardingStep(AppRoutes.goalSetup);
-      Get.toNamed(AppRoutes.goalSetup);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _toggleHeightUnit(bool useCm) {
+    if (useCm == _heightUseCm) return;
+    setState(() {
+      _heightUseCm = useCm;
+      _stepError = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final idx = _heightIndexForCm(_heightCm);
+      if (_heightCtrl.hasClients) {
+        _heightCtrl.jumpToItem(idx);
+      }
+    });
+  }
+
+  (String, String?) get _copy {
+    switch (_step) {
+      case _PersonalStep.gender:
+        return ('Select Your Gender', null);
+      case _PersonalStep.age:
+        return (
+          'How old are you?',
+          'This helps us personalize your calorie and health goals',
+        );
+      case _PersonalStep.height:
+        return (
+          "What's your height?",
+          'This helps us personalize your calorie and health goals',
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    AppColors.syncFromContext(context);
     final r = context.responsive;
-    final fromProfile = RouteArgs.isEditingFromProfile;
-    final compact = r.height < 720;
+    final isLast = _step == _PersonalStep.height;
+    final pageBg = AppColors.backgroundOf(context);
+    final (title, subtitle) = _copy;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: SetupScreenLayout(
-          scrollable: true,
-          content: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(height: r.scale(60, tablet: 68)),
-              _HeroSection(r: r, compact: compact),
-              SizedBox(height: r.scale(20)),
-              _DetailCard(
-                iconWidget: SvgPicture.asset(_ageIconAsset, fit: BoxFit.contain),
-                label: 'Age',
-                subtitle: 'Enter your age',
-                errorText: _ageError,
-                child: _NumberInput(
-                  controller: _ageCtrl,
-                  focusNode: _ageFocus,
-                  unit: 'years',
-                  maxLength: 3,
-                  hasError: _ageError != null,
-                ),
-              ),
-            SizedBox(height: r.scale(12)),
-            Focus(
-              focusNode: _genderFocus,
-              child: _DetailCard(
-                iconWidget: SvgPicture.asset(
-                  _genderIconAsset,
-                  fit: BoxFit.contain,
-                ),
-                label: 'Gender',
-                subtitle: 'Select your gender',
-                errorText: _genderError,
-                child: Padding(
-                  padding: EdgeInsets.only(top: r.scale(6)),
-                  child: _GenderDropdown(
-                    value: _gender,
-                    options: _genders,
-                    hasError: _genderError != null,
-                    onChanged: (g) => setState(() {
-                      _gender = g;
-                      _genderError = null;
-                      _syncDraftFromFields();
-                    }),
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(height: r.scale(12)),
-            _DetailCard(
-              iconWidget: SvgPicture.asset(
-                _heightIconAsset,
-                fit: BoxFit.contain,
-              ),
-              label: 'Height',
-              subtitle: 'Enter your height',
-              errorText: _heightError,
-              child: _HeightInput(
-                useCm: _heightUseCm,
-                cmController: _heightCmCtrl,
-                feetController: _heightFeetCtrl,
-                inchesController: _heightInchesCtrl,
-                focusNode: _heightFocus,
-                hasError: _heightError != null,
-                onUnitTap: () => _toggleHeightUnit(!_heightUseCm),
-              ),
-            ),
-            SizedBox(height: r.scale(12)),
-            _DetailCard(
-              iconWidget: SvgPicture.asset(
-                _weightIconAsset,
-                fit: BoxFit.contain,
-              ),
-              label: 'Weight',
-              subtitle: 'Enter your current weight',
-              errorText: _weightError,
-              child: _NumberInput(
-                controller: _weightCtrl,
-                focusNode: _weightFocus,
-                unit: _weightUseKg ? 'kg' : 'lb',
-                maxLength: 3,
-                hasError: _weightError != null,
-                onUnitTap: () => _selectWeightUnit(!_weightUseKg),
-              ),
-            ),
-          ],
-        ),
-        action: PrimaryButton(
-          label: fromProfile ? 'Save' : 'Continue',
-          onPressed: _save,
-        ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HeroSection extends StatelessWidget {
-  const _HeroSection({required this.r, required this.compact});
-
-  final Responsive r;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              RichText(
-                text: TextSpan(
-                  style: TextStyle(
-                    fontSize: r.scale(compact ? 26 : 28, tablet: 30),
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                    height: 1.2,
-                    letterSpacing: -0.3,
-                  ),
-                  children: const [
-                    TextSpan(text: 'Tell us about '),
-                    TextSpan(
-                      text: 'yourself',
-                      style: TextStyle(color: AppColors.primary),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: r.scale(compact ? 6 : 8)),
-              Text(
-                'This helps us personalize your calorie goal and recommendations.',
-                style: TextStyle(
-                  fontSize: r.scale(compact ? 13 : 14, tablet: 15),
-                  color: AppColors.textSecondary,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(width: r.scale(8)),
-        const _HeroIllustration(),
-      ],
-    );
-  }
-}
-
-class _HeroIllustration extends StatelessWidget {
-  const _HeroIllustration();
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    final size = r.scale(88, tablet: 96);
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            top: 8,
-            right: 0,
-            child: Icon(
-              Icons.eco_rounded,
-              size: r.scale(24),
-              color: AppColors.primary.withValues(alpha: 0.35),
-            ),
-          ),
-          Positioned(
-            top: 28,
-            left: 4,
-            child: Icon(
-              Icons.spa_rounded,
-              size: r.scale(18),
-              color: AppColors.primary.withValues(alpha: 0.45),
-            ),
-          ),
-          Positioned(
-            bottom: 4,
-            right: 10,
-            child: Container(
-              width: r.scale(48),
-              height: r.scale(48),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.primary.withValues(alpha: 0.25),
-                    AppColors.primary.withValues(alpha: 0.55),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(
-                Icons.person_rounded,
-                size: r.scale(30),
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailCard extends StatelessWidget {
-  const _DetailCard({
-    this.icon,
-    this.iconWidget,
-    required this.label,
-    required this.subtitle,
-    required this.child,
-    this.errorText,
-  }) : assert(icon != null || iconWidget != null);
-
-  final IconData? icon;
-  final Widget? iconWidget;
-  final String label;
-  final String subtitle;
-  final Widget child;
-  final String? errorText;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    final hasError = errorText != null;
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: r.scale(14),
-        vertical: r.scale(14),
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: hasError
-              ? AppColors.error.withValues(alpha: 0.45)
-              : AppColors.border.withValues(alpha: 0.7),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.only(top: r.scale(2)),
-            child: iconWidget != null
-                ? SizedBox(width: 40, height: 40, child: iconWidget)
-                : Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(icon, size: 20, color: AppColors.primary),
-                  ),
-          ),
-          SizedBox(width: r.scale(12)),
-          Expanded(
+    return PopScope(
+      canPop: _fromProfile && _step == _PersonalStep.gender,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _onBack();
+      },
+      child: Scaffold(
+        backgroundColor: pageBg,
+        body: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: r.scale(20, tablet: 28)),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: r.scale(14, tablet: 15),
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                SizedBox(height: r.scale(4)),
+                OnboardingStepTopBar(
+                  stepIndex: _progressIndex,
+                  totalSteps: OnboardingFlowProgress.totalSteps,
+                  onBack: _onBack,
+                ),
+                SizedBox(height: r.scale(28)),
+                Expanded(
+                  child: ColoredBox(
+                    color: pageBg,
+                    child: AnimatedOpacity(
+                      opacity: _contentOpacity,
+                      duration: _contentOpacity == 0
+                          ? _stepOutDuration
+                          : _stepInDuration,
+                      curve: Curves.easeInOutCubic,
+                      child: AnimatedSlide(
+                        offset: _contentSlide,
+                        duration: _contentOpacity == 0
+                            ? _stepOutDuration
+                            : _stepInDuration,
+                        curve: Curves.easeInOutCubic,
+                        child: Column(
+                          children: [
+                            Text(
+                              title,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: r.scale(28, tablet: 32),
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimaryOf(context),
+                                height: 1.15,
+                                letterSpacing: -0.4,
+                              ),
+                            ),
+                            if (subtitle != null) ...[
+                              SizedBox(height: r.scale(10)),
+                              Text(
+                                subtitle,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: r.scale(14, tablet: 15),
+                                  color: AppColors.textSecondaryOf(context),
+                                  height: 1.4,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                            if (_stepError != null) ...[
+                              SizedBox(height: r.scale(12)),
+                              Text(
+                                _stepError!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.error,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                            Expanded(child: _buildStepBody(r)),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  hasError ? errorText! : subtitle,
-                  style: TextStyle(
-                    fontSize: r.scale(11, tablet: 12),
-                    color: hasError ? AppColors.error : AppColors.textSecondary,
-                    height: 1.3,
-                    fontWeight: hasError ? FontWeight.w500 : FontWeight.normal,
-                  ),
+                OnboardingContinueButton(
+                  label: _fromProfile && isLast
+                      ? (_saving ? 'Saving...' : 'Save')
+                      : (_saving ? 'Please wait...' : 'Continue'),
+                  onPressed: () {
+                    if (_saving || _transitioning) return;
+                    _onContinue();
+                  },
                 ),
+                SizedBox(height: r.scale(12)),
               ],
             ),
           ),
-          SizedBox(width: r.scale(8)),
-          Padding(
-            padding: EdgeInsets.only(top: r.scale(2)),
-            child: child,
-          ),
-        ],
+        ),
       ),
     );
   }
-}
 
-class _HeightInput extends StatelessWidget {
-  const _HeightInput({
-    required this.useCm,
-    required this.cmController,
-    required this.feetController,
-    required this.inchesController,
-    required this.hasError,
-    required this.onUnitTap,
-    this.focusNode,
-  });
-
-  final bool useCm;
-  final TextEditingController cmController;
-  final TextEditingController feetController;
-  final TextEditingController inchesController;
-  final bool hasError;
-  final VoidCallback onUnitTap;
-  final FocusNode? focusNode;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    if (useCm) {
-      return _NumberInput(
-        controller: cmController,
-        focusNode: focusNode,
-        unit: 'cm',
-        maxLength: 3,
-        hasError: hasError,
-        onUnitTap: onUnitTap,
-      );
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        _NumberInput(
-          controller: feetController,
-          focusNode: focusNode,
-          maxLength: 1,
-          hasError: hasError,
-          showUnitLabel: false,
-          width: r.scale(40),
-        ),
-        SizedBox(width: r.scale(4)),
-        _NumberInput(
-          controller: inchesController,
-          maxLength: 2,
-          hasError: hasError,
-          showUnitLabel: false,
-          width: r.scale(46),
-        ),
-        const SizedBox(width: 6),
-        _UnitLabel(
-          label: 'ft/in',
-          onTap: onUnitTap,
-        ),
-      ],
-    );
-  }
-}
-
-class _UnitLabel extends StatelessWidget {
-  const _UnitLabel({
-    required this.label,
-    this.onTap,
-  });
-
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    final text = Text(
-      label,
-      style: TextStyle(
-        fontSize: r.scale(11, tablet: 12),
-        color: onTap != null ? AppColors.primary : AppColors.textSecondary,
-        fontWeight: onTap != null ? FontWeight.w600 : FontWeight.w500,
-      ),
-    );
-
-    if (onTap == null) return text;
-
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: r.scale(10),
-          vertical: r.scale(10),
-        ),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: text,
-      ),
-    );
-  }
-}
-
-class _NumberInput extends StatelessWidget {
-  const _NumberInput({
-    required this.controller,
-    required this.maxLength,
-    this.focusNode,
-    this.unit = '',
-    this.hasError = false,
-    this.showUnitLabel = true,
-    this.width,
-    this.onUnitTap,
-  });
-
-  final TextEditingController controller;
-  final FocusNode? focusNode;
-  final String unit;
-  final int maxLength;
-  final bool hasError;
-  final bool showUnitLabel;
-  final double? width;
-  final VoidCallback? onUnitTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    const fieldRadius = 10.0;
-    final borderColor =
-        hasError ? AppColors.error.withValues(alpha: 0.65) : AppColors.border;
-    final fieldWidth = width ?? r.scale(52);
-
-    final field = SizedBox(
-      width: fieldWidth,
-      child: TextField(
-        controller: controller,
-        focusNode: focusNode,
-        keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        maxLength: maxLength,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: r.scale(14, tablet: 15),
-          fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
-        ),
-        decoration: InputDecoration(
-          filled: true,
-          fillColor: AppColors.surface,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 10,
-          ),
-          counterText: '',
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(fieldRadius),
-            borderSide: BorderSide(color: borderColor),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(fieldRadius),
-            borderSide: BorderSide(
-              color: hasError ? AppColors.error : AppColors.primary,
-              width: 1.5,
-            ),
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(fieldRadius),
-            borderSide: BorderSide(color: borderColor),
-          ),
-        ),
-      ),
-    );
-
-    if (!showUnitLabel || unit.isEmpty) return field;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        field,
-        const SizedBox(width: 6),
-        _UnitLabel(label: unit, onTap: onUnitTap),
-      ],
-    );
-  }
-}
-
-class _GenderDropdown extends StatelessWidget {
-  const _GenderDropdown({
-    required this.value,
-    required this.options,
-    required this.onChanged,
-    this.hasError = false,
-  });
-
-  final String value;
-  final List<String> options;
-  final ValueChanged<String> onChanged;
-  final bool hasError;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    const fieldRadius = 10.0;
-    final borderColor =
-        hasError ? AppColors.error.withValues(alpha: 0.65) : AppColors.border;
-    final selected = value.isNotEmpty;
-    final textStyle = TextStyle(
-      fontSize: r.scale(14, tablet: 15),
-      fontWeight: FontWeight.w600,
-      color: AppColors.textPrimary,
-    );
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: r.scale(10),
-        vertical: r.scale(2),
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(fieldRadius),
-        border: Border.all(color: borderColor),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: selected ? value : null,
-          isDense: true,
-          hint: Text(
-            'Select',
-            style: textStyle.copyWith(color: AppColors.textSecondary),
-          ),
-          icon: Icon(
-            Icons.keyboard_arrow_down_rounded,
-            size: r.scale(18),
-            color: AppColors.textSecondary,
-          ),
-          borderRadius: BorderRadius.circular(fieldRadius),
-          dropdownColor: AppColors.card,
-          style: textStyle,
-          items: options
-              .map(
-                (option) => DropdownMenuItem(
-                  value: option,
-                  child: Text(option, style: textStyle),
+  Widget _buildStepBody(Responsive r) {
+    switch (_step) {
+      case _PersonalStep.gender:
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final g in _genders) ...[
+                OnboardingOptionCard(
+                  title: g,
+                  selected: _gender == g,
+                  onTap: () => _onGenderSelected(g),
                 ),
-              )
-              .toList(),
-          onChanged: (v) {
-            if (v != null) onChanged(v);
+                if (g != _genders.last) SizedBox(height: r.scale(12)),
+              ],
+            ],
+          ),
+        );
+      case _PersonalStep.age:
+        return OnboardingCupertinoValuePicker(
+          controller: _ageCtrl,
+          labels: _ages.map((e) => '$e').toList(growable: false),
+          onSelectedItemChanged: (i) {
+            setState(() {
+              _age = _ages[i];
+              _stepError = null;
+            });
+            _syncDraft();
           },
-        ),
-      ),
-    );
+        );
+      case _PersonalStep.height:
+        final labels = _heightUseCm
+            ? _heightsCm.map((e) => '$e').toList(growable: false)
+            : _heightFtLabels;
+        return Column(
+          children: [
+            OnboardingUnitToggle(
+              left: 'cm',
+              right: 'ft',
+              leftSelected: _heightUseCm,
+              onLeft: () => _toggleHeightUnit(true),
+              onRight: () => _toggleHeightUnit(false),
+            ),
+            Expanded(
+              child: OnboardingCupertinoValuePicker(
+                key: ValueKey('h-$_heightUseCm'),
+                controller: _heightCtrl,
+                labels: labels,
+                unit: _heightUseCm ? 'cm' : null,
+                onSelectedItemChanged: (i) {
+                  setState(() {
+                    if (_heightUseCm) {
+                      _heightCm = _heightsCm[i];
+                    } else {
+                      final parts = labels[i].split("'");
+                      if (parts.length == 2) {
+                        final feet = int.tryParse(parts[0]) ?? 5;
+                        final inches =
+                            int.tryParse(parts[1].replaceAll('"', '')) ?? 0;
+                        _heightCm = BodyMeasurementUnits.cmFromFeetInches(
+                          feet,
+                          inches,
+                        );
+                      }
+                    }
+                    _stepError = null;
+                  });
+                  _syncDraft();
+                },
+              ),
+            ),
+          ],
+        );
+    }
   }
 }

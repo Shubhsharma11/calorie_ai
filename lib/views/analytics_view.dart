@@ -1423,7 +1423,7 @@ class _MealBreakdownTile extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-      decoration: BoxDecoration(
+      decoration: BoxDecoration(  
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withValues(alpha: 0.18)),

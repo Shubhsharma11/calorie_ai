@@ -30,8 +30,8 @@ class _GoalWeightViewState extends State<GoalWeightView> {
   late DateTime _targetDate;
   bool _isSaving = false;
 
-  static const double _weightMinKg = 40;
-  static const double _weightMaxKg = 200;
+  static const double _weightMinKg = 30;
+  static const double _weightMaxKg = 300;
 
   @override
   void initState() {

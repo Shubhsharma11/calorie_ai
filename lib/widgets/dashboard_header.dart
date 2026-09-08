@@ -9,108 +9,169 @@ class DashboardHeader extends StatelessWidget {
   const DashboardHeader({
     super.key,
     required this.firstName,
+    this.scrollController,
     this.showNotificationBadge = false,
+    this.onGifts,
     this.onSearch,
     this.onCalendar,
     this.onNotifications,
     this.searchShowcaseKey,
+    this.contentPadding,
+    this.maxWidth,
   });
 
   final String firstName;
+  final ScrollController? scrollController;
   final bool showNotificationBadge;
+  final VoidCallback? onGifts;
   final VoidCallback? onSearch;
   final VoidCallback? onCalendar;
   final VoidCallback? onNotifications;
   final GlobalKey? searchShowcaseKey;
+  final EdgeInsetsGeometry? contentPadding;
+  final double? maxWidth;
+
+  static const _elevateAfter = 8.0;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
     final greeting = _Greeting.forNow();
+    final listenable = scrollController;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: r.scale(24),
-                        height: r.scale(24),
-                        decoration: BoxDecoration(
-                          color: greeting.color.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          greeting.icon,
-                          size: r.scale(15),
+    Widget content = Padding(
+      padding: contentPadding ?? EdgeInsets.zero,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: r.scale(24),
+                      height: r.scale(24),
+                      decoration: BoxDecoration(
+                        color: greeting.color.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        greeting.icon,
+                        size: r.scale(15),
+                        color: greeting.color,
+                      ),
+                    ),
+                    SizedBox(width: r.scale(8)),
+                    Flexible(
+                      child: Text(
+                        greeting.message,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: r.scale(13, tablet: 14),
+                          fontWeight: FontWeight.w700,
                           color: greeting.color,
                         ),
                       ),
-                      SizedBox(width: r.scale(8)),
-                      Flexible(
-                        child: Text(
-                          greeting.message,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: r.scale(13, tablet: 14),
-                            fontWeight: FontWeight.w700,
-                            color: greeting.color,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: r.scale(4)),
-                  Text(
-                    firstName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: r.scale(28, tablet: 30, desktop: 32),
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                      height: 1.05,
                     ),
+                  ],
+                ),
+                SizedBox(height: r.scale(4)),
+                Text(
+                  firstName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: r.scale(28, tablet: 30, desktop: 32),
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                    height: 1.05,
                   ),
-                  SizedBox(height: r.scale(6)),
-                  RotatingMotivationText(
-                    style: TextStyle(
-                      fontSize: r.scale(14),
-                      color: AppColors.textSecondary,
-                      height: 1.3,
-                    ),
+                ),
+                SizedBox(height: r.scale(6)),
+                RotatingMotivationText(
+                  style: TextStyle(
+                    fontSize: r.scale(14),
+                    color: AppColors.textSecondary,
+                    height: 1.3,
                   ),
-                  SizedBox(height: r.scale(12)),
-                ],
+                ),
+                SizedBox(height: r.scale(12)),
+              ],
+            ),
+          ),
+          _HeaderIconButton(
+            icon: Icons.card_giftcard_rounded,
+            onTap: onGifts,
+          ),
+          SizedBox(width: r.scale(8)),
+          _wrapSearchShowcase(
+            context,
+            _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearch),
+          ),
+          SizedBox(width: r.scale(8)),
+          _HeaderIconButton(
+            icon: Icons.calendar_today_rounded,
+            onTap: onCalendar,
+          ),
+          SizedBox(width: r.scale(8)),
+          _HeaderIconButton(
+            icon: Icons.notifications_none_rounded,
+            showBadge: showNotificationBadge,
+            onTap: onNotifications,
+          ),
+        ],
+      ),
+    );
+
+    if (maxWidth != null) {
+      content = Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth!),
+          child: content,
+        ),
+      );
+    }
+
+    if (listenable == null) {
+      return ColoredBox(
+        color: AppColors.background,
+        child: content,
+      );
+    }
+
+    return ListenableBuilder(
+      listenable: listenable,
+      builder: (context, _) {
+        final offset =
+            listenable.hasClients ? listenable.offset.clamp(0.0, 24.0) : 0.0;
+        final elevate = (offset / _elevateAfter).clamp(0.0, 1.0);
+        final shadow = Curves.easeOut.transform(elevate);
+
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06 * shadow),
+                blurRadius: 10 * shadow,
+                offset: Offset(0, 3 * shadow),
+              ),
+            ],
+            border: Border(
+              bottom: BorderSide(
+                color: AppColors.border.withValues(alpha: 0.35 * shadow),
+                width: 0.5,
               ),
             ),
-            _wrapSearchShowcase(
-              context,
-              _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearch),
-            ),
-            SizedBox(width: r.scale(8)),
-            _HeaderIconButton(
-              icon: Icons.calendar_today_rounded,
-              onTap: onCalendar,
-            ),
-            SizedBox(width: r.scale(8)),
-            _HeaderIconButton(
-              icon: Icons.notifications_none_rounded,
-              showBadge: showNotificationBadge,
-              onTap: onNotifications,
-            ),
-          ],
-        ),
-      ],
+          ),
+          child: content,
+        );
+      },
     );
   }
 

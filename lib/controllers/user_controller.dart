@@ -20,10 +20,12 @@ import '../repositories/nutrition_plan_repository.dart';
 import '../repositories/onboarding_repository.dart';
 import '../routes/app_routes.dart';
 import '../core/app_snackbar.dart';
+import '../core/body_measurement_units.dart';
 import '../core/image_downscale.dart';
 import '../core/media_url.dart';
 import '../core/photo_permission.dart';
 import '../core/pick_cropped_image.dart';
+import '../core/route_args.dart';
 import '../core/wait_for_resume.dart';
 import '../core/weight_goal_calculator.dart';
 import '../services/auth_api_service.dart';
@@ -1279,7 +1281,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
       _storeAiRecommendedGoalWeight(plan.targetWeightKg!);
     } else if (plan.targetWeightKg != null) {
       // Remember AI suggestion for comparison UI only — do not pin/replace goal.
-      aiRecommendedGoalWeightKg = plan.targetWeightKg!.clamp(40.0, 200.0);
+      aiRecommendedGoalWeightKg = plan.targetWeightKg!.clamp(
+        BodyMeasurementUnits.minWeightKg.toDouble(),
+        BodyMeasurementUnits.maxWeightKg.toDouble(),
+      );
     }
 
     await _persistNutritionTargets();
@@ -1300,7 +1305,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
   }
 
   void _storeAiRecommendedGoalWeight(double kg) {
-    aiRecommendedGoalWeightKg = kg.clamp(40.0, 200.0);
+    aiRecommendedGoalWeightKg = kg.clamp(
+      BodyMeasurementUnits.minWeightKg.toDouble(),
+      BodyMeasurementUnits.maxWeightKg.toDouble(),
+    );
     // Keep the user's onboarding target active by default.ss
     if (userOnboardingGoalWeightKg != null &&
         weightTargetSource.value == WeightTargetSource.user) {
@@ -1314,7 +1322,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
   /// Applies the server's goal/target weight as the active home + profile target.
   /// Lose/gain/maintain targets are pinned so logging weight cannot move the goal.
   void _applyServerGoalWeight(double kg, {bool? isManual}) {
-    final clamped = kg.clamp(40.0, 200.0);
+    final clamped = kg.clamp(
+      BodyMeasurementUnits.minWeightKg.toDouble(),
+      BodyMeasurementUnits.maxWeightKg.toDouble(),
+    );
     aiRecommendedGoalWeightKg = clamped;
 
     final effectiveGoal = user.pinnedGoalType ?? user.goal;
@@ -1523,7 +1534,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   void finishSetup() {
     unawaited(persistOnboardingStep(AppRoutes.healthProblem));
-    Get.toNamed(AppRoutes.healthProblem);
+    Get.offNamed(AppRoutes.healthProblem);
   }
 
   static const _resumeableSetupRoutes = <String>{
@@ -1659,10 +1670,6 @@ class UserController extends GetxController with WidgetsBindingObserver {
       return AppRoutes.healthProblem;
     }
     if (currentRoute == AppRoutes.activityLevel) {
-      final goal = user.goal;
-      if (goal == null || goal == GoalType.maintainWeight) {
-        return AppRoutes.goalSetup;
-      }
       return AppRoutes.goalAmount;
     }
     final index = _setupRouteOrder.indexOf(currentRoute);
@@ -1672,6 +1679,24 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   /// Saves draft, marks the previous step as current, then opens that route.
   Future<void> goToPreviousOnboardingStep(String currentRoute) async {
+    // Age → Goal → Height → Weight goal: land on the right personal-details step.
+    if (currentRoute == AppRoutes.goalSetup) {
+      await persistOnboardingStep(AppRoutes.personalDetails);
+      Get.offNamed(
+        AppRoutes.personalDetails,
+        arguments: RouteArgs.onboardingAgeMap,
+      );
+      return;
+    }
+    if (currentRoute == AppRoutes.goalAmount) {
+      await persistOnboardingStep(AppRoutes.personalDetails);
+      Get.offNamed(
+        AppRoutes.personalDetails,
+        arguments: RouteArgs.onboardingHeightMap,
+      );
+      return;
+    }
+
     final previous = previousOnboardingRoute(currentRoute);
     if (previous == null) return;
 
@@ -1712,10 +1737,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
     final step = _onboardingStep;
     if (step != null && _resumeableSetupRoutes.contains(step)) {
-      if (step == AppRoutes.goalAmount) {
-        final goal = user.goal;
-        if (goal == null) return AppRoutes.goalSetup;
-        if (goal == GoalType.maintainWeight) return AppRoutes.activityLevel;
+      if (step == AppRoutes.goalAmount && user.goal == null) {
+        return AppRoutes.goalSetup;
       }
       return step;
     }
@@ -2065,7 +2088,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
           'goal_start_weight',
         ]);
         if (nestedStartWeight != null && nestedStartWeight > 0) {
-          user.goalStartWeightKg = nestedStartWeight.clamp(40.0, 200.0);
+          user.goalStartWeightKg = nestedStartWeight.clamp(
+            BodyMeasurementUnits.minWeightKg.toDouble(),
+            BodyMeasurementUnits.maxWeightKg.toDouble(),
+          );
         }
         if (nestedGoalWeight != null) {
           receivedGoalWeight = true;
@@ -2115,7 +2141,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
         'goal_start_weight',
       ]);
       if (startWeight != null && startWeight > 0) {
-        user.goalStartWeightKg = startWeight.clamp(40.0, 200.0);
+        user.goalStartWeightKg = startWeight.clamp(
+          BodyMeasurementUnits.minWeightKg.toDouble(),
+          BodyMeasurementUnits.maxWeightKg.toDouble(),
+        );
       }
       if (goalWeight != null) {
         receivedGoalWeight = true;

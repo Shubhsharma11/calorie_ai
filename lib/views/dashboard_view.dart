@@ -37,67 +37,91 @@ class DashboardView extends GetView<DashboardController> {
     AppColors.syncFromContext(context);
     final food = Get.find<FoodController>();
     final r = context.responsive;
+    final pagePad = r.pagePadding;
 
-    return RefreshIndicator(
-      onRefresh: food.refreshMealsFromApi,
-      color: AppColors.primary,
-      child: ResponsivePage(
-        scrollable: true,
-        scrollController: controller.homeScrollController,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Obx(() {
-              final hasBadge = DashboardActions.hasNotificationBadge;
-              return GetBuilder<UserController>(
-                builder: (userCtrl) {
-                  final name = userCtrl.user.name.trim();
-                  final homeTitle = Platform.isIOS && name.isEmpty
-                      ? 'MyCaloriePal'
-                      : userCtrl.user.firstName;
-                  return DashboardHeader(
-                    firstName: homeTitle,
-                    showNotificationBadge: hasBadge,
-                    onSearch: DashboardActions.openFoodSearch,
-                    onCalendar: () => DashboardActions.openCalendar(context),
-                    onNotifications: () =>
-                        DashboardActions.openNotifications(context),
-                    searchShowcaseKey: AppCoachMarks.searchKey,
-                  );
-                },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Obx(() {
+          final hasBadge = DashboardActions.hasNotificationBadge;
+          return GetBuilder<UserController>(
+            builder: (userCtrl) {
+              final name = userCtrl.user.name.trim();
+              final homeTitle = Platform.isIOS && name.isEmpty
+                  ? 'MyCaloriePal'
+                  : userCtrl.user.firstName;
+              return DashboardHeader(
+                firstName: homeTitle,
+                scrollController: controller.homeScrollController,
+                showNotificationBadge: hasBadge,
+                onGifts: DashboardActions.openBuddyGifts,
+                onSearch: DashboardActions.openFoodSearch,
+                onCalendar: () => DashboardActions.openCalendar(context),
+                onNotifications: () =>
+                    DashboardActions.openNotifications(context),
+                searchShowcaseKey: AppCoachMarks.searchKey,
+                contentPadding: EdgeInsets.fromLTRB(
+                  pagePad.left,
+                  pagePad.top,
+                  pagePad.right,
+                  0,
+                ),
+                maxWidth: r.contentMaxWidth,
               );
-            }),
-            Obx(() {
-              food.selectedLogDate.value;
-              if (controller.isViewingToday) {
-                return SizedBox(height: r.scale(10));
-              }
-              return Column(
-                children: [    
+            },
+          );
+        }),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: food.refreshMealsFromApi,
+            color: AppColors.primary,
+            child: ResponsivePage(
+              scrollable: true,
+              scrollController: controller.homeScrollController,
+              padding: EdgeInsets.fromLTRB(
+                pagePad.left,
+                r.scale(4),
+                pagePad.right,
+                pagePad.bottom,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Obx(() {
+                    food.selectedLogDate.value;
+                    if (controller.isViewingToday) {
+                      return SizedBox(height: r.scale(10));
+                    }
+                    return Column(
+                      children: [
+                        SizedBox(height: r.scale(12)),
+                        PastDateBanner(
+                          dateLabel:
+                              formatLogDateLabel(controller.viewingDate),
+                          onBackToToday: controller.backToToday,
+                        ),
+                        SizedBox(height: r.scale(10)),
+                      ],
+                    );
+                  }),
+                  // Streak badge temporarily disabled on home.
+                  // const _StreakSection(),
+                  // SizedBox(height: r.scale(20)),
+                  const _CalorieSection(),
                   SizedBox(height: r.scale(12)),
-                  PastDateBanner(
-                    dateLabel: formatLogDateLabel(controller.viewingDate),
-                    onBackToToday: controller.backToToday,
-                  ),
-                  SizedBox(height: r.scale(10)),
+                  const AiMealPlanCard(),
+                  SizedBox(height: r.scale(12)),
+                  WaterIntakeBanner(coachKey: AppCoachMarks.waterKey),
+                  SizedBox(height: r.scale(12)),
+                  WeightTrackerBanner(coachKey: AppCoachMarks.weightKey),
+                  SizedBox(height: r.scale(28)),
+                  const _SecondarySection(),
                 ],
-              );
-            }),
-            // Streak badge temporarily disabled on home.
-            // const _StreakSection(),
-            // SizedBox(height: r.scale(20)),
-            const _CalorieSection(),
-            SizedBox(height: r.scale(12)),
-            const AiMealPlanCard(),
-            SizedBox(height: r.scale(12)),
-            WaterIntakeBanner(coachKey: AppCoachMarks.waterKey),
-            SizedBox(height: r.scale(12)),
-            WeightTrackerBanner(coachKey: AppCoachMarks.weightKey),
-            SizedBox(height: r.scale(28)),
-            const _SecondarySection(),
-          ],
+              ),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }

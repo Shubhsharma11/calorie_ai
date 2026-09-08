@@ -17,14 +17,18 @@ abstract final class BodyMeasurementUnits {
 
   static int lbsFromKg(int kg) => (kg * kgToLb).round();
 
-  static bool isValidCm(int cm) => cm >= 100 && cm <= 250;
+  static bool isValidCm(int cm) => cm >= 100 && cm <= 275;
 
-  static bool isValidKg(int kg) => kg >= 30 && kg <= 300;
+  static const minWeightKg = 30;
+  static const maxWeightKg = 300;
+
+  static bool isValidKg(int kg) =>
+      kg >= minWeightKg && kg <= maxWeightKg;
 
   static bool isValidLbs(int lbs) => lbs >= 66 && lbs <= 661;
 
   static bool isValidFeetInches(int feet, int inches) {
-    if (feet < 3 || feet > 8) return false;
+    if (feet < 3 || feet > 9) return false;
     if (inches < 0 || inches > 11) return false;
     return isValidCm(cmFromFeetInches(feet, inches));
   }

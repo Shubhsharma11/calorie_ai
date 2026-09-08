@@ -154,7 +154,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
       final height = int.tryParse(result);
       if (height == null || !BodyMeasurementUnits.isValidCm(height)) {
         AppSnackbar.error(
-          'Please enter a valid height between 100 and 250 cm.',
+          'Please enter a valid height between 100 and 275 cm.',
           title: 'Invalid height',
         );
         return;
@@ -168,7 +168,7 @@ class _PersonalInformationViewState extends State<PersonalInformationView> {
     if (result == null) return;
     if (!BodyMeasurementUnits.isValidFeetInches(result.feet, result.inches)) {
       AppSnackbar.error(
-        'Please enter a valid height between 3 ft 4 in and 8 ft 2 in.',
+        'Please enter a valid height between 3 ft 3 in and 9 ft 0 in.',
         title: 'Invalid height',
       );
       return;

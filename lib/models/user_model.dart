@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'activity_level.dart';
 import 'goal_type.dart';
 import 'health_concern.dart';
+import '../core/body_measurement_units.dart';
 import '../core/weight_goal_calculator.dart';
 
 /// In-memory profile. Body metrics are nullable until the API / onboarding
@@ -122,7 +123,10 @@ class UserModel {
   }
 
   void pinGoalWeight(double kg, {GoalType? goalType}) {
-    final clamped = kg.clamp(40.0, 200.0);
+    final clamped = kg.clamp(
+      BodyMeasurementUnits.minWeightKg.toDouble(),
+      BodyMeasurementUnits.maxWeightKg.toDouble(),
+    );
     pinnedGoalWeightKg = clamped;
     manualGoalWeightKg = clamped;
     if (goalType != null) {

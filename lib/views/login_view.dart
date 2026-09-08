@@ -50,7 +50,7 @@ class _LoginPhoneHintBootstrapState extends State<_LoginPhoneHintBootstrap> {
   Widget build(BuildContext context) => widget.child;
 }
 
-class _LoginScaffold extends StatelessWidget {
+class _LoginScaffold extends StatefulWidget {
   const _LoginScaffold({required this.controller});
 
   final AuthController controller;
@@ -58,246 +58,304 @@ class _LoginScaffold extends StatelessWidget {
   static const _logoAsset = LoginView._logoAsset;
   static const _googleAsset = LoginView._googleAsset;
   static const _appleAsset = LoginView._appleAsset;
+  static const _buddyAsset = 'assets/image/buddy/buddy_wave_hello.png';
+
+  @override
+  State<_LoginScaffold> createState() => _LoginScaffoldState();
+}
+
+class _LoginScaffoldState extends State<_LoginScaffold> {
+  AuthController get controller => widget.controller;
 
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
     final isDark = AppColors.isDark(context);
     final r = context.responsive;
-    final horizontal = r.scale(24, tablet: 32);
-    final compact = r.height < 720;
+    final size = MediaQuery.sizeOf(context);
+    final padding = MediaQuery.paddingOf(context);
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final keyboardOpen = keyboard > 0;
+    final headerPad = r.scale(20, tablet: 28);
+    final formPad = (size.width * 0.132).clamp(26.0, 40.0);
+    final compact = size.height < 740;
 
-    final logoSize = r.scale(compact ? 60 : 68, tablet: 76);
-    final buttonHeight = r.scale(compact ? 52 : 56, tablet: 58);
-    final buttonGap = r.scale(compact ? 10 : 12);
-    final sectionGap = r.scale(compact ? 20 : 24);
-    final topPadding = r.scale(compact ? 36 : 44);
+    final logoSize = r.scale(compact ? 48 : 54, tablet: 60);
+    final buttonHeight = r.scale(compact ? 48 : 52, tablet: 56);
+    final buttonGap = r.scale(compact ? 8 : 10);
+    final sectionGap = r.scale(compact ? 10 : 12);
+    final pageBg =
+        isDark ? AppColors.darkBackground : const Color(0xFFF1F8F1);
+
+    final restingSheetTop = size.height * 0.463;
+    final buddyHeight = size.height * 0.36;
+    // Buddy sits ~halfway onto the white sheet (same as before).
+    final visualInside = buddyHeight * 0.10;
+    final imageBottomPad = buddyHeight * 0.10;
+    final overlap = visualInside + imageBottomPad;
+    final sheetRadius = r.scale(44, tablet: 48);
+    final formTopPad = keyboardOpen
+        ? r.scale(16)
+        : (size.height * 0.074).clamp(
+            visualInside + r.scale(16),
+            visualInside + r.scale(36),
+          );
+    // Sheet sits above the keyboard; content scrolls if space is tight.
+    final focusedBlockHeight = formTopPad +
+        r.scale(compact ? 26 : 30) +
+        r.scale(8) +
+        r.scale(14) +
+        sectionGap +
+        buttonHeight +
+        buttonGap +
+        buttonHeight +
+        r.scale(12);
+    final availableAboveKeyboard = size.height - keyboard;
+    final raisedSheetTop =
+        (availableAboveKeyboard - focusedBlockHeight).clamp(
+      padding.top + r.scale(44),
+      restingSheetTop,
+    );
+    final sheetTop = keyboardOpen ? raisedSheetTop : restingSheetTop;
+    final buddyTop = sheetTop - buddyHeight + overlap;
 
     return Scaffold(
-      backgroundColor: AppColors.backgroundOf(context),
-      body: SafeArea(
-        bottom: true,
-        top: false,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
+      backgroundColor: pageBg,
+      resizeToAvoidBottomInset: false,
+      body: Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.none,
+        children: [
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            left: 0,
+            right: 0,
+            top: sheetTop,
+            bottom: keyboard,
+            child: Material(
+              color: isDark ? AppColors.darkCard : Colors.white,
+              elevation: 8,
+              shadowColor: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(sheetRadius),
+                topRight: Radius.circular(sheetRadius),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: EdgeInsets.fromLTRB(
+                        formPad,
+                        formTopPad,
+                        formPad,
+                        r.scale(8),
+                      ),
+                      child: _LoginForm(
+                        controller: controller,
+                        buttonHeight: buttonHeight,
+                        buttonGap: buttonGap,
+                        sectionGap: sectionGap,
+                        compact: compact,
+                        isDark: isDark,
+                        keyboardOpen: keyboardOpen,
+                      ),
+                    ),
+                  ),
+                  if (!keyboardOpen)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        formPad + 4,
+                        r.scale(8),
+                        formPad + 4,
+                        padding.bottom + r.scale(12),
+                      ),
+                      child: _TermsFooter(
+                        compact: compact,
+                        onTermsTap: openTermsOfService,
+                        onPrivacyTap: openPrivacyPolicy,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
+          // Buddy on top of the sheet so it sits half on the box.
+          if (!keyboardOpen)
             Positioned(
-              top: r.scale(-20),
-              right: r.scale(-42, tablet: -28),
+              top: buddyTop,
+              left: 0,
+              right: 0,
+              height: buddyHeight,
               child: IgnorePointer(
-                child: SizedBox(
-                  width: r.scale(190, tablet: 180),
-                  height: r.scale(190, tablet: 180),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.primary.withValues(
-                              alpha: isDark ? 0.14 : 0.08,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: r.scale(46, tablet: 32),
-                        bottom: r.scale(26, tablet: 28),
-                        child: _CalorieWheel(
-                          size: r.scale(68, tablet: 79),
-                          isDark: isDark,
-                        ),
-                      ),
-                    ],
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SizedBox(
+                    height: buddyHeight,
+                    width: size.width * 0.72,
+                    child: Image.asset(
+                      _LoginScaffold._buddyAsset,
+                      fit: BoxFit.contain,
+                      alignment: Alignment.bottomCenter,
+                      filterQuality: FilterQuality.high,
+                      gaplessPlayback: true,
+                    ),
                   ),
                 ),
               ),
             ),
-            Column(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      horizontal,
-                      topPadding,
-                      horizontal,
-                      r.scale(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Align(
-                          alignment: Alignment.topLeft,
-                          child: _BrandHeader(
-                            logoSize: logoSize,
-                            compact: compact,
-                            isDark: isDark,
-                          ),
-                        ),
-                        Expanded(
-                          child: Center(
-                            child: SingleChildScrollView(
-                              padding: EdgeInsets.symmetric(
-                                vertical: r.scale(18),
-                              ),
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: r.scale(420, tablet: 460),
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    Text(
-                                      'Welcome back!',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: r.scale(
-                                          compact ? 30 : 34,
-                                          tablet: 36,
-                                        ),
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.textPrimaryOf(context),
-                                        height: 1.12,
-                                        letterSpacing: -0.5,
-                                      ),
-                                    ),
-                                    SizedBox(height: r.scale(10)),
-                                    Text(
-                                      'Enter your mobile number to continue',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: r.scale(14, tablet: 15),
-                                        color: AppColors.textSecondaryOf(
-                                          context,
-                                        ),
-                                        height: 1.4,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    SizedBox(height: sectionGap),
-                                    _PhoneNumberField(
-                                      height: buttonHeight,
-                                      isDark: isDark,
-                                    ),
-                                    SizedBox(height: buttonGap),
-                                    Obx(() {
-                                      final sending =
-                                          controller.isSendingPhoneOtp.value;
-                                      final anyLoading = controller.isSigningIn;
-                                      return _PrimaryContinueButton(
-                                        height: buttonHeight,
-                                        label: sending
-                                            ? 'Sending code...'
-                                            : 'Continue',
-                                        isLoading: anyLoading,
-                                        onPressed: controller.sendPhoneOtp,
-                                      );
-                                    }),
-                                    SizedBox(height: sectionGap),
-                                    _OrDivider(compact: compact),
-                                    SizedBox(height: sectionGap),
-                                    Obx(() {
-                                      final googleLoading =
-                                          controller.isSigningInWithGoogle.value;
-                                      final anyLoading = controller.isSigningIn;
-                                      return _SocialLoginButton(
-                                        height: buttonHeight,
-                                        isDark: isDark,
-                                        label: googleLoading
-                                            ? 'Signing in...'
-                                            : 'Continue with Google',
-                                        icon: googleLoading
-                                            ? SizedBox(
-                                                width: 24,
-                                                height: 24,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                  strokeWidth: 2.3,
-                                                  color: AppColors.primary,
-                                                ),
-                                              )
-                                            : _SocialIcon(
-                                                asset: _googleAsset,
-                                                size: r.scale(
-                                                  compact ? 22 : 24,
-                                                ),
-                                              ),
-                                        isLoading: anyLoading,
-                                        onPressed: controller.loginWithGoogle,
-                                      );
-                                    }),
-                                    if (Platform.isIOS) ...[
-                                      SizedBox(height: buttonGap),
-                                      Obx(() {
-                                        final appleLoading = controller
-                                            .isSigningInWithApple
-                                            .value;
-                                        final anyLoading =
-                                            controller.isSigningIn;
-                                        return _SocialLoginButton(
-                                          height: buttonHeight,
-                                          isDark: isDark,
-                                          label: appleLoading
-                                              ? 'Signing in...'
-                                              : 'Continue with Apple',
-                                          icon: appleLoading
-                                              ? SizedBox(
-                                                  width: 24,
-                                                  height: 24,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                    strokeWidth: 2.3,
-                                                    color: AppColors.primary,
-                                                  ),
-                                                )
-                                              : _SocialIcon(
-                                                  asset: _appleAsset,
-                                                  size: r.scale(
-                                                    compact ? 22 : 24,
-                                                  ),
-                                                  tintForDarkMode: true,
-                                                ),
-                                          isLoading: anyLoading,
-                                          onPressed: controller.loginWithApple,
-                                        );
-                                      }),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontal,
-                    0,
-                    horizontal,
-                    r.scale(compact ? 8 : 12),
-                  ),
-                  child: _TermsFooter(
-                    compact: compact,
-                    onTermsTap: openTermsOfService,
-                    onPrivacyTap: openPrivacyPolicy,
-                  ),
-                ),
-              ],
+
+          Positioned(
+            top: padding.top + r.scale(compact ? 4 : 8),
+            left: headerPad,
+            right: headerPad,
+            child: _BrandHeader(
+              logoSize: logoSize,
+              compact: compact,
+              isDark: isDark,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _PhoneNumberField extends StatelessWidget {
+class _LoginForm extends StatelessWidget {
+  const _LoginForm({
+    required this.controller,
+    required this.buttonHeight,
+    required this.buttonGap,
+    required this.sectionGap,
+    required this.compact,
+    required this.isDark,
+    required this.keyboardOpen,
+  });
+
+  final AuthController controller;
+  final double buttonHeight;
+  final double buttonGap;
+  final double sectionGap;
+  final bool compact;
+  final bool isDark;
+  final bool keyboardOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Welcome back!',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: r.scale(compact ? 26 : 30, tablet: 34),
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimaryOf(context),
+            height: 1.12,
+            letterSpacing: -0.5,
+          ),
+        ),
+        SizedBox(height: r.scale(8)),
+        Text(
+          'Enter your mobile number to continue',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: r.scale(14, tablet: 15),
+            color: AppColors.textSecondaryOf(context),
+            height: 1.4,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        SizedBox(height: sectionGap),
+        _PhoneNumberField(
+          height: buttonHeight,
+          isDark: isDark,
+        ),
+        SizedBox(height: buttonGap),
+        Obx(() {
+          final sending = controller.isSendingPhoneOtp.value;
+          final anyLoading = controller.isSigningIn;
+          return _PrimaryContinueButton(
+            height: buttonHeight,
+            label: sending ? 'Sending code...' : 'Continue',
+            isLoading: anyLoading,
+            onPressed: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              controller.sendPhoneOtp();
+            },
+          );
+        }),
+        if (!keyboardOpen) ...[
+          SizedBox(height: sectionGap),
+          _OrDivider(compact: compact),
+          SizedBox(height: sectionGap),
+          Obx(() {
+            final googleLoading = controller.isSigningInWithGoogle.value;
+            final anyLoading = controller.isSigningIn;
+            return _SocialLoginButton(
+              height: buttonHeight,
+              isDark: isDark,
+              label: googleLoading ? 'Signing in...' : 'Continue with Google',
+              icon: googleLoading
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.3,
+                        color: AppColors.primary,
+                      ),
+                    )
+                  : _SocialIcon(
+                      asset: _LoginScaffold._googleAsset,
+                      size: r.scale(compact ? 22 : 24),
+                    ),
+              isLoading: anyLoading,
+              onPressed: controller.loginWithGoogle,
+            );
+          }),
+          if (Platform.isIOS) ...[
+            SizedBox(height: buttonGap),
+            Obx(() {
+              final appleLoading = controller.isSigningInWithApple.value;
+              final anyLoading = controller.isSigningIn;
+              return _SocialLoginButton(
+                height: buttonHeight,
+                isDark: isDark,
+                label: appleLoading ? 'Signing in...' : 'Continue with Apple',
+                icon: appleLoading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.3,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : _SocialIcon(
+                        asset: _LoginScaffold._appleAsset,
+                        size: r.scale(compact ? 22 : 24),
+                        tintForDarkMode: true,
+                      ),
+                isLoading: anyLoading,
+                onPressed: controller.loginWithApple,
+              );
+            }),
+          ],
+        ],
+      ],
+    );
+  }
+}
+
+class _PhoneNumberField extends StatefulWidget {
   const _PhoneNumberField({
     required this.height,
     required this.isDark,
@@ -307,100 +365,154 @@ class _PhoneNumberField extends StatelessWidget {
   final bool isDark;
 
   @override
+  State<_PhoneNumberField> createState() => _PhoneNumberFieldState();
+}
+
+class _PhoneNumberFieldState extends State<_PhoneNumberField> {
+  final _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final controller = Get.find<AuthController>();
-    final background = isDark ? const Color(0xFF1F1F1F) : Colors.white;
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : const Color(0xFFE8E8ED);
-    final radius = height / 2;
+    final sheetColor = widget.isDark ? AppColors.darkCard : Colors.white;
+    final idleBorder = widget.isDark
+        ? Colors.white.withValues(alpha: 0.14)
+        : const Color(0xFFD9DCE3);
+    final focused = _focusNode.hasFocus;
+    final borderColor = focused ? AppColors.primary : idleBorder;
+    final radius = widget.height / 2;
     final muted = AppColors.textSecondaryOf(context);
 
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: borderColor),
-        ),
-        alignment: Alignment.center,
-        child: TextField(
-          controller: controller.phoneController,
-          enabled: !controller.isSigningIn,
-          keyboardType: TextInputType.number,
-          textInputAction: TextInputAction.done,
-          textAlignVertical: TextAlignVertical.center,
-          maxLength: 10,
-          onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-          onSubmitted: (_) => controller.sendPhoneOtp(),
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(10),
-          ],
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.4,
-            height: 1.2,
-            color: AppColors.textPrimaryOf(context),
-          ),
-          cursorColor: AppColors.primary,
-          decoration: InputDecoration(
-            hintText: 'Mobile number',
-            hintStyle: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              height: 1.2,
-              color: muted.withValues(alpha: 0.85),
+    return Obx(() {
+      final enabled = !controller.isSigningIn;
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled
+            ? () {
+                _focusNode.requestFocus();
+                SystemChannels.textInput.invokeMethod('TextInput.show');
+              }
+            : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          height: widget.height,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: sheetColor,
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(
+              color: borderColor,
+              width: focused ? 1.5 : 1.2,
             ),
-            prefixIcon: Padding(
-              padding: const EdgeInsets.only(left: 18, right: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '🇮🇳',
-                    style: TextStyle(fontSize: height < 54 ? 17 : 18),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '+91',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimaryOf(context),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '🇮🇳',
+                      style: TextStyle(
+                        fontSize: widget.height < 54 ? 17 : 18,
+                        height: 1,
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Container(
-                      width: 1,
-                      height: 18,
-                      color: muted.withValues(alpha: isDark ? 0.35 : 0.28),
+                    const SizedBox(width: 8),
+                    Text(
+                      '+91',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        height: 1,
+                        color: AppColors.textPrimaryOf(context),
+                      ),
                     ),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Container(
+                        width: 1,
+                        height: 18,
+                        color: muted.withValues(
+                          alpha: widget.isDark ? 0.35 : 0.28,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            prefixIconConstraints: const BoxConstraints(
-              minWidth: 0,
-              minHeight: 0,
-            ),
-            counterText: '',
-            filled: false,
-            fillColor: Colors.transparent,
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            disabledBorder: InputBorder.none,
-            contentPadding: const EdgeInsets.only(right: 18),
-            isDense: true,
+              Expanded(
+                child: TextField(
+                  controller: controller.phoneController,
+                  focusNode: _focusNode,
+                  enabled: enabled,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const [
+                    AutofillHints.telephoneNumberNational,
+                  ],
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  smartDashesType: SmartDashesType.disabled,
+                  smartQuotesType: SmartQuotesType.disabled,
+                  textAlignVertical: TextAlignVertical.center,
+                  maxLength: 10,
+                  onTapOutside: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
+                  onSubmitted: (_) {
+                    _focusNode.unfocus();
+                    controller.sendPhoneOtp();
+                  },
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.35,
+                    height: 1.15,
+                    color: AppColors.textPrimaryOf(context),
+                  ),
+                  cursorColor: AppColors.primary,
+                  decoration: InputDecoration(
+                    hintText: 'Mobile number',
+                    hintStyle: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      height: 1.15,
+                      color: muted.withValues(alpha: 0.8),
+                    ),
+                    counterText: '',
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    isCollapsed: true,
+                    contentPadding: const EdgeInsets.only(right: 16),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 
@@ -525,46 +637,46 @@ class _BrandHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final heroOverlap = r.scale(88, tablet: 100);
 
-    return Padding(
-      padding: EdgeInsets.only(right: heroOverlap),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(height: r.scale(compact ? 24 : 28)),
-          _AppLogo(size: logoSize, isDark: isDark),
-          SizedBox(height: r.scale(compact ? 14 : 16)),
-          RichText(
-            text: TextSpan(
-              style: TextStyle(
-                fontSize: r.scale(compact ? 22 : 24, tablet: 26),
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimaryOf(context),
-                height: 1.15,
-                letterSpacing: -0.2,
-              ),
-              children: const [
-                TextSpan(text: 'MyCalorie'),
-                TextSpan(
-                  text: 'Pal',
-                  style: TextStyle(color: AppColors.primary),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: r.scale(compact ? 4 : 6)),
-          Text(
-            'Smarter tracking. Healthier you.',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _AppLogo(size: logoSize, isDark: isDark),
+        SizedBox(height: r.scale(compact ? 8 : 10)),
+        RichText(
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          text: TextSpan(
             style: TextStyle(
-              fontSize: r.scale(compact ? 13 : 14),
-              color: AppColors.textSecondaryOf(context),
-              height: 1.35,
+              fontSize: r.scale(compact ? 21 : 24, tablet: 26),
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimaryOf(context),
+              height: 1.15,
+              letterSpacing: -0.3,
             ),
+            children: const [
+              TextSpan(text: 'MyCalorie'),
+              TextSpan(
+                text: 'Pal',
+                style: TextStyle(color: AppColors.primary),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        SizedBox(height: r.scale(3)),
+        Text(
+          'Smarter tracking. Healthier you.',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: r.scale(compact ? 12 : 13.5),
+            color: AppColors.textSecondaryOf(context),
+            height: 1.3,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -706,74 +818,6 @@ class _SocialIcon extends StatelessWidget {
   }
 }
 
-class _CalorieWheel extends StatelessWidget {
-  const _CalorieWheel({required this.size, required this.isDark});
-
-  final double size;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    final ringWidth = size * 0.085;
-    final trackColor = isDark
-        ? Colors.white.withValues(alpha: 0.12)
-        : AppColors.lightBorder;
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox(
-            width: size,
-            height: size,
-            child: CircularProgressIndicator(
-              value: 1,
-              strokeWidth: ringWidth,
-              color: trackColor,
-            ),
-          ),
-          SizedBox(
-            width: size,
-            height: size,
-            child: CircularProgressIndicator(
-              value: 0.78,
-              strokeWidth: ringWidth,
-              strokeCap: StrokeCap.round,
-              color: AppColors.primary,
-            ),
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '2546',
-                style: TextStyle(
-                  fontSize: size * 0.2,
-                  height: 1,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimaryOf(context),
-                ),
-              ),
-              SizedBox(height: size * 0.03),
-              Text(
-                'kcal',
-                style: TextStyle(
-                  fontSize: size * 0.11,
-                  height: 1,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondaryOf(context),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _TermsFooter extends StatelessWidget {
   const _TermsFooter({
     required this.onTermsTap,
@@ -787,18 +831,21 @@ class _TermsFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = compact ? 11.5 : 12.0;
+    final muted = AppColors.textSecondaryOf(context).withValues(alpha: 0.8);
     final baseStyle = TextStyle(
-      fontSize: compact ? 11 : 12,
-      color: AppColors.textSecondaryOf(context).withValues(alpha: 0.9),
-      height: 1.55,
+      fontSize: size,
+      color: muted,
+      height: 1.5,
+      fontWeight: FontWeight.w400,
+      letterSpacing: 0.1,
     );
-
     final linkStyle = TextStyle(
-      fontSize: compact ? 11 : 12,
+      fontSize: size,
       color: AppColors.primary,
+      height: 1.5,
       fontWeight: FontWeight.w600,
-      height: 1.55,
-      decoration: TextDecoration.none,
+      letterSpacing: 0.1,
     );
 
     return Column(
@@ -809,6 +856,7 @@ class _TermsFooter extends StatelessWidget {
           textAlign: TextAlign.center,
           style: baseStyle,
         ),
+        const SizedBox(height: 2),
         Text.rich(
           TextSpan(
             style: baseStyle,
@@ -820,7 +868,7 @@ class _TermsFooter extends StatelessWidget {
               ),
               const TextSpan(text: ' and '),
               TextSpan(
-                text: 'Privacy Policy.',
+                text: 'Privacy Policy',
                 style: linkStyle,
                 recognizer: TapGestureRecognizer()..onTap = onPrivacyTap,
               ),
