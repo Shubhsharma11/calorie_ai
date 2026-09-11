@@ -5,7 +5,11 @@ import '../theme/app_colors.dart';
 
 /// App-wide toast helper — same top snackbar on every screen.
 abstract final class AppSnackbar {
-  static void success(String message, {String title = 'Saved'}) {
+  static DateTime? _lastShownAt;
+  static String? _lastFingerprint;
+  static const _dedupeWindow = Duration(milliseconds: 900);
+
+  static void success(String message, {String? title}) {
     _show(
       title: title,
       message: message,
@@ -14,7 +18,7 @@ abstract final class AppSnackbar {
     );
   }
 
-  static void error(String message, {String title = 'Something went wrong'}) {
+  static void error(String message, {String? title}) {
     _show(
       title: title,
       message: message,
@@ -23,7 +27,7 @@ abstract final class AppSnackbar {
     );
   }
 
-  static void info(String message, {String title = 'Heads up'}) {
+  static void info(String message, {String? title}) {
     _show(
       title: title,
       message: message,
@@ -33,29 +37,45 @@ abstract final class AppSnackbar {
   }
 
   static void _show({
-    required String title,
+    required String? title,
     required String message,
     required IconData icon,
     required Color accent,
   }) {
+    final fingerprint = '${title ?? ''}|$message|$icon';
+    final now = DateTime.now();
+    if (_lastFingerprint == fingerprint &&
+        _lastShownAt != null &&
+        now.difference(_lastShownAt!) < _dedupeWindow) {
+      return;
+    }
+    _lastFingerprint = fingerprint;
+    _lastShownAt = now;
+
+    // Never stack toasts — replace whatever is already visible.
     if (Get.isSnackbarOpen) {
-      Get.closeCurrentSnackbar();
+      Get.closeAllSnackbars();
     }
 
+    final hasTitle = title != null && title.trim().isNotEmpty;
+
     Get.rawSnackbar(
-      titleText: Text(
-        title,
-        style: TextStyle(
-          color: AppColors.textPrimary,
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+      titleText: hasTitle
+          ? Text(
+              title.trim(),
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          : null,
       messageText: Text(
         message,
         style: TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 13,
+          color: hasTitle ? AppColors.textSecondary : AppColors.textPrimary,
+          fontSize: hasTitle ? 13 : 14,
+          fontWeight: hasTitle ? FontWeight.w500 : FontWeight.w600,
           height: 1.3,
         ),
       ),
@@ -68,7 +88,7 @@ abstract final class AppSnackbar {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       snackPosition: SnackPosition.TOP,
       duration: const Duration(seconds: 2),
-      animationDuration: const Duration(milliseconds: 350),
+      animationDuration: const Duration(milliseconds: 280),
       boxShadows: [
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.10),

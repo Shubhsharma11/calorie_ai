@@ -635,7 +635,7 @@ class _SideStatRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: r.scale(13),
                   fontWeight: FontWeight.w600,
-                  height: 1.1,
+                  height: 1.1,  
                   color: accent,
                 ),
               ),

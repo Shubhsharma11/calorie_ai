@@ -12,6 +12,7 @@ abstract final class AppRoutes {
   static const activityLevel = '/activity-level';
   static const nutritionPlanLoading = '/nutrition-plan-loading';
   static const healthProblem = '/health-problem';
+  static const dietPreferences = '/diet-preferences';
   static const dailyCalorieGoal = '/daily-calorie-goal';
   static const main = '/main';
   static const waterTracker = '/water-tracker';

@@ -15,6 +15,7 @@ import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_bottom_sheet.dart';
+import '../widgets/onboarding_entrance.dart';
 import '../widgets/onboarding_step_scaffold.dart';
 
 class HealthProblemView extends StatefulWidget {
@@ -260,8 +261,8 @@ class _HealthProblemViewState extends State<HealthProblemView> {
       return;
     }
 
-    await _user.persistOnboardingStep(AppRoutes.nutritionPlanLoading);
-    Get.offNamed(AppRoutes.nutritionPlanLoading);
+    await _user.persistOnboardingStep(AppRoutes.dietPreferences);
+    Get.offNamed(AppRoutes.dietPreferences);
   }
 
   void _showValidationMessage(String title, String message) {
@@ -355,185 +356,225 @@ class _HealthProblemViewState extends State<HealthProblemView> {
                     showProgress: !_fromProfile,
                     onBack: () => unawaited(_onBack()),
                   ),
-                  SizedBox(height: r.scale(24)),
-                  Text(
-                    "We're here for your health",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: r.scale(28, tablet: 32),
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimaryOf(context),
-                      height: 1.15,
-                      letterSpacing: -0.4,
-                    ),
-                  ),
-                  SizedBox(height: r.scale(10)),
-                  Text(
-                    'Tell us a little about your health so we can personalize your journey.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: r.scale(14, tablet: 15),
-                      color: AppColors.textSecondaryOf(context),
-                      height: 1.4,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  SizedBox(height: r.scale(20)),
+                  SizedBox(height: r.scale(28)),
                   Expanded(
-                    child: AbsorbPointer(
-                      absorbing: _isSaving,
-                      child: ListView(
-                        physics: const BouncingScrollPhysics(),
-                        children: [
-                          Text(
-                            'Do you have any health concerns?',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: r.scale(16, tablet: 17),
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimaryOf(context),
+                    child: OnboardingEntrance(
+                      builder: (context, entrance) {
+                        return Column(
+                          children: [
+                            entrance.item(
+                              index: 0,
+                              child: Text(
+                                'Do you have any health concerns?',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: r.scale(28, tablet: 32),
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimaryOf(context),
+                                  height: 1.15,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
                             ),
-                          ),
-                          SizedBox(height: r.scale(12)),
-                          OnboardingOptionCard(
-                            title: 'Yes',
-                            subtitle: 'I have one or more health concerns',
-                            selected: _hasConcerns == true,
-                            onTap: () => _selectHasConcerns(true),
-                          ),
-                          SizedBox(height: r.scale(12)),
-                          OnboardingOptionCard(
-                            title: 'No',
-                            subtitle: 'No health concerns right now',
-                            selected: _hasConcerns == false,
-                            onTap: () => _selectHasConcerns(false),
-                          ),
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 280),
-                            curve: Curves.easeOutCubic,
-                            alignment: Alignment.topCenter,
-                            child: _noneSelected
-                                ? Padding(
-                                    padding: EdgeInsets.only(top: r.scale(14)),
-                                    child: _NoneConfirmedCard(
-                                      actionLabel: _fromProfile ? 'Save' : 'Continue',
-                                    ),
-                                  )
-                                : const SizedBox.shrink(),
-                          ),
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 280),
-                            curve: Curves.easeOutCubic,
-                            alignment: Alignment.topCenter,
-                            child: showingConcerns
-                                ? Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
+                            SizedBox(height: r.scale(10)),
+                            entrance.item(
+                              index: 1,
+                              child: Text(
+                                'This helps us personalize your meal plan around your health.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: r.scale(14, tablet: 15),
+                                  color: AppColors.textSecondaryOf(context),
+                                  height: 1.4,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: r.scale(24)),
+                            Expanded(
+                              child: entrance.item(
+                                index: 2,
+                                child: AbsorbPointer(
+                                  absorbing: _isSaving,
+                                  child: ListView(
+                                    physics: const BouncingScrollPhysics(),
                                     children: [
-                                      SizedBox(height: r.scale(compact ? 18 : 22)),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              'Which ones apply?',
-                                              style: TextStyle(
-                                                fontSize: r.scale(17, tablet: 18),
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.textPrimaryOf(
-                                                  context,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          if (hasHealthConcerns)
-                                            _CountBadge(
-                                              count: _selectedCategories.length,
-                                            ),
-                                        ],
-                                      ),
-                                      SizedBox(height: r.scale(4)),
-                                      Text(
-                                        'Select all that apply. Tap again to remove.',
-                                        style: TextStyle(
-                                          fontSize: r.scale(13, tablet: 14),
-                                          color: AppColors.textSecondaryOf(
-                                            context,
-                                          ),
-                                          height: 1.35,
-                                        ),
+                                      OnboardingOptionCard(
+                                        title: 'Yes',
+                                        subtitle:
+                                            'I have one or more health concerns',
+                                        selected: _hasConcerns == true,
+                                        onTap: () =>
+                                            _selectHasConcerns(true),
                                       ),
                                       SizedBox(height: r.scale(12)),
-                                      _CategoryGrid(
-                                        categories: _categories,
-                                        selectedCategories: _selectedCategories,
-                                        onChanged: _toggleCategory,
+                                      OnboardingOptionCard(
+                                        title: 'No',
+                                        subtitle:
+                                            'No health concerns right now',
+                                        selected: _hasConcerns == false,
+                                        onTap: () =>
+                                            _selectHasConcerns(false),
                                       ),
-                                      if (_selectedCategories.isEmpty) ...[
-                                        SizedBox(height: r.scale(14)),
-                                        const _GuidanceCard(
-                                          iconAsset: 'assets/image/point.svg',
-                                          title: 'Select your concerns',
-                                          message:
-                                              'Choose one or more categories, then add details for each.',
+                                      AnimatedSize(
+                                        duration: const Duration(
+                                          milliseconds: 280,
                                         ),
+                                        curve: Curves.easeOutCubic,
+                                        alignment: Alignment.topCenter,
+                                        child: showingConcerns
+                                            ? Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment
+                                                        .stretch,
+                                                children: [
+                                                  SizedBox(
+                                                    height: r.scale(
+                                                      compact ? 18 : 22,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    'Which ones apply?',
+                                                    style: TextStyle(
+                                                      fontSize: r.scale(
+                                                        17,
+                                                        tablet: 18,
+                                                      ),
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      color: AppColors
+                                                          .textPrimaryOf(
+                                                        context,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  SizedBox(
+                                                    height: r.scale(4),
+                                                  ),
+                                                  Text(
+                                                    'Select all that apply. Tap again to remove.',
+                                                    style: TextStyle(
+                                                      fontSize: r.scale(
+                                                        13,
+                                                        tablet: 14,
+                                                      ),
+                                                      color: AppColors
+                                                          .textSecondaryOf(
+                                                        context,
+                                                      ),
+                                                      height: 1.35,
+                                                    ),
+                                                  ),
+                                                  SizedBox(
+                                                    height: r.scale(12),
+                                                  ),
+                                                  _CategoryGrid(
+                                                    categories: _categories,
+                                                    selectedCategories:
+                                                        _selectedCategories,
+                                                    onChanged:
+                                                        _toggleCategory,
+                                                  ),
+                                                  if (_selectedCategories
+                                                      .isEmpty) ...[
+                                                    SizedBox(
+                                                      height: r.scale(14),
+                                                    ),
+                                                    const _GuidanceCard(
+                                                      iconAsset:
+                                                          'assets/image/point.svg',
+                                                      title:
+                                                          'Select your concerns',
+                                                      message:
+                                                          'Choose one or more categories, then add details for each.',
+                                                    ),
+                                                  ],
+                                                ],
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
+                                      if (hasHealthConcerns) ...[
+                                        SizedBox(
+                                          height:
+                                              r.scale(compact ? 18 : 22),
+                                        ),
+                                        _SectionTitle(
+                                          text: 'Details for each concern',
+                                          r: r,
+                                        ),
+                                        SizedBox(height: r.scale(6)),
+                                        Text(
+                                          'Expand each concern and add its own description and details.',
+                                          style: TextStyle(
+                                            fontSize:
+                                                r.scale(13, tablet: 14),
+                                            color:
+                                                AppColors.textSecondaryOf(
+                                              context,
+                                            ),
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                        SizedBox(height: r.scale(12)),
+                                        ...sortedCategories.map((category) {
+                                          final form = _forms[category]!;
+                                          final asset = _categories
+                                              .firstWhere(
+                                                (item) =>
+                                                    item.label == category,
+                                              )
+                                              .asset;
+                                          return Padding(
+                                            padding: EdgeInsets.only(
+                                              bottom: r.scale(12),
+                                            ),
+                                            child: _ConcernDetailCard(
+                                              category: category,
+                                              asset: asset,
+                                              form: form,
+                                              expanded: _expandedCategories
+                                                  .contains(category),
+                                              onExpansionChanged:
+                                                  (expanded) {
+                                                setState(() {
+                                                  if (expanded) {
+                                                    _expandedCategories
+                                                        .add(category);
+                                                  } else {
+                                                    _expandedCategories
+                                                        .remove(category);
+                                                  }
+                                                });
+                                              },
+                                              onChanged: () {
+                                                setState(() {});
+                                                _persistPartialHealth();
+                                              },
+                                            ),
+                                          );
+                                        }),
                                       ],
+                                      SizedBox(height: r.scale(8)),
                                     ],
-                                  )
-                                : const SizedBox.shrink(),
-                          ),
-                          if (hasHealthConcerns) ...[
-                            SizedBox(height: r.scale(compact ? 18 : 22)),
-                            _SectionTitle(text: 'Details for Each Concern', r: r),
-                            SizedBox(height: r.scale(6)),
-                            Text(
-                              'Expand each concern and add its own description and details.',
-                              style: TextStyle(
-                                fontSize: r.scale(13, tablet: 14),
-                                color: AppColors.textSecondaryOf(context),
-                                height: 1.35,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            entrance.item(
+                              index: 3,
+                              child: OnboardingContinueButton(
+                                label: actionLabel,
+                                onPressed: _isSaving
+                                    ? null
+                                    : () => unawaited(_continue()),
                               ),
                             ),
                             SizedBox(height: r.scale(12)),
-                            ...sortedCategories.map((category) {
-                              final form = _forms[category]!;
-                              final asset = _categories
-                                  .firstWhere((item) => item.label == category)
-                                  .asset;
-                              return Padding(
-                                padding: EdgeInsets.only(bottom: r.scale(12)),
-                                child: _ConcernDetailCard(
-                                  category: category,
-                                  asset: asset,
-                                  form: form,
-                                  expanded:
-                                      _expandedCategories.contains(category),
-                                  onExpansionChanged: (expanded) {
-                                    setState(() {
-                                      if (expanded) {
-                                        _expandedCategories.add(category);
-                                      } else {
-                                        _expandedCategories.remove(category);
-                                      }
-                                    });
-                                  },
-                                  onChanged: () {
-                                    setState(() {});
-                                    _persistPartialHealth();
-                                  },
-                                ),
-                              );
-                            }),
                           ],
-                          SizedBox(height: r.scale(16)),
-                        ],
-                      ),
+                        );
+                      },
                     ),
                   ),
-                  OnboardingContinueButton(
-                    label: actionLabel,
-                    onPressed: _isSaving ? null : () => unawaited(_continue()),
-                  ),
-                  SizedBox(height: r.scale(12)),
                 ],
               ),
             ),
@@ -721,37 +762,6 @@ class _ConcernDetailCard extends StatelessWidget {
   }
 }
 
-class _CountBadge extends StatelessWidget {
-  const _CountBadge({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: r.scale(10),
-        vertical: r.scale(5),
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.22)),
-      ),
-      child: Text(
-        '$count selected',
-        style: TextStyle(
-          fontSize: r.scale(12, tablet: 13),
-          fontWeight: FontWeight.w700,
-          color: AppColors.primary,
-        ),
-      ),
-    );
-  }
-}
-
 class _CategoryIconBadge extends StatelessWidget {
   const _CategoryIconBadge({
     required this.asset,
@@ -840,72 +850,6 @@ abstract final class _SetupCard {
           offset: Offset(0, active ? 2 : 1),
         ),
       ],
-    );
-  }
-}
-
-class _NoneConfirmedCard extends StatelessWidget {
-  const _NoneConfirmedCard({required this.actionLabel});
-
-  final String actionLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: r.scale(14),
-        vertical: r.scale(14),
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.22)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: r.scale(36),
-            height: r.scale(36),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.check_rounded,
-              color: AppColors.primary,
-              size: r.scale(20),
-            ),
-          ),
-          SizedBox(width: r.scale(12)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'No health concerns',
-                  style: TextStyle(
-                    fontSize: r.scale(14, tablet: 15),
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                SizedBox(height: r.scale(2)),
-                Text(
-                  'Tap $actionLabel below when you\'re ready.',
-                  style: TextStyle(
-                    fontSize: r.scale(12, tablet: 13),
-                    color: AppColors.textSecondary,
-                    height: 1.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1045,13 +989,14 @@ class _CategoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final mintFill = AppColors.primary.withValues(alpha: 0.12);
 
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
@@ -1062,19 +1007,23 @@ class _CategoryCard extends StatelessWidget {
             vertical: r.scale(10),
           ),
           decoration: BoxDecoration(
-            color: selected ? AppColors.selectionFill : AppColors.card,
-            borderRadius: BorderRadius.circular(14),
+            color: selected ? mintFill : AppColors.cardOf(context),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected ? AppColors.primary : AppColors.border,
-              width: selected ? 1.5 : 1,
+              color: selected
+                  ? AppColors.primary
+                  : Colors.transparent,
+              width: 1.6,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.shadowColor,
-                blurRadius: selected ? 8 : 5,
-                offset: Offset(0, selected ? 2 : 1),
-              ),
-            ],
+            boxShadow: selected
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
           ),
           child: Row(
             children: [
@@ -1092,31 +1041,10 @@ class _CategoryCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: r.scale(12, tablet: 13),
                     fontWeight: FontWeight.w700,
-                    color: selected ? AppColors.primary : AppColors.textPrimary,
+                    color: AppColors.textPrimaryOf(context),
                     height: 1.15,
                   ),
                 ),
-              ),
-              SizedBox(width: r.scale(4)),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                width: r.scale(18),
-                height: r.scale(18),
-                decoration: BoxDecoration(
-                  color: selected ? AppColors.primary : Colors.transparent,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: selected ? AppColors.primary : AppColors.border,
-                    width: 1.5,
-                  ),
-                ),
-                child: selected
-                    ? Icon(
-                        Icons.check_rounded,
-                        size: r.scale(12),
-                        color: AppColors.onPrimary,
-                      )
-                    : null,
               ),
             ],
           ),

@@ -6,7 +6,7 @@ import 'package:get/get.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
-// import '../controllers/streak_controller.dart';
+import '../controllers/streak_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_coach_marks.dart';
@@ -23,7 +23,7 @@ import '../widgets/dashboard_header.dart';
 import '../widgets/macro_nutrition_card.dart';
 import '../widgets/past_date_banner.dart';
 import '../widgets/responsive_page.dart';
-// import '../widgets/streak_badge.dart';
+import '../widgets/streak_badge.dart';
 import '../widgets/water_intake_banner.dart';
 import '../widgets/weight_tracker_banner.dart';
 import '../widgets/meal_type_icon.dart';
@@ -104,9 +104,8 @@ class DashboardView extends GetView<DashboardController> {
                       ],
                     );
                   }),
-                  // Streak badge temporarily disabled on home.
-                  // const _StreakSection(),
-                  // SizedBox(height: r.scale(20)),
+                  const _StreakSection(),
+                  SizedBox(height: r.scale(20)),
                   const _CalorieSection(),
                   SizedBox(height: r.scale(12)),
                   const AiMealPlanCard(),
@@ -126,23 +125,23 @@ class DashboardView extends GetView<DashboardController> {
   }
 }
 
-// class _StreakSection extends GetView<DashboardController> {
-//   const _StreakSection();
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Obx(() {
-//       if (Get.isRegistered<StreakController>()) {
-//         Get.find<StreakController>().revision.value;
-//       }
-//       return StreakBadge(
-//         streakDays: controller.loggingStreak,
-//         isAtRisk: controller.isStreakAtRisk,
-//         onTap: () => Get.toNamed(AppRoutes.streak),
-//       );
-//     });
-//   }
-// }
+class _StreakSection extends GetView<DashboardController> {
+  const _StreakSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      if (Get.isRegistered<StreakController>()) {
+        Get.find<StreakController>().revision.value;
+      }
+      return StreakBadge(
+        streakDays: controller.loggingStreak,
+        isAtRisk: controller.isStreakAtRisk,
+        onTap: () => Get.toNamed(AppRoutes.streak),
+      );
+    });
+  }
+}
 
 class _CalorieSection extends GetView<DashboardController> {
   const _CalorieSection();

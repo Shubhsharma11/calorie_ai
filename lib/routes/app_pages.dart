@@ -18,6 +18,7 @@ import '../views/add_food_view.dart';
 import '../views/daily_calorie_goal_view.dart';
 import '../views/daily_summary_view.dart';
 import '../views/health_problem_view.dart';
+import '../views/diet_preferences_view.dart';
 import '../controllers/daily_summary_controller.dart';
 import '../views/create_meal_view.dart';
 import '../views/create_custom_food_view.dart';
@@ -40,7 +41,7 @@ import '../views/personal_details_view.dart';
 import '../views/personal_information_view.dart';
 import '../views/progress_view.dart';
 import '../views/register_view.dart';
-// import '../controllers/streak_controller.dart';
+import '../controllers/streak_controller.dart';
 import '../views/streak_view.dart';
 import '../views/calories_burn_view.dart';
 import '../views/water_tracker_view.dart';
@@ -117,6 +118,15 @@ abstract final class AppPages {
     AppPageTransitions.onboardingPage(
       name: AppRoutes.healthProblem,
       page: () => const HealthProblemView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<UserController>()) {
+          Get.put(UserController(), permanent: true);
+        }
+      }),
+    ),
+    AppPageTransitions.onboardingPage(
+      name: AppRoutes.dietPreferences,
+      page: () => const DietPreferencesView(),
       binding: BindingsBuilder(() {
         if (!Get.isRegistered<UserController>()) {
           Get.put(UserController(), permanent: true);
@@ -255,10 +265,9 @@ abstract final class AppPages {
       page: () => const StreakView(),
       binding: BindingsBuilder(() {
         HomeBinding().dependencies();
-        // Streak unused — do not register controller / hit streak API.
-        // if (!Get.isRegistered<StreakController>()) {
-        //   Get.put(StreakController());
-        // }
+        if (!Get.isRegistered<StreakController>()) {
+          Get.put(StreakController());
+        }
       }),
     ),
 

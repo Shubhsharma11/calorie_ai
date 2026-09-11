@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'activity_level.dart';
+import 'diet_type.dart';
 import 'goal_type.dart';
 import 'health_concern.dart';
 import '../core/body_measurement_units.dart';
@@ -40,6 +41,14 @@ class UserModel {
   /// Weight when the current target was set (from API `startWeight`, not disk).
   double? goalStartWeightKg;
   List<HealthConcern> healthConcerns = [];
+
+  DietType? dietType;
+  List<String> foodAllergies = [];
+  String foodsToAvoid = '';
+  int? mealsPerDay;
+
+  bool get hasDietPreferencesConfigured =>
+      dietType != null && mealsPerDay != null;
 
   bool get hasHealthConcernsConfigured => healthConcerns.isNotEmpty;
 
@@ -265,6 +274,10 @@ class UserModel {
     pinnedGoalType = null;
     goalStartWeightKg = null;
     healthConcerns = [];
+    dietType = null;
+    foodAllergies = [];
+    foodsToAvoid = '';
+    mealsPerDay = null;
     manualCalorieAdjustment = 0;
     nutritionPlanBaseCalories = null;
     nutritionPlanDailyCalories = null;

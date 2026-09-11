@@ -1,4 +1,5 @@
 import 'activity_level.dart';
+import 'diet_type.dart';
 import 'goal_type.dart';
 import 'health_concern.dart';
 import 'health_problem_api_mapper.dart';
@@ -120,6 +121,10 @@ class OnboardingRequestModel {
     this.goalTimelineCustomDate,
     this.startWeight,
     this.startWeightUnit,
+    this.dietType,
+    this.foodAllergies = const [],
+    this.foodsToAvoid,
+    this.mealsPerDay,
   });
 
   final OnboardingPersonalDetails personalDetails;
@@ -132,6 +137,10 @@ class OnboardingRequestModel {
   final String? goalTimelineCustomDate;
   final num? startWeight;
   final String? startWeightUnit;
+  final String? dietType;
+  final List<String> foodAllergies;
+  final String? foodsToAvoid;
+  final int? mealsPerDay;
 
   OnboardingHealthProblem? get primaryHealthProblem =>
       healthProblems.isEmpty ? null : healthProblems.first;
@@ -149,6 +158,11 @@ class OnboardingRequestModel {
         'goalTimelineCustomDate': goalTimelineCustomDate,
       if (startWeight != null) 'startWeight': startWeight,
       if (startWeightUnit != null) 'startWeightUnit': startWeightUnit,
+      if (dietType != null) 'dietType': dietType,
+      'foodAllergies': foodAllergies,
+      if (foodsToAvoid != null && foodsToAvoid!.isNotEmpty)
+        'foodsToAvoid': foodsToAvoid,
+      if (mealsPerDay != null) 'mealsPerDay': mealsPerDay,
     };
   }
 
@@ -205,6 +219,12 @@ class OnboardingRequestModel {
           ? _roundGoalWeight(user.goalStartWeightKg!)
           : _roundGoalWeight(weightKg.toDouble()),
       startWeightUnit: 'kg',
+      dietType: user.dietType?.apiValue,
+      foodAllergies: List<String>.from(user.foodAllergies),
+      foodsToAvoid: user.foodsToAvoid.trim().isEmpty
+          ? null
+          : user.foodsToAvoid.trim(),
+      mealsPerDay: user.mealsPerDay,
     );
   }
 
@@ -258,6 +278,17 @@ class OnboardingPatchModel {
   bool get shouldRefreshNutritionPlan {
     if (touchesGoalFields) return true;
     if (activityLevel != null) return true;
+    final extras = extraFields;
+    if (extras != null &&
+        extras.keys.any(
+          (key) =>
+              key == 'dietType' ||
+              key == 'foodAllergies' ||
+              key == 'foodsToAvoid' ||
+              key == 'mealsPerDay',
+        )) {
+      return true;
+    }
     final personal = personalDetails;
     if (personal == null || personal.isEmpty) return false;
     const planKeys = {
@@ -528,6 +559,44 @@ class OnboardingPatchModel {
     }
 
     return OnboardingPatchModel.healthConcerns(concerns);
+  }
+
+  factory OnboardingPatchModel.dietPreferences(UserModel user) {
+    final avoid = user.foodsToAvoid.trim();
+    return OnboardingPatchModel._(
+      extraFields: {
+        if (user.dietType != null) 'dietType': user.dietType!.apiValue,
+        'foodAllergies': List<String>.from(user.foodAllergies),
+        'foodsToAvoid': avoid,
+        if (user.mealsPerDay != null) 'mealsPerDay': user.mealsPerDay,
+      },
+    );
+  }
+
+  factory OnboardingPatchModel.dietPreferencesDiff(
+    UserModel user,
+    ProfileSyncSnapshot baseline,
+  ) {
+    final extras = <String, dynamic>{};
+
+    if (user.dietType != baseline.dietType) {
+      extras['dietType'] = user.dietType?.apiValue;
+    }
+    if (!ProfileSyncSnapshot.foodAllergiesEqual(
+      user.foodAllergies,
+      baseline.foodAllergies,
+    )) {
+      extras['foodAllergies'] = List<String>.from(user.foodAllergies);
+    }
+    if (user.foodsToAvoid.trim() != baseline.foodsToAvoid.trim()) {
+      extras['foodsToAvoid'] = user.foodsToAvoid.trim();
+    }
+    if (user.mealsPerDay != baseline.mealsPerDay) {
+      extras['mealsPerDay'] = user.mealsPerDay;
+    }
+
+    if (extras.isEmpty) return const OnboardingPatchModel._();
+    return OnboardingPatchModel._(extraFields: extras);
   }
 }
 

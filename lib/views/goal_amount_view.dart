@@ -14,6 +14,7 @@ import '../models/goal_type.dart';
 import '../models/onboarding_request_model.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/onboarding_entrance.dart';
 import '../widgets/onboarding_step_scaffold.dart';
 
 class GoalAmountView extends StatefulWidget {
@@ -204,6 +205,127 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     _persistDraft();
   }
 
+  void _applyWeight({
+    required bool isCurrent,
+    required double displayValue,
+  }) {
+    final idx = _nearestIndex(displayValue);
+    final snapped = _weightValues[idx];
+    setState(() {
+      _errorText = null;
+      if (isCurrent) {
+        _currentChosen = true;
+        _currentDisplay = snapped;
+      } else {
+        _goalChosen = true;
+        _goalDisplay = snapped;
+      }
+    });
+
+    final ctrl = isCurrent ? _currentCtrl : _goalCtrl;
+    void jump() {
+      if (!ctrl.hasClients) return;
+      ctrl.animateToItem(
+        idx,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+
+    if (ctrl.hasClients) {
+      jump();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        jump();
+      });
+    }
+    _persistDraft();
+  }
+
+  Future<void> _editWeight({required bool isCurrent}) async {
+    final initial = isCurrent ? _currentDisplay : _goalDisplay;
+    final label = isCurrent ? 'Current weight' : 'Goal weight';
+    final textCtrl = TextEditingController(text: _format(initial));
+    final entered = await showCupertinoDialog<double>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return CupertinoAlertDialog(
+          title: Text(label),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Column(
+              children: [
+                Text(
+                  'Enter a value in $_unit',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(ctx),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                CupertinoTextField(
+                  controller: textCtrl,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  textAlign: TextAlign.center,
+                  placeholder: _format(initial),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.tertiarySystemFill.resolveFrom(ctx),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  onSubmitted: (raw) {
+                    final parsed = _parseDisplayWeight(raw);
+                    Navigator.of(ctx).pop(parsed);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () {
+                final parsed = _parseDisplayWeight(textCtrl.text);
+                Navigator.of(ctx).pop(parsed);
+              },
+              child: const Text('Done'),
+            ),
+          ],
+        );
+      },
+    );
+    textCtrl.dispose();
+    if (!mounted || entered == null) return;
+
+    final minDisplay = _weightValues.first;
+    final maxDisplay = _weightValues.last;
+    if (entered < minDisplay || entered > maxDisplay) {
+      AppSnackbar.error(
+        'Enter a weight between ${_format(minDisplay)} and ${_format(maxDisplay)} $_unit.',
+      );
+      return;
+    }
+    _applyWeight(isCurrent: isCurrent, displayValue: entered);
+  }
+
+  double? _parseDisplayWeight(String raw) {
+    final cleaned = raw.trim().replaceAll(',', '.');
+    if (cleaned.isEmpty) return null;
+    return double.tryParse(cleaned);
+  }
+
   void _persistDraft() {
     if (RouteArgs.isEditingFromProfile) return;
     if (!_currentChosen || !_goalChosen) return;
@@ -338,133 +460,171 @@ class _GoalAmountViewState extends State<GoalAmountView> {
                   onBack: () => unawaited(_onBack(fromProfile: fromProfile)),
                 ),
                 SizedBox(height: r.scale(28)),
-                Text(
-                  "What's your weight goal?",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: r.scale(28, tablet: 32),
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimaryOf(context),
-                    height: 1.15,
-                    letterSpacing: -0.4,
-                  ),
-                ),
-                SizedBox(height: r.scale(18)),
-                OnboardingUnitToggle(
-                  left: 'lbs',
-                  right: 'kg',
-                  leftSelected: !_useKg,
-                  onLeft: () => _toggleUnit(false),
-                  onRight: () => _toggleUnit(true),
-                ),
-                if (_errorText != null) ...[
-                  SizedBox(height: r.scale(10)),
-                  Text(
-                    _errorText!,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.error,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
                 Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: _WeightColumn(
-                          label: 'Current',
-                          controller: _currentCtrl,
-                          values: _weightValues,
-                          format: _format,
-                          onSelected: (i) {
-                            if (!_pickersReady) return;
-                            setState(() {
-                              _currentChosen = true;
-                              _currentDisplay = _weightValues[i];
-                              _errorText = null;
-                            });
-                            _persistDraft();
-                          },
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.only(top: r.scale(28)),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            OnboardingBoldChevron(
-                              up: true,
-                              onTap: () => _nudgeGoal(-1),
+                  child: OnboardingEntrance(
+                    builder: (context, entrance) {
+                      return Column(
+                        children: [
+                          entrance.item(
+                            index: 0,
+                            child: Text(
+                              "What's your weight goal?",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: r.scale(28, tablet: 32),
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimaryOf(context),
+                                height: 1.15,
+                                letterSpacing: -0.4,
+                              ),
                             ),
-                            const SizedBox(height: 12),
-                            OnboardingBoldChevron(
-                              up: false,
-                              onTap: () => _nudgeGoal(1),
+                          ),
+                          SizedBox(height: r.scale(18)),
+                          entrance.item(
+                            index: 1,
+                            child: OnboardingUnitToggle(
+                              left: 'lbs',
+                              right: 'kg',
+                              leftSelected: !_useKg,
+                              onLeft: () => _toggleUnit(false),
+                              onRight: () => _toggleUnit(true),
+                            ),
+                          ),
+                          if (_errorText != null) ...[
+                            SizedBox(height: r.scale(10)),
+                            Text(
+                              _errorText!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.error,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
-                        ),
-                      ),
-                      Expanded(
-                        child: _WeightColumn(
-                          label: 'Goal',
-                          controller: _goalCtrl,
-                          values: _weightValues,
-                          format: _format,
-                          onSelected: (i) {
-                            if (!_pickersReady) return;
-                            setState(() {
-                              _goalChosen = true;
-                              _goalDisplay = _weightValues[i];
-                              _errorText = null;
-                            });
-                            _persistDraft();
-                          },
-                        ),
-                      ),
-                    ],
+                          Expanded(
+                            child: entrance.item(
+                              index: 2,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: _WeightColumn(
+                                      label: 'Current',
+                                      controller: _currentCtrl,
+                                      values: _weightValues,
+                                      format: _format,
+                                      onSelected: (i) {
+                                        if (!_pickersReady) return;
+                                        setState(() {
+                                          _currentChosen = true;
+                                          _currentDisplay = _weightValues[i];
+                                          _errorText = null;
+                                        });
+                                        _persistDraft();
+                                      },
+                                      onTapValue: () => unawaited(
+                                        _editWeight(isCurrent: true),
+                                      ),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: EdgeInsets.only(top: r.scale(28)),
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        OnboardingBoldChevron(
+                                          up: true,
+                                          onTap: () => _nudgeGoal(-1),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        OnboardingBoldChevron(
+                                          up: false,
+                                          onTap: () => _nudgeGoal(1),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _WeightColumn(
+                                      label: 'Goal',
+                                      controller: _goalCtrl,
+                                      values: _weightValues,
+                                      format: _format,
+                                      onSelected: (i) {
+                                        if (!_pickersReady) return;
+                                        setState(() {
+                                          _goalChosen = true;
+                                          _goalDisplay = _weightValues[i];
+                                          _errorText = null;
+                                        });
+                                        _persistDraft();
+                                      },
+                                      onTapValue: () => unawaited(
+                                        _editWeight(isCurrent: false),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          entrance.item(
+                            index: 3,
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: r.scale(14),
+                                vertical: r.scale(8),
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    AppColors.primary.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (badgeIcon != null) ...[
+                                    Icon(
+                                      badgeIcon,
+                                      size: 16,
+                                      color: AppColors.primaryDark,
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Text(
+                                    badgeLabel,
+                                    style: TextStyle(
+                                      fontSize: r.scale(13),
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primaryDark,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: r.scale(20)),
+                          entrance.item(
+                            index: 4,
+                            child: OnboardingContinueButton(
+                              label: _isSaving
+                                  ? 'Please wait...'
+                                  : (fromProfile ? 'Save' : 'Continue'),
+                              onPressed: _isSaving
+                                  ? null
+                                  : () =>
+                                      _onContinue(fromProfile: fromProfile),
+                            ),
+                          ),
+                          SizedBox(height: r.scale(12)),
+                        ],
+                      );
+                    },
                   ),
                 ),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: r.scale(14),
-                    vertical: r.scale(8),
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (badgeIcon != null) ...[
-                        Icon(badgeIcon, size: 16, color: AppColors.primaryDark),
-                        const SizedBox(width: 4),
-                      ],
-                      Text(
-                        badgeLabel,
-                        style: TextStyle(
-                          fontSize: r.scale(13),
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primaryDark,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: r.scale(20)),
-                OnboardingContinueButton(
-                  label: _isSaving
-                      ? 'Please wait...'
-                      : (fromProfile ? 'Save' : 'Continue'),
-                  onPressed: _isSaving
-                      ? null
-                      : () => _onContinue(fromProfile: fromProfile),
-                ),
-                SizedBox(height: r.scale(12)),
               ],
             ),
           ),
@@ -481,6 +641,7 @@ class _WeightColumn extends StatelessWidget {
     required this.values,
     required this.format,
     required this.onSelected,
+    required this.onTapValue,
   });
 
   final String label;
@@ -488,6 +649,7 @@ class _WeightColumn extends StatelessWidget {
   final List<double> values;
   final String Function(double) format;
   final ValueChanged<int> onSelected;
+  final VoidCallback onTapValue;
 
   static const _itemExtent = 48.0;
 
@@ -509,53 +671,111 @@ class _WeightColumn extends StatelessWidget {
         ),
         SizedBox(height: r.scale(8)),
         Expanded(
-          child: CupertinoPicker.builder(
-            scrollController: controller,
-            itemExtent: _itemExtent,
-            diameterRatio: 1.15,
-            squeeze: 1.05,
-            useMagnifier: true,
-            magnification: 1.12,
-            backgroundColor: Colors.transparent,
-            selectionOverlay: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: r.scale(10),
-                vertical: 2,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CupertinoPicker.builder(
+                scrollController: controller,
+                itemExtent: _itemExtent,
+                diameterRatio: 1.15,
+                squeeze: 1.05,
+                useMagnifier: true,
+                magnification: 1.12,
+                backgroundColor: Colors.transparent,
+                selectionOverlay: const SizedBox.shrink(),
+                onSelectedItemChanged: onSelected,
+                childCount: values.length,
+                itemBuilder: (context, index) {
+                  return Center(
+                    child: Text(
+                      format(values[index]),
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: primary,
+                        height: 1,
+                      ),
+                    ),
+                  );
+                },
               ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.55),
-                    width: 1.4,
-                  ),
+              // Translucent so vertical scroll still works on the center band.
+              Align(
+                alignment: Alignment.center,
+                child: _TapToEditBand(
+                  height: _itemExtent - 4,
+                  horizontalMargin: r.scale(10),
+                  onTap: onTapValue,
                 ),
               ),
-            ),
-            onSelectedItemChanged: onSelected,
-            childCount: values.length,
-            itemBuilder: (context, index) {
-              return Center(
-                child: Text(
-                  format(values[index]),
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: primary,
-                    height: 1,
-                  ),
-                ),
-              );
-            },
+            ],
           ),
         ),
-        // Fade hint — inactive values already dimmed by CupertinoPicker.
         SizedBox(
           height: 1,
           child: ColoredBox(color: secondary.withValues(alpha: 0)),
         ),
       ],
+    );
+  }
+}
+
+/// Draws the green selection frame and detects taps without blocking scroll.
+class _TapToEditBand extends StatefulWidget {
+  const _TapToEditBand({
+    required this.height,
+    required this.horizontalMargin,
+    required this.onTap,
+  });
+
+  final double height;
+  final double horizontalMargin;
+  final VoidCallback onTap;
+
+  @override
+  State<_TapToEditBand> createState() => _TapToEditBandState();
+}
+
+class _TapToEditBandState extends State<_TapToEditBand> {
+  Offset? _downPosition;
+  int? _downTimestamp;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (event) {
+        _downPosition = event.localPosition;
+        _downTimestamp = event.timeStamp.inMilliseconds;
+      },
+      onPointerUp: (event) {
+        final start = _downPosition;
+        final startedAt = _downTimestamp;
+        _downPosition = null;
+        _downTimestamp = null;
+        if (start == null || startedAt == null) return;
+        final elapsed = event.timeStamp.inMilliseconds - startedAt;
+        final distance = (event.localPosition - start).distance;
+        if (elapsed <= 350 && distance <= 18) {
+          widget.onTap();
+        }
+      },
+      onPointerCancel: (_) {
+        _downPosition = null;
+        _downTimestamp = null;
+      },
+      child: Container(
+        height: widget.height,
+        margin: EdgeInsets.symmetric(horizontal: widget.horizontalMargin),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.55),
+            width: 1.4,
+          ),
+        ),
+      ),
     );
   }
 }

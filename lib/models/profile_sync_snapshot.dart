@@ -1,4 +1,5 @@
 import 'activity_level.dart';
+import 'diet_type.dart';
 import 'goal_type.dart';
 import 'health_concern.dart';
 import 'user_model.dart';
@@ -16,6 +17,10 @@ class ProfileSyncSnapshot {
     required this.targetDate,
     required this.activityLevel,
     required this.healthConcerns,
+    required this.dietType,
+    required this.foodAllergies,
+    required this.foodsToAvoid,
+    required this.mealsPerDay,
   });
 
   final int age;
@@ -28,6 +33,10 @@ class ProfileSyncSnapshot {
   final DateTime targetDate;
   final ActivityLevel? activityLevel;
   final List<HealthConcern> healthConcerns;
+  final DietType? dietType;
+  final List<String> foodAllergies;
+  final String foodsToAvoid;
+  final int? mealsPerDay;
 
   factory ProfileSyncSnapshot.fromUser(UserModel user) {
     return ProfileSyncSnapshot(
@@ -45,7 +54,21 @@ class ProfileSyncSnapshot {
       ),
       activityLevel: user.activityLevel,
       healthConcerns: List<HealthConcern>.from(user.healthConcerns),
+      dietType: user.dietType,
+      foodAllergies: List<String>.from(user.foodAllergies),
+      foodsToAvoid: user.foodsToAvoid,
+      mealsPerDay: user.mealsPerDay,
     );
+  }
+
+  static bool foodAllergiesEqual(List<String> left, List<String> right) {
+    final a = List<String>.from(left)..sort();
+    final b = List<String>.from(right)..sort();
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   static bool healthConcernsEqual(

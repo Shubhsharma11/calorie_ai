@@ -11,6 +11,7 @@ import '../models/onboarding_request_model.dart';
 import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/onboarding_entrance.dart';
 import '../widgets/onboarding_step_scaffold.dart';
 
 enum _PersonalStep { gender, age, height }
@@ -31,9 +32,6 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   static final _ages = [for (var i = 13; i <= 100; i++) i];
   static final _heightsCm = [for (var i = 100; i <= 275; i++) i];
 
-  static const _stepOutDuration = Duration(milliseconds: 220);
-  static const _stepInDuration = Duration(milliseconds: 280);
-
   late final FixedExtentScrollController _ageCtrl;
   late final FixedExtentScrollController _heightCtrl;
 
@@ -42,10 +40,8 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   String? _stepError;
   bool _saving = false;
   bool _transitioning = false;
-  double _contentOpacity = 1;
-  Offset _contentSlide = Offset.zero;
 
-  late String _gender;
+  late String? _gender;
   late int _age;
   late int _heightCm;
 
@@ -63,7 +59,8 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     }
 
     final u = _user.user;
-    _gender = _genders.contains(u.gender) ? u.gender! : _genders.first;
+    // New users start with no selection — don't auto-pick Male.
+    _gender = _genders.contains(u.gender) ? u.gender : null;
     _age = (u.age != null && u.age! >= 13 && u.age! <= 100) ? u.age! : 25;
     _heightCm = (u.heightCm != null &&
             BodyMeasurementUnits.isValidCm(u.heightCm!))
@@ -125,7 +122,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   void _syncDraft() {
     if (_fromProfile) return;
     final u = _user.user;
-    u.gender = _gender;
+    if (_gender != null) u.gender = _gender;
     u.age = _age;
     u.heightCm = _heightCm;
     _user.scheduleOnboardingDraftSave();
@@ -135,7 +132,9 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     String? error;
     switch (_step) {
       case _PersonalStep.gender:
-        if (!_genders.contains(_gender)) error = 'Select your gender';
+        if (_gender == null || !_genders.contains(_gender)) {
+          error = 'Select your gender';
+        }
       case _PersonalStep.age:
         if (_age < 13 || _age > 100) {
           error = 'Use an age between 13 and 100';
@@ -225,30 +224,14 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     _PersonalStep next, {
     required bool forward,
   }) async {
+    if (_transitioning || next == _step) return;
     _transitioning = true;
-
-    setState(() {
-      _contentOpacity = 0;
-      _contentSlide = Offset(0, forward ? -0.035 : 0.035);
-      _stepError = null;
-    });
-    await Future<void>.delayed(_stepOutDuration);
-    if (!mounted) return;
-
     setState(() {
       _step = next;
-      _contentSlide = Offset(0, forward ? 0.035 : -0.035);
+      _stepError = null;
     });
-    await Future<void>.delayed(const Duration(milliseconds: 16));
+    await Future<void>.delayed(const Duration(milliseconds: 420));
     if (!mounted) return;
-
-    setState(() {
-      _contentOpacity = 1;
-      _contentSlide = Offset.zero;
-    });
-    await Future<void>.delayed(_stepInDuration);
-    if (!mounted) return;
-
     _transitioning = false;
   }
 
@@ -258,7 +241,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
 
     final u = _user.user;
     u.age = _age;
-    u.gender = _gender;
+    if (_gender != null) u.gender = _gender;
     u.heightCm = _heightCm;
 
     try {
@@ -345,23 +328,14 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
                 ),
                 SizedBox(height: r.scale(28)),
                 Expanded(
-                  child: ColoredBox(
-                    color: pageBg,
-                    child: AnimatedOpacity(
-                      opacity: _contentOpacity,
-                      duration: _contentOpacity == 0
-                          ? _stepOutDuration
-                          : _stepInDuration,
-                      curve: Curves.easeInOutCubic,
-                      child: AnimatedSlide(
-                        offset: _contentSlide,
-                        duration: _contentOpacity == 0
-                            ? _stepOutDuration
-                            : _stepInDuration,
-                        curve: Curves.easeInOutCubic,
-                        child: Column(
-                          children: [
-                            Text(
+                  child: OnboardingEntrance(
+                    replayToken: _step,
+                    builder: (context, entrance) {
+                      return Column(
+                        children: [
+                          entrance.item(
+                            index: 0,
+                            child: Text(
                               title,
                               textAlign: TextAlign.center,
                               style: TextStyle(
@@ -372,9 +346,12 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
                                 letterSpacing: -0.4,
                               ),
                             ),
-                            if (subtitle != null) ...[
-                              SizedBox(height: r.scale(10)),
-                              Text(
+                          ),
+                          if (subtitle != null) ...[
+                            SizedBox(height: r.scale(10)),
+                            entrance.item(
+                              index: 1,
+                              child: Text(
                                 subtitle,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
@@ -384,36 +361,44 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                            ],
-                            if (_stepError != null) ...[
-                              SizedBox(height: r.scale(12)),
-                              Text(
-                                _stepError!,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.error,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                            Expanded(child: _buildStepBody(r)),
+                            ),
                           ],
-                        ),
-                      ),
-                    ),
+                          if (_stepError != null) ...[
+                            SizedBox(height: r.scale(12)),
+                            Text(
+                              _stepError!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.error,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                          Expanded(
+                            child: entrance.item(
+                              index: 2,
+                              child: _buildStepBody(r),
+                            ),
+                          ),
+                          entrance.item(
+                            index: 3,
+                            child: OnboardingContinueButton(
+                              label: _fromProfile && isLast
+                                  ? (_saving ? 'Saving...' : 'Save')
+                                  : (_saving ? 'Please wait...' : 'Continue'),
+                              onPressed: () {
+                                if (_saving || _transitioning) return;
+                                _onContinue();
+                              },
+                            ),
+                          ),
+                          SizedBox(height: r.scale(12)),
+                        ],
+                      );
+                    },
                   ),
                 ),
-                OnboardingContinueButton(
-                  label: _fromProfile && isLast
-                      ? (_saving ? 'Saving...' : 'Save')
-                      : (_saving ? 'Please wait...' : 'Continue'),
-                  onPressed: () {
-                    if (_saving || _transitioning) return;
-                    _onContinue();
-                  },
-                ),
-                SizedBox(height: r.scale(12)),
               ],
             ),
           ),
@@ -425,9 +410,10 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   Widget _buildStepBody(Responsive r) {
     switch (_step) {
       case _PersonalStep.gender:
-        return Center(
+        return Padding(
+          padding: EdgeInsets.only(top: r.scale(28)),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (final g in _genders) ...[
                 OnboardingOptionCard(

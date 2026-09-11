@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/access_token_resolution.dart';
 import '../models/activity_level.dart';
 import '../models/avatar_upload_result.dart';
+import '../models/diet_type.dart';
 import '../models/goal_type.dart';
 import '../models/health_concern.dart';
 import '../models/health_problem_api_mapper.dart';
@@ -126,6 +127,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     AppRoutes.goalAmount,
     AppRoutes.activityLevel,
     AppRoutes.healthProblem,
+    AppRoutes.dietPreferences,
     AppRoutes.nutritionPlanLoading,
     AppRoutes.dailyCalorieGoal,
   ];
@@ -1188,6 +1190,20 @@ class UserController extends GetxController with WidgetsBindingObserver {
     // Persisted via onboarding / profile API — not SharedPreferences.
   }
 
+  Future<void> saveDietPreferences({
+    DietType? dietType,
+    List<String> foodAllergies = const [],
+    String foodsToAvoid = '',
+    int? mealsPerDay,
+  }) async {
+    user.dietType = dietType;
+    user.foodAllergies = List<String>.from(foodAllergies);
+    user.foodsToAvoid = foodsToAvoid.trim();
+    user.mealsPerDay = mealsPerDay;
+    update();
+    scheduleOnboardingDraftSave();
+  }
+
   @Deprecated('Use saveHealthConcerns')
   Future<void> saveHealthProblem({
     required String category,
@@ -1543,6 +1559,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     AppRoutes.goalAmount,
     AppRoutes.activityLevel,
     AppRoutes.healthProblem,
+    AppRoutes.dietPreferences,
     AppRoutes.nutritionPlanLoading,
     AppRoutes.dailyCalorieGoal,
   };
@@ -1571,6 +1588,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
       'manualGoalWeightKg': user.manualGoalWeightKg,
       'pinnedGoalWeightKg': user.pinnedGoalWeightKg,
       'activityLevel': user.activityLevel?.name,
+      'dietType': user.dietType?.apiValue,
+      'foodAllergies': List<String>.from(user.foodAllergies),
+      'foodsToAvoid': user.foodsToAvoid,
+      'mealsPerDay': user.mealsPerDay,
       'targetDate':
           '${target.year.toString().padLeft(4, '0')}-'
           '${target.month.toString().padLeft(2, '0')}-'
@@ -1636,6 +1657,38 @@ class UserController extends GetxController with WidgetsBindingObserver {
       user.activityLevel = null;
     }
 
+    final dietType = draft['dietType'];
+    if (dietType is String) {
+      user.dietType = DietTypeLabel.tryParse(dietType);
+    } else if (dietType == null) {
+      user.dietType = null;
+    }
+
+    final allergies = draft['foodAllergies'];
+    if (allergies is List) {
+      user.foodAllergies = allergies
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    } else if (allergies == null) {
+      user.foodAllergies = [];
+    }
+
+    final avoid = draft['foodsToAvoid'];
+    if (avoid is String) {
+      user.foodsToAvoid = avoid;
+    } else if (avoid == null) {
+      user.foodsToAvoid = '';
+    }
+
+    final meals = draft['mealsPerDay'];
+    if (meals is num) {
+      user.mealsPerDay = meals.round();
+    } else if (meals == null) {
+      user.mealsPerDay = null;
+    }
+
     final targetRaw = draft['targetDate'];
     if (targetRaw is String) {
       final parsed = _parseApiDate(targetRaw);
@@ -1667,7 +1720,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
   String? previousOnboardingRoute(String currentRoute) {
     if (currentRoute == AppRoutes.dailyCalorieGoal) {
       // Skip the loading screen so Back does not re-trigger setup.
-      return AppRoutes.healthProblem;
+      return AppRoutes.dietPreferences;
     }
     if (currentRoute == AppRoutes.activityLevel) {
       return AppRoutes.goalAmount;
@@ -1790,6 +1843,15 @@ class UserController extends GetxController with WidgetsBindingObserver {
     }
     if (!user.hasHealthConcernsConfigured) {
       return 'Please complete the health concern step.';
+    }
+    if (user.dietType == null) {
+      return 'Please select your diet type.';
+    }
+    if (user.foodAllergies.isEmpty) {
+      return 'Please select any food allergies, or None.';
+    }
+    if (user.mealsPerDay == null) {
+      return 'Please select how many meals you prefer.';
     }
     return null;
   }
@@ -2028,6 +2090,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
       }
 
       _applyHealthProblemsFromMap(map);
+      _applyDietPreferencesFromMap(map);
 
       if (!applyGoalFields) {
         // Still allow calorie fields from a full payload if present.
@@ -2220,6 +2283,52 @@ class UserController extends GetxController with WidgetsBindingObserver {
     final parsed = HealthProblemApiMapper.parseConcerns(raw);
     if (parsed == null) return;
     user.healthConcerns = parsed;
+  }
+
+  void _applyDietPreferencesFromMap(Map<String, dynamic> map) {
+    final dietType = _readResponseString(map, const [
+      'dietType',
+      'diet_type',
+      'diet',
+    ]);
+    final parsedDiet = DietTypeLabel.tryParse(dietType);
+    if (parsedDiet != null) {
+      user.dietType = parsedDiet;
+    }
+
+    final allergies = map['foodAllergies'] ?? map['food_allergies'];
+    if (allergies is List) {
+      user.foodAllergies = allergies
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    } else if (allergies is String && allergies.trim().isNotEmpty) {
+      user.foodAllergies = allergies
+          .split(',')
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    }
+
+    final avoid = _readResponseString(map, const [
+      'foodsToAvoid',
+      'foods_to_avoid',
+      'foodDislikes',
+      'food_dislikes',
+    ]);
+    if (avoid != null) {
+      user.foodsToAvoid = avoid;
+    }
+
+    final meals = _readResponseInt(map, const [
+      'mealsPerDay',
+      'meals_per_day',
+      'preferredMeals',
+    ]);
+    if (meals != null && MealsPerDayOptions.values.contains(meals)) {
+      user.mealsPerDay = meals;
+    }
   }
 
   static Iterable<Map<String, dynamic>> _onboardingResponseMaps(

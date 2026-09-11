@@ -145,7 +145,7 @@ class FoodApiService {
         'User-Agent': 'MyCaloriePal/1.0 (Flutter; https://fitbuddyai.app)',
         'Accept': 'application/json',
       },
-    );
+    );  
     if (response.statusCode != 200) return null;
 
     final decoded = jsonDecode(response.body);

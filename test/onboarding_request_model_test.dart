@@ -60,6 +60,7 @@ void main() {
       },
     ]);
     expect(json.containsKey('healthProblem'), isFalse);
+    expect(json['foodAllergies'], isEmpty);
   });
 
   test('OnboardingRequestModel.fromUser maps multiple health concerns', () {

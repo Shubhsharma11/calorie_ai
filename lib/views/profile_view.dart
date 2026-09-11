@@ -11,6 +11,7 @@ import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../models/diet_type.dart';
 import '../models/user_model.dart';
 import '../widgets/edit_profile_sheet.dart';
 import '../widgets/privacy_policy_dialog.dart';
@@ -79,7 +80,15 @@ class ProfileView extends GetView<UserController> {
                           arguments: RouteArgs.fromProfileMap,
                         ),
                       ),
-
+                      _ProfileMenuRow(
+                        icon: Icons.restaurant_outlined,
+                        title: 'Diet Preferences',
+                        subtitle: _dietPreferencesSummary(ctrl.user),
+                        onTap: () => Get.toNamed(
+                          AppRoutes.dietPreferences,
+                          arguments: RouteArgs.fromProfileMap,
+                        ),
+                      ),
 
                     
 
@@ -163,6 +172,14 @@ class ProfileView extends GetView<UserController> {
       return 'None selected';
     }
     return user.healthProblemCategory;
+  }
+
+  String _dietPreferencesSummary(UserModel user) {
+    final diet = user.dietType;
+    if (diet == null) return 'Not set';
+    final meals = user.mealsPerDay;
+    if (meals == null) return diet.title;
+    return '${diet.title} · $meals meals';
   }
 
   Future<void> _shareApp(BuildContext context) async {

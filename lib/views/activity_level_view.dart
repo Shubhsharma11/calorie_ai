@@ -13,6 +13,7 @@ import '../models/onboarding_request_model.dart';
 import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import '../widgets/onboarding_entrance.dart';
 import '../widgets/onboarding_step_scaffold.dart';
 
 class ActivityLevelView extends StatefulWidget {
@@ -129,78 +130,92 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
                       },
                     ),
                     SizedBox(height: r.scale(28)),
-                    Text(
-                      'Choose your activity level',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: r.scale(28, tablet: 32),
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimaryOf(context),
-                        height: 1.15,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    SizedBox(height: r.scale(10)),
-                    Text(
-                      'How active are you during a typical week?',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: r.scale(14, tablet: 15),
-                        color: AppColors.textSecondaryOf(context),
-                        height: 1.4,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    SizedBox(height: r.scale(24)),
                     Expanded(
-                      child: ListView(
-                        physics: const BouncingScrollPhysics(),
-                        children: [
-                          for (final level in ActivityLevel.values) ...[
-                            OnboardingOptionCard(
-                              title: level.title,
-                              subtitle: level.description,
-                              leading: SizedBox(
-                                width: 44,
-                                height: 44,
-                                child: SvgPicture.asset(
-                                  level.imageAsset,
-                                  fit: BoxFit.contain,
+                      child: OnboardingEntrance(
+                        builder: (context, entrance) {
+                          return Column(
+                            children: [
+                              entrance.item(
+                                index: 0,
+                                child: Text(
+                                  'Choose your activity level',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: r.scale(28, tablet: 32),
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textPrimaryOf(context),
+                                    height: 1.15,
+                                    letterSpacing: -0.4,
+                                  ),
                                 ),
                               ),
-                              selected: selected == level,
-                              onTap: () => controller.selectActivity(level),
-                            ),
-                            SizedBox(height: r.scale(12)),
-                          ],
-                        ],
-                      ),
-                    ),
-                    OnboardingContinueButton(
-                      label: _saving
-                          ? 'Saving...'
-                          : (editing ? 'Save' : 'Continue'),
-                      onPressed: selected == null || _saving
-                          ? null
-                          : () => unawaited(
-                                _onContinue(
-                                  fromProfile: fromProfile,
-                                  returnToDailyGoal: returnToDailyGoal,
+                              SizedBox(height: r.scale(10)),
+                              entrance.item(
+                                index: 1,
+                                child: Text(
+                                  'How active are you during a typical week?',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: r.scale(14, tablet: 15),
+                                    color: AppColors.textSecondaryOf(context),
+                                    height: 1.4,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
-                    ),
-                    if (!editing) ...[
-                      SizedBox(height: r.scale(10)),
-                      Text(
-                        'You can change this anytime in your profile',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: r.scale(12, tablet: 13),
-                          color: AppColors.textSecondaryOf(context),
-                        ),
+                              SizedBox(height: r.scale(24)),
+                              Expanded(
+                                child: entrance.item(
+                                  index: 2,
+                                  child: ListView(
+                                    physics: const BouncingScrollPhysics(),
+                                    children: [
+                                      for (final level
+                                          in ActivityLevel.values) ...[
+                                        OnboardingOptionCard(
+                                          title: level.title,
+                                          subtitle: level.description,
+                                          leading: SizedBox(
+                                            width: 44,
+                                            height: 44,
+                                            child: SvgPicture.asset(
+                                              level.imageAsset,
+                                              fit: BoxFit.contain,
+                                            ),
+                                          ),
+                                          selected: selected == level,
+                                          onTap: () =>
+                                              controller.selectActivity(level),
+                                        ),
+                                        SizedBox(height: r.scale(12)),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              entrance.item(
+                                index: 3,
+                                child: OnboardingContinueButton(
+                                  label: _saving
+                                      ? 'Saving...'
+                                      : (editing ? 'Save' : 'Continue'),
+                                  onPressed: selected == null || _saving
+                                      ? null
+                                      : () => unawaited(
+                                            _onContinue(
+                                              fromProfile: fromProfile,
+                                              returnToDailyGoal:
+                                                  returnToDailyGoal,
+                                            ),
+                                          ),
+                                ),
+                              ),
+                              SizedBox(height: r.scale(12)),
+                            ],
+                          );
+                        },
                       ),
-                    ],
-                    SizedBox(height: r.scale(12)),
+                    ),
                   ],
                 ),
               ),

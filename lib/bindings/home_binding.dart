@@ -8,7 +8,7 @@ import '../controllers/main_controller.dart';
 import '../controllers/notifications_controller.dart';
 import '../controllers/scan_controller.dart';
 import '../controllers/settings_controller.dart';
-// import '../controllers/streak_controller.dart';
+import '../controllers/streak_controller.dart';
 import '../controllers/tracker_controller.dart';
 
 /// Registers controllers for the main app shell (tabs + features).
@@ -22,10 +22,9 @@ class HomeBinding extends Bindings {
       Get.put(FoodController(), permanent: true);
     }
 
-    // Streak temporarily disabled on home.
-    // if (!Get.isRegistered<StreakController>()) {
-    //   Get.put(StreakController(), permanent: true);
-    // }
+    if (!Get.isRegistered<StreakController>()) {
+      Get.put(StreakController(), permanent: true);
+    }
   
     if (!Get.isRegistered<DashboardController>()) {
       Get.put(DashboardController(), permanent: true);

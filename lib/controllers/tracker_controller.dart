@@ -4,7 +4,6 @@
   import 'package:flutter/scheduler.dart';
   import 'package:get/get.dart';
 
-  import '../core/app_snackbar.dart';
   import '../core/weight_chart_data.dart';
   import '../models/daily_water_intake.dart';
   import '../models/exercise_entry.dart';
@@ -345,7 +344,7 @@
       waterByDate[day] = previous + ml;
       _bumpWaterRevision();
       await AnalyticsService.logWaterLogged(1);
-      AppSnackbar.success(_waterLoggedMessage(ml), title: 'Water');
+      // UI already updates the glass count — avoid toast spam on rapid taps.
       _maybeShowWaterGoalCelebration(wasComplete, forDate: day);
 
       final accessToken = await _weightAccessToken();
@@ -374,15 +373,6 @@
       } catch (error) {
         debugPrint('TrackerController: water log failed: $error');
       }
-    }
-
-    static String _waterLoggedMessage(int ml) {
-      if (ml == mlPerGlass) return 'Added 1 glass.';
-      if (ml > 0 && ml % mlPerGlass == 0) {
-        final glasses = ml ~/ mlPerGlass;
-        return 'Added $glasses glasses.';
-      }
-      return 'Added ${formatWaterMl(ml)}.';
     }
 
     void _logWaterApi404Once(WaterApiException error) {
@@ -429,7 +419,6 @@
       if (entry != null) {
         final outcome = await deleteWaterEntry(entry);
         if (outcome.status == WaterDeleteStatus.deleted) {
-          AppSnackbar.success(_waterRemovedMessage(ml), title: 'Water');
           if (waterForDate(day) < waterGoalMl) {
             _waterGoalCelebrationShown = false;
           }
@@ -444,20 +433,10 @@
         waterByDate[day] = next;
       }
       _bumpWaterRevision();
-      AppSnackbar.success(_waterRemovedMessage(ml), title: 'Water');
 
       if (waterForDate(day) < waterGoalMl) {
         _waterGoalCelebrationShown = false;
       }
-    }
-
-    static String _waterRemovedMessage(int ml) {
-      if (ml == mlPerGlass) return 'Removed 1 glass.';
-      if (ml > 0 && ml % mlPerGlass == 0) {
-        final glasses = ml ~/ mlPerGlass;
-        return 'Removed $glasses glasses.';
-      }
-      return 'Removed ${formatWaterMl(ml)}.';
     }
 
     Future<WaterDeleteOutcome> deleteWaterEntry(WaterLogEntry entry) async {

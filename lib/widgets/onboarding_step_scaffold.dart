@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
 
-/// Unified progress: gender → age → goal → height → weight goal → activity → health.
+/// Unified progress: gender → age → goal → height → weight → activity → health → diet steps.
 abstract final class OnboardingFlowProgress {
-  static const totalSteps = 7;
+  static const totalSteps = 11;
   static const gender = 0;
   static const age = 1;
   static const goalSetup = 2;
@@ -14,6 +14,13 @@ abstract final class OnboardingFlowProgress {
   static const goalWeight = 4;
   static const activity = 5;
   static const health = 6;
+  static const dietType = 7;
+  static const foodAllergies = 8;
+  static const foodsToAvoid = 9;
+  static const mealsPerDay = 10;
+
+  /// First diet-preferences sub-step (kept for older call sites).
+  static const dietPreferences = dietType;
 }
 
 /// Shared chrome for onboarding steps (personal details, goal, activity, …).
@@ -229,7 +236,7 @@ class OnboardingCircleBackButton extends StatelessWidget {
   }
 }
 
-/// Clean equal segments — clearer than tiny dots + hairlines.
+/// Sleek progress track used across onboarding steps.
 class OnboardingDotsProgress extends StatelessWidget {
   const OnboardingDotsProgress({
     super.key,
@@ -245,44 +252,34 @@ class OnboardingDotsProgress extends StatelessWidget {
     final isDark = AppColors.isDark(context);
     final track = isDark
         ? AppColors.darkBorder
-        : Colors.white;
-    final trackBorder = isDark
-        ? Colors.transparent
-        : Colors.black.withValues(alpha: 0.04);
+        : AppColors.primary.withValues(alpha: 0.14);
+    final progress = totalSteps <= 0
+        ? 0.0
+        : ((currentStep + 1) / totalSteps).clamp(0.0, 1.0);
 
     return SizedBox(
-      height: 8,
-      child: Row(
-        children: List.generate(totalSteps, (i) {
-          final active = i <= currentStep;
-          return Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeInOutCubic,
-              height: 6,
-              margin: EdgeInsets.only(
-                left: i == 0 ? 0 : 3,
-                right: i == totalSteps - 1 ? 0 : 3,
-              ),
-              decoration: BoxDecoration(
-                color: active ? AppColors.primary : track,
-                borderRadius: BorderRadius.circular(99),
-                border: active
-                    ? null
-                    : Border.all(color: trackBorder, width: 1),
-                boxShadow: active
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.03),
-                          blurRadius: 2,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
-              ),
-            ),
-          );
-        }),
+      height: 6,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(99),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                ColoredBox(color: track),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeInOutCubic,
+                    width: constraints.maxWidth * progress,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

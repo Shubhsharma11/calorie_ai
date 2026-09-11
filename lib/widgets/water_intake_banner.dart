@@ -9,6 +9,7 @@ import '../core/app_coach_marks.dart';
 import '../core/responsive.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
+import 'water_quick_sheet.dart';
 
 /// Compact water intake row for the Home screen summary area.
 class WaterIntakeBanner extends StatelessWidget {
@@ -38,20 +39,25 @@ class WaterIntakeBanner extends StatelessWidget {
       food?.selectedLogDate.value;
       final viewingToday = food?.isViewingToday ?? true;
       final viewDate = food?.selectedLogDate.value;
+      final logDate = viewDate ?? DateTime.now();
       final waterMl = viewDate == null
           ? tracker.waterMl
           : tracker.waterForDate(viewDate);
-    final settings = Get.isRegistered<SettingsController>()
-    ? Get.find<SettingsController>()
-    : null;
+      final settings = Get.isRegistered<SettingsController>()
+          ? Get.find<SettingsController>()
+          : null;
 
-final goalMl = settings?.waterGoalMl.value ??
-    TrackerController.waterGoalMl;
-      
-      final glasses = (waterMl / TrackerController.mlPerGlass).floor();
-      final goalGlasses = goalMl > 0
-          ? (goalMl / TrackerController.mlPerGlass).round().clamp(1, 100)
-          : 8;
+      final goalMl =
+          settings?.waterGoalMl.value ?? TrackerController.waterGoalMl;
+      final glassMl =
+          settings?.effectiveGlassMl ?? TrackerController.mlPerGlass;
+      // Observe glass/unit settings so the row rebuilds when they change.
+      settings?.waterGlassMl.value;
+      settings?.waterUseMl.value;
+
+      final glasses = (waterMl / glassMl).floor();
+      final goalGlasses =
+          goalMl > 0 ? (goalMl / glassMl).round().clamp(1, 100) : 8;
       final isComplete = waterMl >= goalMl;
       final overGlasses = glasses > goalGlasses ? glasses - goalGlasses : 0;
       final remainingGlasses =
@@ -76,6 +82,7 @@ final goalMl = settings?.waterGoalMl.value ??
 
       final shownGoal = goalGlasses.clamp(1, _maxGlassesShown);
       final filledShown = glasses.clamp(0, shownGoal);
+      final canRemove = waterMl > 0;
 
       final card = Container(
         decoration: BoxDecoration(
@@ -219,30 +226,33 @@ final goalMl = settings?.waterGoalMl.value ??
                   ),
                 ),
               ),
-              SizedBox(width: r.scale(10)),
-              Tooltip(
-                message: 'Add 1 glass',
-                child: Material(
-                  color: color,
-                  shape: const CircleBorder(),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      tracker.addWater(date: DateTime.now());
-                    },
-                    child: SizedBox(
-                      width: r.scale(40),
-                      height: r.scale(40),
-                      child: Icon(
-                        Icons.add_rounded,
-                        size: r.scale(22),
-                        color: AppColors.onPrimary,
-                      ),
-                    ),
-                  ),
-                ),
+              SizedBox(width: r.scale(8)),
+              _RoundActionButton(
+                tooltip: 'Remove 1 glass',
+                icon: Icons.remove_rounded,
+                color: color,
+                filled: false,
+                enabled: canRemove,
+                size: r.scale(40),
+                iconSize: r.scale(22),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  tracker.removeWater(date: logDate);
+                },
+              ),
+              SizedBox(width: r.scale(8)),
+              _RoundActionButton(
+                tooltip: 'Add water',
+                icon: Icons.add_rounded,
+                color: color,
+                filled: true,
+                enabled: true,
+                size: r.scale(40),
+                iconSize: r.scale(22),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  showWaterQuickSheet(context, date: logDate);
+                },
               ),
             ],
           ),
@@ -251,6 +261,69 @@ final goalMl = settings?.waterGoalMl.value ??
       if (coachKey == null) return card;
       return AppCoachMarks.target(key: coachKey!, child: card);
     });
+  }
+}
+
+class _RoundActionButton extends StatelessWidget {
+  const _RoundActionButton({
+    required this.tooltip,
+    required this.icon,
+    required this.color,
+    required this.filled,
+    required this.enabled,
+    required this.size,
+    required this.iconSize,
+    required this.onTap,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final Color color;
+  final bool filled;
+  final bool enabled;
+  final double size;
+  final double iconSize;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = !enabled
+        ? AppColors.border.withValues(alpha: 0.35)
+        : filled
+            ? color
+            : Colors.transparent;
+    final fg = !enabled
+        ? AppColors.textSecondary.withValues(alpha: 0.45)
+        : filled
+            ? AppColors.onPrimary
+            : color;
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: bg,
+        shape: CircleBorder(
+          side: filled
+              ? BorderSide.none
+              : BorderSide(
+                  color: enabled
+                      ? color.withValues(alpha: 0.55)
+                      : AppColors.border,
+                  width: 1.4,
+                ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: enabled ? onTap : null,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Icon(icon, size: iconSize, color: fg),
+          ),
+        ),
+      ),
+    );
   }
 }
 

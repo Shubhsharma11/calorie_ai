@@ -33,7 +33,7 @@ import '../services/my_foods_api_service.dart';
 import '../services/uploads_api_service.dart';
 import '../widgets/calorie_goal_success_dialog.dart';
 import 'dashboard_controller.dart';
-// import 'streak_controller.dart';
+import 'streak_controller.dart';
 import 'user_controller.dart';
 
 import '../services/analytics_service.dart';
@@ -2940,10 +2940,8 @@ class FoodController extends GetxController {
   }
 
   void _notifyStreakController() {
-    // Streak unused — do not notify / refresh streak API.
-    // debugPrint("🔥 _notifyStreakController called");
-    // if (!Get.isRegistered<StreakController>()) return;
-    // Get.find<StreakController>().onMealsChanged();
+    if (!Get.isRegistered<StreakController>()) return;
+    Get.find<StreakController>().onMealsChanged();
   }
 
   void _maybeCelebrateCalorieGoal({DateTime? day}) {
