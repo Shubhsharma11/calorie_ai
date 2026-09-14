@@ -274,6 +274,42 @@ class AuthController extends GetxController {
     }
   }
 
+  /// System Sign in with Apple sheet (Face ID / password) so the user
+  /// re-confirms ownership before account deletion — same pattern as
+  /// App Store / other Apple ID apps.
+  ///
+  /// Returns `true` when Apple authorizes, `false` when the user cancels.
+  Future<bool> confirmAppleIdentityForDeletion() async {
+    try {
+      debugPrint('AuthController: requesting Apple re-auth for account deletion');
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: const [AppleIDAuthorizationScopes.email],
+      );
+      final token = credential.identityToken;
+      if (token == null || token.isEmpty) {
+        throw const AuthApiException(
+          'Apple identity token was not returned.',
+        );
+      }
+      debugPrint('AuthController: Apple re-auth succeeded for deletion');
+      return true;
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) {
+        debugPrint('AuthController: Apple re-auth canceled by user');
+        return false;
+      }
+      debugPrint(
+        'AuthController: Apple re-auth failed code=${e.code} '
+        'message=${e.message}',
+      );
+      _showAuthError(e.message);
+      return false;
+    } catch (e, stackTrace) {
+      debugPrint('AuthController: Apple re-auth error: $e\n$stackTrace');
+      _showAuthError('Could not confirm with Apple. Please try again.');
+      return false;
+    }
+  }
 
   Future<void> _logAuthAnalytics({
     required UserController user,

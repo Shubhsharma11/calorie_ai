@@ -2460,48 +2460,88 @@ class UserController extends GetxController with WidgetsBindingObserver {
   void _notifyDashboard() => _notifyCalorieGoalChanged();
 
   Future<bool> performDeleteAccount() async {
-    if (isDeletingAccount || isLoggingOut) return false;
+    if (isLoggingOut) return false;
+    // Recover a stuck flag left by hot reload / interrupted prior attempt.
+    if (isDeletingAccount && !isSessionBusy.value) {
+      debugPrint('UserController: clearing stuck isDeletingAccount');
+      isDeletingAccount = false;
+    }
+    if (isDeletingAccount) return false;
 
     isDeletingAccount = true;
     isSessionBusy.value = true;
     update();
 
-    try {
-      if (accessToken.isEmpty) await loadAuthSession();
+    String? errorMessage;
+    var succeeded = false;
 
-      if (accessToken.isEmpty) {
-        AppSnackbar.error('You are not signed in.', title: 'Delete failed');
+    try {
+      final token = (await resolveAccessToken())?.trim() ?? '';
+      if (token.isEmpty) {
+        errorMessage = 'You are not signed in.';
         return false;
       }
 
       debugPrint(
-        'UserController: delete account — calling API with access token',
+        'UserController: delete account — calling API '
+        '(tokenLength=${token.length})',
       );
-      await _authRepository.deleteAccount(accessToken: accessToken);
+      await _authRepository.deleteAccount(accessToken: token);
       _clearApiOwnedControllers();
       _clearInMemoryAuthState();
       user.resetToDefaults();
+      unawaited(AnalyticsService.clearUser());
 
       MainController.resetHomeTabIfRegistered();
       Get.offAllNamed(AppRoutes.login);
-      AppSnackbar.success(
-        'Your account has been permanently deleted.',
-        title: 'Account deleted',
-      );
+      succeeded = true;
       return true;
     } on AuthApiException catch (e) {
-      AppSnackbar.error(e.message, title: 'Delete failed');
-      return false;
-    } catch (e) {
-      AppSnackbar.error(
-        'Could not delete your account. Please try again.',
-        title: 'Delete failed',
+      debugPrint(
+        'UserController: delete account AuthApiException '
+        'status=${e.statusCode} message=${e.message}',
       );
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        errorMessage =
+            'Your session expired. Log out, sign in again, then delete your account.';
+      } else {
+        errorMessage = e.message;
+      }
+      return false;
+    } catch (e, stackTrace) {
+      debugPrint('UserController: delete account failed: $e\n$stackTrace');
+      final detail = e.toString();
+      if (detail.contains('SocketException') ||
+          detail.contains('ClientException') ||
+          detail.contains('Failed host lookup') ||
+          detail.contains('Connection')) {
+        errorMessage =
+            'Network error while deleting. Check your connection and try again.';
+      } else {
+        errorMessage = 'Could not delete your account. Please try again.';
+      }
       return false;
     } finally {
       isDeletingAccount = false;
       isSessionBusy.value = false;
       update();
+      // Snackbars must show AFTER the busy scrim clears — it sits above the
+      // navigator overlay and hides toasts while isSessionBusy is true.
+      final message = errorMessage;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (succeeded) {
+          AppSnackbar.success(
+            'Your account has been permanently deleted.',
+            title: 'Account deleted',
+          );
+        } else if (message != null && message.isNotEmpty) {
+          AppSnackbar.error(
+            message,
+            title: 'Delete failed',
+            duration: const Duration(seconds: 4),
+          );
+        }
+      });
     }
   }
 
@@ -2511,6 +2551,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
     isLoggingOut = true;
     isSessionBusy.value = true;
     update();
+
+    String? snackTitle;
+    String? snackMessage;
+    var snackKind = _LogoutSnackKind.success;
 
     try {
       if (refreshToken.isEmpty || accessToken.isEmpty) {
@@ -2534,22 +2578,38 @@ class UserController extends GetxController with WidgetsBindingObserver {
       Get.offAllNamed(AppRoutes.login);
 
       if (result.backendRevoked) {
-        AppSnackbar.success(
-          'You’ve been logged out.',
-          title: 'Logged out',
-        );
+        snackTitle = 'Logged out';
+        snackMessage = 'You’ve been logged out.';
+        snackKind = _LogoutSnackKind.success;
       } else if (result.hasBackendError) {
-        AppSnackbar.info(
-          'Could not reach the server, but your session was cleared.',
-          title: 'Signed out on this device',
-        );
+        snackTitle = 'Signed out on this device';
+        snackMessage =
+            'Could not reach the server, but your session was cleared.';
+        snackKind = _LogoutSnackKind.info;
       } else {
-        AppSnackbar.success('Your session was cleared.', title: 'Logged out');
+        snackTitle = 'Logged out';
+        snackMessage = 'Your session was cleared.';
+        snackKind = _LogoutSnackKind.success;
       }
     } finally {
       isLoggingOut = false;
       isSessionBusy.value = false;
       update();
+      final title = snackTitle;
+      final message = snackMessage;
+      final kind = snackKind;
+      // Show after the busy scrim clears so the toast isn’t trapped under it
+      // or jammed into the status bar during the route swap.
+      if (title != null && message != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          switch (kind) {
+            case _LogoutSnackKind.success:
+              AppSnackbar.success(message, title: title);
+            case _LogoutSnackKind.info:
+              AppSnackbar.info(message, title: title);
+          }
+        });
+      }
     }
   }
 
@@ -2590,6 +2650,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
 }
 
 enum WeightTargetSource { user, ai }
+
+enum _LogoutSnackKind { success, info }
 
 /// In-memory checkpoint for a My Goals → Goal Setup/Amount/Weight edit journey.
     class _GoalEditCheckpoint {

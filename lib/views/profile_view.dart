@@ -1,12 +1,14 @@
 import 'dart:io' show Platform;
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:get/get.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../controllers/auth_controller.dart';
 import '../controllers/user_controller.dart';
+import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../routes/app_routes.dart';
@@ -185,52 +187,120 @@ class ProfileView extends GetView<UserController> {
     BuildContext context,
     UserController ctrl,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: !ctrl.isDeletingAccount,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Account'),
-        content: const Text(
-          'This permanently deletes your MyCaloriePal account and all app data. '
-          'You will need to create a new account to use the app again.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Delete', style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
+    final isAppleAccount = ctrl.authProvider == 'apple';
+
+    // Prefer Get.dialog so confirm works with GetX routing. Do NOT gate on
+    // context.mounted after the await — Profile can rebuild while the dialog
+    // is open and that would skip delete entirely (looks like a no-op).
+    final confirmed = await Get.dialog<bool>(
+      Platform.isIOS
+          ? CupertinoAlertDialog(
+              title: const Text('Delete Account?'),
+              content: Text(
+                isAppleAccount
+                    ? 'This permanently deletes your MyCaloriePal account and all app data. '
+                        'Next, confirm with Sign in with Apple (Face ID or password).'
+                    : 'This permanently deletes your MyCaloriePal account and all app data. '
+                        'You will need to create a new account to use the app again.',
+              ),
+              actions: [
+                CupertinoDialogAction(
+                  onPressed: () => Get.back(result: false),
+                  child: const Text('Cancel'),
+                ),
+                CupertinoDialogAction(
+                  isDestructiveAction: true,
+                  onPressed: () => Get.back(result: true),
+                  child: const Text('Delete Account'),
+                ),
+              ],
+            )
+          : AlertDialog(
+              title: const Text('Delete Account'),
+              content: const Text(
+                'This permanently deletes your MyCaloriePal account and all app data. '
+                'You will need to create a new account to use the app again.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Get.back(result: false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Get.back(result: true),
+                  child: Text(
+                    'Delete',
+                    style: TextStyle(color: AppColors.error),
+                  ),
+                ),
+              ],
+            ),
+      barrierDismissible: false,
     );
 
-    if (confirmed == true) {
-      await ctrl.performDeleteAccount();
+    if (confirmed != true) return;
+
+    // Apple ID accounts: system Sign in with Apple sheet before delete.
+    if (isAppleAccount) {
+      if (!Get.isRegistered<AuthController>()) {
+        Get.put(AuthController());
+      }
+      final appleConfirmed =
+          await Get.find<AuthController>().confirmAppleIdentityForDeletion();
+      if (!appleConfirmed) {
+        AppSnackbar.info(
+          'Sign in with Apple was cancelled. Your account was not deleted.',
+          title: 'Deletion cancelled',
+        );
+        return;
+      }
     }
+
+    await ctrl.performDeleteAccount();
   }
 
   Future<void> _confirmLogout(BuildContext context, UserController ctrl) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: !ctrl.isLoggingOut,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Logout', style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
-    );
+    final confirmed = Platform.isIOS
+        ? await showCupertinoDialog<bool>(
+            context: context,
+            barrierDismissible: !ctrl.isLoggingOut,
+            builder: (ctx) => CupertinoAlertDialog(
+              title: const Text('Log Out?'),
+              content: const Text('Are you sure you want to log out?'),
+              actions: [
+                CupertinoDialogAction(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                CupertinoDialogAction(
+                  isDestructiveAction: true,
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('Log Out'),
+                ),
+              ],
+            ),
+          )
+        : await showDialog<bool>(
+            context: context,
+            barrierDismissible: !ctrl.isLoggingOut,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Logout'),
+              content: const Text('Are you sure you want to logout?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: Text(
+                    'Logout',
+                    style: TextStyle(color: AppColors.error),
+                  ),
+                ),
+              ],
+            ),
+          );
 
     if (confirmed == true) {
       await ctrl.performLogout();

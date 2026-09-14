@@ -21,10 +21,14 @@ class SettingsController extends GetxController {
   static const _waterIntervalHoursKey = 'settings_water_interval_hours';
   static const _waterGoalGlassesKey = 'settings_water_goal_glasses';
   static const _waterGoalMlKey = 'settings_water_goal_ml';
+  static const _waterUseMlKey = 'settings_water_use_ml';
+  static const _waterGlassMlKey = 'settings_water_glass_ml';
 
   static const int mlPerGlass = 250;
   static const int defaultWaterGoalMl = 2000;
   static const List<int> waterGoalMlOptions = [1500, 2000, 2500, 3000];
+  static const List<int> waterGlassMlOptions = [150, 200, 250, 300, 350, 500];
+  static const double mlPerFlOz = 29.5735;
 
   final RxBool pushNotifications = true.obs;
   final RxBool mealReminders = true.obs;
@@ -34,6 +38,10 @@ class SettingsController extends GetxController {
   final RxBool weeklyReport = false.obs;
   final RxBool appUpdates = false.obs;
   final RxBool useMetricUnits = true.obs;
+  /// Water display unit: true = ml, false = fl oz.
+  final RxBool waterUseMl = true.obs;
+  /// Customizable glass size used when logging +1 glass.
+  final RxInt waterGlassMl = mlPerGlass.obs;
 
   final Rx<TimeOfDay> breakfastReminder = const TimeOfDay(
     hour: 8,
@@ -84,6 +92,10 @@ class SettingsController extends GetxController {
       waterReminderIntervalHours.value =
           (prefs.getInt(_waterIntervalHoursKey) ?? 2).clamp(1, 4);
       waterGoalMl.value = _resolveWaterGoalMl(prefs);
+      waterUseMl.value = prefs.getBool(_waterUseMlKey) ?? true;
+      waterGlassMl.value = _normalizeWaterGlassMl(
+        prefs.getInt(_waterGlassMlKey) ?? mlPerGlass,
+      );
     } finally {
       if (_settingsReady != null && !_settingsReady!.isCompleted) {
         _settingsReady!.complete();
@@ -181,11 +193,57 @@ class SettingsController extends GetxController {
     await prefs.setInt(_waterGoalMlKey, waterGoalMl.value);
   }
 
+  Future<void> setWaterUseMl(bool useMl) async {
+    waterUseMl.value = useMl;
+    await _saveBool(_waterUseMlKey, useMl);
+  }
+
+  Future<void> setWaterGlassMl(int ml) async {
+    waterGlassMl.value = _normalizeWaterGlassMl(ml);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_waterGlassMlKey, waterGlassMl.value);
+  }
+
+  int get effectiveGlassMl => waterGlassMl.value;
+
+  String get waterUnitLabel => waterUseMl.value ? 'ml' : 'oz';
+
+  String formatWaterAmount(int ml) {
+    if (waterUseMl.value) {
+      if (ml >= 1000) {
+        final liters = ml / 1000;
+        final text = liters == liters.roundToDouble()
+            ? liters.round().toString()
+            : liters.toStringAsFixed(1);
+        return '$text L';
+      }
+      return '$ml ml';
+    }
+    final oz = ml / mlPerFlOz;
+    final text = oz >= 10
+        ? oz.round().toString()
+        : oz.toStringAsFixed(oz == oz.roundToDouble() ? 0 : 1);
+    return '$text oz';
+  }
+
+  int mlFromDisplay(double display) {
+    if (waterUseMl.value) return display.round();
+    return (display * mlPerFlOz).round();
+  }
+
+  double displayFromMl(int ml) {
+    if (waterUseMl.value) return ml.toDouble();
+    return ml / mlPerFlOz;
+  }
+
   String get waterGoalSummary {
     final ml = waterGoalMl.value;
-    final glasses = (ml / mlPerGlass).round();
-    return '$ml ml per day (~$glasses glasses)';
+    final glasses = (ml / effectiveGlassMl).round().clamp(1, 99);
+    return '${formatWaterAmount(ml)} per day (~$glasses glasses)';
   }
+
+  String get waterGlassSummary =>
+      '${formatWaterAmount(effectiveGlassMl)} per glass';
 
   String formatTime(BuildContext context, TimeOfDay time) {
     return time.format(context);
@@ -216,6 +274,10 @@ class SettingsController extends GetxController {
       }
     }
     return closest;
+  }
+
+  int _normalizeWaterGlassMl(int ml) {
+    return ml.clamp(50, 1000);
   }
 
   Future<void> _saveBool(String key, bool value) async {

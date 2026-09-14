@@ -1,10 +1,10 @@
   import 'dart:async';
+  import 'dart:io' show Platform;
 
   import 'package:flutter/foundation.dart';
   import 'package:flutter/scheduler.dart';
   import 'package:get/get.dart';
 
-  import '../core/app_snackbar.dart';
   import '../core/weight_chart_data.dart';
   import '../models/daily_water_intake.dart';
   import '../models/exercise_entry.dart';
@@ -102,6 +102,14 @@
 
     static const int mlPerGlass = DailyWaterIntake.mlPerGlass;
     static const int defaultWaterGoalMl = SettingsController.defaultWaterGoalMl;
+
+    /// Active glass size from settings (falls back to 250 ml).
+    int get glassMl {
+      if (Get.isRegistered<SettingsController>()) {
+        return Get.find<SettingsController>().effectiveGlassMl;
+      }
+      return mlPerGlass;
+    }
 
     static int get waterGoalMl {
       if (Get.isRegistered<SettingsController>()) {
@@ -276,7 +284,7 @@
     int get waterMl => waterForDate(_today);
 
     /// Glass equivalent of today's intake, for display.
-    int get waterGlasses => (waterMl / mlPerGlass).round();
+    int get waterGlasses => (waterMl / mlPerGlass).floor();
 
     double get waterProgress =>
         waterGoalMl > 0 ? (waterMl / waterGoalMl).clamp(0.0, 1.0) : 0.0;
@@ -341,11 +349,12 @@
       final day = MealEntry.normalizeDate(date ?? _today);
       final previous = waterForDate(day);
       final wasComplete = previous >= waterGoalMl;
+      final localTotal = previous + ml;
 
-      waterByDate[day] = previous + ml;
+      // Optimistic update so the glass fills immediately.
+      waterByDate[day] = localTotal;
       _bumpWaterRevision();
       await AnalyticsService.logWaterLogged(1);
-      AppSnackbar.success(_waterLoggedMessage(ml), title: 'Water');
       _maybeShowWaterGoalCelebration(wasComplete, forDate: day);
 
       final accessToken = await _weightAccessToken();
@@ -362,27 +371,19 @@
           _upsertWaterEntries([loggedEntry]);
         }
         final serverTotal = response.dailyTotalMl;
-        if (serverTotal != null) {
+        if (serverTotal != null && serverTotal >= localTotal) {
+          // Only apply server total when it isn't behind the optimistic UI.
           waterByDate[day] = serverTotal;
           _bumpWaterRevision();
-        } else {
-          await refreshWaterForDate(day);
         }
+        // If the API omits dailyTotal (or lags), keep localTotal so glasses
+        // stay filled — a full refresh can race and look like fill "failed".
       } on WaterApiException catch (error) {
         _logWaterApi404Once(error);
         debugPrint('TrackerController: water log failed: $error');
       } catch (error) {
         debugPrint('TrackerController: water log failed: $error');
       }
-    }
-
-    static String _waterLoggedMessage(int ml) {
-      if (ml == mlPerGlass) return 'Added 1 glass.';
-      if (ml > 0 && ml % mlPerGlass == 0) {
-        final glasses = ml ~/ mlPerGlass;
-        return 'Added $glasses glasses.';
-      }
-      return 'Added ${formatWaterMl(ml)}.';
     }
 
     void _logWaterApi404Once(WaterApiException error) {
@@ -429,7 +430,6 @@
       if (entry != null) {
         final outcome = await deleteWaterEntry(entry);
         if (outcome.status == WaterDeleteStatus.deleted) {
-          AppSnackbar.success(_waterRemovedMessage(ml), title: 'Water');
           if (waterForDate(day) < waterGoalMl) {
             _waterGoalCelebrationShown = false;
           }
@@ -444,20 +444,10 @@
         waterByDate[day] = next;
       }
       _bumpWaterRevision();
-      AppSnackbar.success(_waterRemovedMessage(ml), title: 'Water');
 
       if (waterForDate(day) < waterGoalMl) {
         _waterGoalCelebrationShown = false;
       }
-    }
-
-    static String _waterRemovedMessage(int ml) {
-      if (ml == mlPerGlass) return 'Removed 1 glass.';
-      if (ml > 0 && ml % mlPerGlass == 0) {
-        final glasses = ml ~/ mlPerGlass;
-        return 'Removed $glasses glasses.';
-      }
-      return 'Removed ${formatWaterMl(ml)}.';
     }
 
     Future<WaterDeleteOutcome> deleteWaterEntry(WaterLogEntry entry) async {
@@ -1315,7 +1305,9 @@
         needsHealthConnectInstall.value = false;
         stepTrackingMessage.value = usesHealthConnect.value
             ? 'Steps sync from Health Connect every 30 seconds.'
-            : 'Steps update automatically from your device.';
+            : Platform.isIOS
+                ? 'Steps update automatically with Motion & Fitness.'
+                : 'Steps update automatically from your device sensors.';
       }
       _notifyActivityChanged();
     }

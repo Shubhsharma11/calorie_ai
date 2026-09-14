@@ -6,6 +6,15 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../core/android_sdk.dart';
 
+/// Mirrors Health Connect SDK availability without leaking the `health`
+/// package into iOS-only call sites.
+enum HealthConnectAvailability {
+  sdkAvailable,
+  sdkUnavailable,
+  sdkUnavailableProviderUpdateRequired,
+  unknown,
+}
+
 /// Reads daily step counts from Health Connect on Android 13+.
 class HealthConnectStepService {
   HealthConnectStepService({Health? health}) : _health = health ?? Health();
@@ -31,16 +40,25 @@ class HealthConnectStepService {
     _configured = true;
   }
 
-  Future<HealthConnectSdkStatus?> sdkStatus() async {
+  Future<HealthConnectAvailability> sdkStatus() async {
     if (!await isOsSupported()) {
-      return HealthConnectSdkStatus.sdkUnavailable;
+      return HealthConnectAvailability.sdkUnavailable;
     }
     try {
       await _ensureConfigured();
-      return _health.getHealthConnectSdkStatus();
+      final status = await _health.getHealthConnectSdkStatus();
+      return switch (status) {
+        HealthConnectSdkStatus.sdkAvailable =>
+          HealthConnectAvailability.sdkAvailable,
+        HealthConnectSdkStatus.sdkUnavailable =>
+          HealthConnectAvailability.sdkUnavailable,
+        HealthConnectSdkStatus.sdkUnavailableProviderUpdateRequired =>
+          HealthConnectAvailability.sdkUnavailableProviderUpdateRequired,
+        _ => HealthConnectAvailability.unknown,
+      };
     } catch (error) {
       debugPrint('HealthConnectStepService.sdkStatus: $error');
-      return HealthConnectSdkStatus.sdkUnavailable;
+      return HealthConnectAvailability.sdkUnavailable;
     }
   }
 

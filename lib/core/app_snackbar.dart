@@ -14,12 +14,17 @@ abstract final class AppSnackbar {
     );
   }
 
-  static void error(String message, {String title = 'Something went wrong'}) {
+  static void error(
+    String message, {
+    String title = 'Something went wrong',
+    Duration duration = const Duration(seconds: 2),
+  }) {
     _show(
       title: title,
       message: message,
       icon: Icons.error_rounded,
       accent: AppColors.error,
+      duration: duration,
     );
   }
 
@@ -37,10 +42,16 @@ abstract final class AppSnackbar {
     required String message,
     required IconData icon,
     required Color accent,
+    Duration duration = const Duration(seconds: 2),
   }) {
     if (Get.isSnackbarOpen) {
       Get.closeCurrentSnackbar();
     }
+
+    final context = Get.overlayContext ?? Get.context;
+    final topInset = context == null
+        ? 12.0
+        : MediaQuery.paddingOf(context).top;
 
     Get.rawSnackbar(
       titleText: Text(
@@ -64,10 +75,12 @@ abstract final class AppSnackbar {
       borderColor: AppColors.border.withValues(alpha: 0.6),
       borderWidth: 1,
       borderRadius: 14,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      // Clear the status bar / notch — top snackbars otherwise sit under the
+      // camera cutout right after logout/login transitions.
+      margin: EdgeInsets.fromLTRB(16, topInset + 8, 16, 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 2),
+      duration: duration,
       animationDuration: const Duration(milliseconds: 350),
       boxShadows: [
         BoxShadow(

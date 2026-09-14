@@ -7,6 +7,7 @@ import '../controllers/tracker_controller.dart';
 import '../controllers/settings_controller.dart';
 import '../core/app_coach_marks.dart';
 import '../core/responsive.dart';
+import '../models/meal_entry.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 
@@ -34,38 +35,40 @@ class WaterIntakeBanner extends StatelessWidget {
         : null;
 
     return Obx(() {
-    
+      // Force rebuild whenever water totals change.
+      final _ = tracker.waterRevision.value;
       food?.selectedLogDate.value;
       final viewingToday = food?.isViewingToday ?? true;
       final viewDate = food?.selectedLogDate.value;
-      final waterMl = viewDate == null
-          ? tracker.waterMl
-          : tracker.waterForDate(viewDate);
-    final settings = Get.isRegistered<SettingsController>()
-    ? Get.find<SettingsController>()
-    : null;
+      final logDate = viewDate == null
+          ? DateTime.now()
+          : MealEntry.normalizeDate(viewDate);
+      final waterMl = tracker.waterForDate(logDate);
+      final settings = Get.isRegistered<SettingsController>()
+          ? Get.find<SettingsController>()
+          : null;
 
-final goalMl = settings?.waterGoalMl.value ??
-    TrackerController.waterGoalMl;
-      
-      final glasses = (waterMl / TrackerController.mlPerGlass).floor();
+      final goalMl =
+          settings?.waterGoalMl.value ?? TrackerController.waterGoalMl;
+
+      final glassSize = TrackerController.mlPerGlass;
+      final glasses = (waterMl / glassSize).floor();
       final goalGlasses = goalMl > 0
-          ? (goalMl / TrackerController.mlPerGlass).round().clamp(1, 100)
+          ? (goalMl / glassSize).round().clamp(1, 100)
           : 8;
       final isComplete = waterMl >= goalMl;
       final overGlasses = glasses > goalGlasses ? glasses - goalGlasses : 0;
       final remainingGlasses =
           (goalGlasses - glasses).clamp(0, goalGlasses);
-      final _ = tracker.waterRevision.value;
       final color = isComplete ? AppColors.primary : _waterBlue;
       final dayWord = viewingToday ? 'today' : 'this day';
-     final headerText = isComplete
-    ? 'Goal reached'
-    : glasses == 0
-        ? 'Stay hydrated'
-        : glasses == 1
-            ? '1 glass $dayWord'
-            : '$glasses glasses $dayWord';
+      final headerText = isComplete
+          ? 'Goal reached'
+          : glasses == 0
+              ? 'Stay hydrated'
+              : glasses == 1
+                  ? '1 glass $dayWord'
+                  : '$glasses glasses $dayWord';
       final status = overGlasses > 0
           ? '+$overGlasses extra'
           : isComplete
@@ -230,7 +233,7 @@ final goalMl = settings?.waterGoalMl.value ??
                     customBorder: const CircleBorder(),
                     onTap: () {
                       HapticFeedback.lightImpact();
-                      tracker.addWater(date: DateTime.now());
+                      tracker.addWater(date: logDate);
                     },
                     child: SizedBox(
                       width: r.scale(40),
@@ -310,6 +313,7 @@ class _AdaptiveGlassesRow extends StatelessWidget {
               for (var i = 0; i < n; i++) ...[
                 if (i > 0) SizedBox(width: gap),
                 _GlassCup(
+                  key: ValueKey('water-glass-$i'),
                   filled: i < filled,
                   color: color,
                   height: glassH,
@@ -326,6 +330,7 @@ class _AdaptiveGlassesRow extends StatelessWidget {
 /// Tumbler glass that animates only when its fill state changes.
 class _GlassCup extends StatefulWidget {
   const _GlassCup({
+    super.key,
     required this.filled,
     required this.color,
     required this.height,

@@ -459,7 +459,10 @@ class _RemoveGlassButton extends StatelessWidget {
       borderRadius: radius,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         borderRadius: radius,
         child: Container(
           width: double.infinity,
@@ -517,7 +520,10 @@ class _QuickAddButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(r.scale(12)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
         child: Container(
           padding: EdgeInsets.symmetric(vertical: r.scale(12)),
           decoration: BoxDecoration(

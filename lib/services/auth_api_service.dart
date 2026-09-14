@@ -10,9 +10,10 @@ import 'api_client.dart';
 import 'api_endpoints.dart';
 
 class AuthApiException implements Exception {
-  const AuthApiException(this.message);
+  const AuthApiException(this.message, {this.statusCode});
 
   final String message;
+  final int? statusCode;
 
   @override
   String toString() => message;
@@ -243,10 +244,28 @@ class AuthApiService {
       'Authorization: Bearer ***',
     );
 
-    final response = await _apiClient.delete(
-      ApiEndpoints.deleteAccount,
-      headers: apiAuthHeaders(accessToken),
-    );
+    http.Response response;
+    try {
+      response = await _apiClient.delete(
+        ApiEndpoints.deleteAccount,
+        headers: {
+          ...apiAuthHeaders(accessToken),
+          'Accept': 'application/json',
+        },
+      );
+    } catch (e) {
+      // One retry — iOS often logs harmless nw_/QUIC noise while a first
+      // attempt is dropped; a second attempt usually gets through.
+      debugPrint('AuthApiService: delete account network error, retrying: $e');
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      response = await _apiClient.delete(
+        ApiEndpoints.deleteAccount,
+        headers: {
+          ...apiAuthHeaders(accessToken),
+          'Accept': 'application/json',
+        },
+      );
+    }
 
     final body = response.body.trim();
     debugPrint(
@@ -255,15 +274,36 @@ class AuthApiService {
     );
     final decoded = _tryDecodeJson(body);
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final message = decoded is Map<String, dynamic>
-          ? decoded['message'] as String? ?? decoded['error'] as String?
-          : null;
+    final httpFailed =
+        response.statusCode < 200 || response.statusCode >= 300;
+    final payloadFailed = decoded is Map && decoded['success'] == false;
+    if (httpFailed || payloadFailed) {
       throw AuthApiException(
-        message ??
-            'Account deletion failed (${response.statusCode}). $body',
+        _readErrorMessage(
+              decoded,
+              fallback:
+                  'Account deletion failed (${response.statusCode}). $body',
+            ) ??
+            'Account deletion failed (${response.statusCode}).',
+        statusCode: response.statusCode,
       );
     }
+  }
+
+  /// Nest/Express may return `message` as a String or a List of strings.
+  String? _readErrorMessage(dynamic decoded, {required String fallback}) {
+    if (decoded is! Map) return fallback;
+    final map = Map<String, dynamic>.from(decoded);
+    final raw = map['message'] ?? map['error'];
+    if (raw is String && raw.trim().isNotEmpty) return raw.trim();
+    if (raw is List) {
+      final parts = raw
+          .map((e) => e?.toString().trim() ?? '')
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (parts.isNotEmpty) return parts.join(' ');
+    }
+    return fallback;
   }
 
   /// Revokes session on the server.

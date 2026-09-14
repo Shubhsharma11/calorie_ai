@@ -28,12 +28,8 @@
 		<true/>
 		<key>NSCameraUsageDescription</key>
 		<string>MyCaloriePal uses the camera to scan food and barcodes.</string>
-		<key>NSHealthShareUsageDescription</key>
-		<string>MyCaloriePal reads your health data, such as steps, calories, and workouts, to provide personalized fitness tracking and insights.</string>
-		<key>NSHealthUpdateUsageDescription</key>
-		<string>MyCaloriePal writes health and workout data to Apple Health only with your permission.</string>
 		<key>NSMotionUsageDescription</key>
-		<string>MyCaloriePal uses motion data to track your steps and activity progress.</string>
+		<string>MyCaloriePal uses Motion &amp; Fitness to count your steps and estimate calories burned. This app does not use Apple Health or HealthKit.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>MyCaloriePal uses your photo library to select food images and attach screenshots to support reports.</string>
 		<key>UIApplicationSceneManifest</key>

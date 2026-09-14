@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -131,8 +133,12 @@ class CaloriesBurnView extends GetView<TrackerController> {
                   isComplete
                       ? 'Goal reached — great work today!'
                       : isAutoTracking
-                          ? 'Auto-detected from your device'
-                          : 'Allow health access to keep your steps updated',
+                          ? (Platform.isIOS
+                              ? 'Auto-detected with Motion & Fitness'
+                              : 'Auto-detected from your device')
+                          : (Platform.isIOS
+                              ? 'Enable Motion & Fitness to keep your steps updated'
+                              : 'Enable step tracking to keep your steps updated'),
                   style: TextStyle(
                     fontSize: r.scale(13),
                     color: AppColors.textSecondary,
@@ -262,7 +268,9 @@ class _EmptyConnectCard extends StatelessWidget {
           Text(
             needsInstall
                 ? 'Install Health Connect so we can estimate calories burned from your steps.'
-                : 'Allow health access to sync steps and see calories burned automatically.',
+                : Platform.isIOS
+                    ? 'Uses Motion & Fitness (not Apple Health) to count steps and estimate calories burned.'
+                    : 'Allow activity access to sync steps and see calories burned automatically.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: r.scale(13),
@@ -311,8 +319,12 @@ class _StepTrackingStatus extends StatelessWidget {
         isActive ? Icons.directions_walk_rounded : Icons.sensors_off_rounded;
     final text = message ??
         (isActive
-            ? 'Steps sync from your health data.'
-            : 'Allow health access to track steps automatically.');
+            ? (Platform.isIOS
+                ? 'Steps update automatically with Motion & Fitness.'
+                : 'Steps sync from your device sensors.')
+            : (Platform.isIOS
+                ? 'Enable Motion & Fitness to track steps automatically.'
+                : 'Enable step tracking to count steps automatically.'));
 
     return Container(
       padding: EdgeInsets.symmetric(

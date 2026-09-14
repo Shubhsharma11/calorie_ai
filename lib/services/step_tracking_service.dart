@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:health/health.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -104,7 +103,8 @@ class StepTrackingService {
     final status = await _healthConnect.sdkStatus();
     // Android 12 and below: Health Connect does not exist. Fall through to
     // the device pedometer without showing an install prompt.
-    if (status == null || status == HealthConnectSdkStatus.sdkUnavailable) {
+    if (status == HealthConnectAvailability.sdkUnavailable ||
+        status == HealthConnectAvailability.unknown) {
       if (await _healthConnect.isOsSupported()) {
         onError?.call(
           'Install Health Connect to sync steps from your fitness apps.',
@@ -112,7 +112,8 @@ class StepTrackingService {
       }
       return false;
     }
-    if (status == HealthConnectSdkStatus.sdkUnavailableProviderUpdateRequired) {
+    if (status ==
+        HealthConnectAvailability.sdkUnavailableProviderUpdateRequired) {
       onError?.call('Update Health Connect to sync steps automatically.');
       return false;
     }
@@ -164,7 +165,11 @@ class StepTrackingService {
   }) async {
     final granted = await hasPermission() || await requestPermission();
     if (!granted) {
-      onError?.call('Allow activity recognition to track steps automatically.');
+      onError?.call(
+        Platform.isIOS
+            ? 'Allow Motion & Fitness access to track steps automatically.'
+            : 'Allow activity recognition to track steps automatically.',
+      );
       return;
     }
 

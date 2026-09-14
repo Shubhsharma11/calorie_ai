@@ -96,15 +96,24 @@ class AuthRepository {
   Future<void> deleteAccount({required String accessToken}) async {
     debugPrint('AuthRepository: calling delete account API');
     try {
+      // Match ApiClient timeout — 8s was failing slow deletes and looking broken.
       await _authApi
           .deleteAccount(accessToken: accessToken)
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 25));
     } on TimeoutException {
       throw const AuthApiException(
         'The server took too long. Please try again.',
       );
     }
-    await clearLocalAuthData();
+    // Server already deleted the account — always wipe local session even if
+    // storage/Google sign-out throws, so the user is not left half-logged-in.
+    try {
+      await clearLocalAuthData();
+    } catch (e, stackTrace) {
+      debugPrint(
+        'AuthRepository: clearLocalAuthData after delete failed: $e\n$stackTrace',
+      );
+    }
     await _signOutFromGoogle();
   }
 
