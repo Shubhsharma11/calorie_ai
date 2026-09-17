@@ -150,7 +150,10 @@ class OnboardingRequestModel {
       'personalDetails': personalDetails.toJson(),
       'goal': goalType,
       'activityLevel': activityLevel,
-      'healthProblems': healthProblems.map((problem) => problem.toJson()).toList(),
+      // Backend accepts `null` when the user selected no health problems.
+      'healthProblems': healthProblems.isEmpty
+          ? null
+          : healthProblems.map((problem) => problem.toJson()).toList(),
       'goalWeight': goalWeight,
       'goalWeightUnit': goalWeightUnit,
       'goalTimeline': goalTimeline,
@@ -158,11 +161,11 @@ class OnboardingRequestModel {
         'goalTimelineCustomDate': goalTimelineCustomDate,
       if (startWeight != null) 'startWeight': startWeight,
       if (startWeightUnit != null) 'startWeightUnit': startWeightUnit,
-      if (dietType != null) 'dietType': dietType,
+      // Diet prefs are always sent on full PUT so nutrition plan AI can use them.
+      'dietType': dietType,
       'foodAllergies': foodAllergies,
-      if (foodsToAvoid != null && foodsToAvoid!.isNotEmpty)
-        'foodsToAvoid': foodsToAvoid,
-      if (mealsPerDay != null) 'mealsPerDay': mealsPerDay,
+      'foodsToAvoid': foodsToAvoid ?? '',
+      'mealsPerDay': mealsPerDay,
     };
   }
 

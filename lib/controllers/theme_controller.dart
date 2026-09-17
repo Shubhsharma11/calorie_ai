@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 
 class ThemeController extends GetxController with WidgetsBindingObserver {
   static const _themeModeKey = 'theme_mode';
@@ -62,6 +63,7 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
       AppColors.setOverlayBrightnessResolver(null);
       _publishAppliedBrightness();
       AppColors.syncWithBrightness(effectiveBrightness);
+      AppTheme.applySystemUiOverlay(effectiveBrightness);
       // Always defer — Settings dispose runs while Flutter is finalizing the
       // tree; sync Get.changeThemeMode then crashes GetMaterialController.
       _syncGetMaterialThemeMode(forceDefer: true);
@@ -77,6 +79,7 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
         WidgetsBinding.instance.platformDispatcher.platformBrightness;
     if (themeMode.value != ThemeMode.system) return;
     AppColors.syncWithBrightness(effectiveBrightness);
+    AppTheme.applySystemUiOverlay(effectiveBrightness);
     _publishAppliedBrightness();
     _syncGetMaterialThemeMode();
     _safeUpdate();
@@ -88,6 +91,7 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
     if (stored == null) {
       _publishAppliedBrightness();
       AppColors.syncWithBrightness(effectiveBrightness);
+      AppTheme.applySystemUiOverlay(effectiveBrightness);
       _syncGetMaterialThemeMode();
       _safeUpdate();
       return;
@@ -112,6 +116,7 @@ class ThemeController extends GetxController with WidgetsBindingObserver {
   void _applyMode(ThemeMode mode, {required bool persist}) {
     themeMode.value = mode;
     AppColors.syncWithBrightness(effectiveBrightness);
+    AppTheme.applySystemUiOverlay(effectiveBrightness);
     _publishAppliedBrightness();
     _syncGetMaterialThemeMode();
     // Rebuild GetBuilder listeners (Settings) without Obx wrapping Theme.

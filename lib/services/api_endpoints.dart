@@ -1,14 +1,14 @@
 abstract final class ApiEndpoints {
 
   
-    static const String baseUrl = 'https://mycaloriepal.com';
+    // static const String baseUrl = 'https://mycaloriepal.com';
 
   /// Public S3 host for uploaded avatars (`avatars/<file>`).
   static const String s3PublicBaseUrl =
       'https://fitbuddyai.s3.ap-south-1.amazonaws.com';
 
 
-// static const String baseUrl = 'https://honor-sacrifice-poetry-belle.trycloudflare.com';
+  static const String baseUrl = 'https://opposed-ozone-minority-moms.trycloudflare.com';
 
 
 
@@ -34,6 +34,10 @@ abstract final class ApiEndpoints {
   static const String mealsStreak = '$apiVersion/meals/streak';
   static const String weight = '$apiVersion/weight';
   static const String water = '$apiVersion/water';
+  static const String steps = '$apiVersion/steps';
+  static const String claimable = '$apiVersion/claimable';
+  static const String coins = '$apiVersion/coins';
+  static const String coinsClaim = '$apiVersion/coins/claim';
   static const String myFoods = '$apiVersion/my-foods';
   static const String favouriteMeals = '$apiVersion/favourite-meals';
   static const String searchFoods = '$apiVersion/search/foods';       
@@ -135,6 +139,41 @@ abstract final class ApiEndpoints {
     return '$water?$query';
   }
 
+  static String stepsWithQuery({
+    DateTime? date,
+    int? page,
+    int? limit,
+  }) {
+    final params = <String, String>{};
+    if (date != null) {
+      params['date'] =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}';
+    }
+    if (page != null) params['page'] = '$page';
+    if (limit != null) params['limit'] = '$limit';
+    if (params.isEmpty) return steps;
+
+    final query = params.entries
+        .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
+        .join('&');
+    return '$steps?$query';
+  }
+
+  /// `GET /api/v1/claimable?date=YYYY-MM-DD&timezone=Asia/Kolkata`
+  static String claimableWithQuery({
+    required String date,
+    required String timezone,
+  }) {
+    final query = {
+      'date': date,
+      'timezone': timezone,
+    }.entries
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    return '$claimable?$query';
+  }
+
   static String weightWithQuery({
     DateTime? date,
     String? period,
@@ -223,6 +262,10 @@ abstract final class ApiEndpoints {
   static String weightByIdUrl(String weightId) => url(weightById(weightId));
   static String get waterUrl => url(water);
   static String waterByIdUrl(String waterId) => url(waterById(waterId));
+  static String get stepsUrl => url(steps);
+  static String get claimableUrl => url(claimable);
+  static String get coinsUrl => url(coins);
+  static String get coinsClaimUrl => url(coinsClaim);
   static String get myFoodsUrl => url(myFoods);
   static String myFoodByIdUrl(String myFoodId) => url(myFoodById(myFoodId));
   static String myFoodLogUrl(String myFoodId) => url(myFoodLog(myFoodId));

@@ -41,6 +41,8 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
+  // Match status + nav bars to the light canvas before first frame.
+  AppTheme.applySystemUiOverlay(Brightness.light);
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
@@ -188,6 +190,7 @@ class _FitBuddyAiAppState extends State<FitBuddyAiApp> {
         final theme = Get.find<ThemeController>();
         Get.changeThemeMode(theme.themeMode.value);
         AppColors.syncWithBrightness(theme.effectiveBrightness);
+        AppTheme.applySystemUiOverlay(theme.effectiveBrightness);
       }
     });
   }
@@ -232,8 +235,12 @@ class _FitBuddyAiAppState extends State<FitBuddyAiApp> {
         }
 
         AppColors.syncFromContext(context);
-        return SessionBusyBarrier(
-          child: child ?? const SizedBox.shrink(),
+        final brightness = Theme.of(context).brightness;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: AppTheme.systemOverlayStyleFor(brightness),
+          child: SessionBusyBarrier(
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
     );

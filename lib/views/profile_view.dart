@@ -1,18 +1,17 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../controllers/user_controller.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
+import '../models/goal_type.dart';
+import '../models/user_model.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
-import '../models/diet_type.dart';
-import '../models/user_model.dart';
 import '../widgets/edit_profile_sheet.dart';
 import '../widgets/privacy_policy_dialog.dart';
 import '../widgets/profile_avatar.dart';
@@ -28,136 +27,169 @@ class ProfileView extends GetView<UserController> {
 
     final r = context.responsive;
     final horizontalPadding = r.scale(20, tablet: 28, desktop: 32);
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final bottomPad = r.scale(110) + bottomInset;
 
     return ColoredBox(
       color: AppColors.background,
       child: GetBuilder<UserController>(
         builder: (ctrl) {
           final isAppleProfile = Platform.isIOS && ctrl.authProvider == 'apple';
+          final user = ctrl.user;
+
           return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              r.scale(8),
+              horizontalPadding,
+              bottomPad,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _ProfileHeader(
-                  user: ctrl.user,
-                  isAppleProfile: isAppleProfile,
-                  onAvatarTap: isAppleProfile && ctrl.user.hasProfilePhoto
-                      ? () => showProfilePhotoViewer(context: context, user: ctrl.user)
-                      : () => ctrl.showProfilePhotoOptions(context),
-                  onEditTap: isAppleProfile
-                      ? () => showEditProfileBottomSheet(
-                            context: context,
-                            controller: ctrl,
-                          )
-                      : null,
-                  isUploadingAvatar: ctrl.isUploadingAvatar,
+                Text(
+                  'Profile',
+                  style: TextStyle(
+                    fontSize: r.scale(28, tablet: 30),
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.4,
+                    height: 1.15,
+                  ),
                 ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    r.scale(18),
-                    horizontalPadding,
-                    r.scale(28),
+                SizedBox(height: r.scale(18)),
+                _ProfileIdentityRow(
+                  user: user,
+                  isAppleProfile: isAppleProfile,
+                  isUploadingAvatar: ctrl.isUploadingAvatar,
+                  onAvatarTap: () {
+                    if (isAppleProfile && user.hasProfilePhoto) {
+                      showProfilePhotoViewer(context: context, user: user);
+                      return;
+                    }
+                    ctrl.showProfilePhotoOptions(context);
+                  },
+                  onEditTap: () => showEditProfileBottomSheet(
+                    context: context,
+                    controller: ctrl,
                   ),
-                  child: Column(
-                    children: [
-                      _ProfileMenuRow(
-                        icon: Icons.person_outline_rounded,
-                        title: 'Personal Information',
-                        onTap: () => Get.toNamed(AppRoutes.personalInformation),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.track_changes_rounded,
-                        title: 'My Goals',
-                        onTap: () => Get.toNamed(AppRoutes.myGoals),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.medical_information_outlined,
-                        title: 'Health Concerns',
-                        subtitle: _healthConcernsSummary(ctrl.user),
-                        onTap: () => Get.toNamed(
-                          AppRoutes.healthProblem,
-                          arguments: RouteArgs.fromProfileMap,
-                        ),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.restaurant_outlined,
-                        title: 'Diet Preferences',
-                        subtitle: _dietPreferencesSummary(ctrl.user),
-                        onTap: () => Get.toNamed(
-                          AppRoutes.dietPreferences,
-                          arguments: RouteArgs.fromProfileMap,
-                        ),
-                      ),
-
-                    
-
-                      _ProfileMenuRow(
-                        icon: Icons.headset_mic_outlined,
-                        title: 'Help & Support',
-                        onTap: () => Get.toNamed(AppRoutes.helpSupport),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.settings_outlined,
-                        title: 'Settings',
-                        onTap: () => Get.toNamed(AppRoutes.settings),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.privacy_tip_outlined,
-                        title: 'Privacy Policy',
-                        onTap: openPrivacyPolicy,
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.description_outlined,
-                        title: 'Terms of Service',
-                        onTap: openTermsOfService,
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.share_outlined,
-                        title: 'Share App',
-                        onTap: () => _shareApp(context),
-                      ),
-                      _ProfileMenuRow(
-                        icon: Icons.delete_outline_rounded,
-                        title: 'Delete Account',
-                        destructive: true,
-                        onTap: ctrl.isDeletingAccount || ctrl.isLoggingOut
-                            ? null
-                            : () => _confirmDeleteAccount(context, ctrl),
-                        showChevron: !ctrl.isDeletingAccount,
-                        trailing: ctrl.isDeletingAccount
-                            ? SizedBox(
-                                width: r.scale(20),
-                                height: r.scale(20),
-                                child: const CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.error,
-                                ),
-                              )
-                            : null,
-                      ),
-
-                      _ProfileMenuRow(
-                        icon: Icons.logout_rounded,
-                        title: 'Logout',
-                        onTap: ctrl.isLoggingOut
-                            ? null
-                            : () => _confirmLogout(context, ctrl),
-                        showChevron: !ctrl.isLoggingOut,
-                        trailing: ctrl.isLoggingOut
-                            ? SizedBox(
-                                width: r.scale(20),
-                                height: r.scale(20),
-                                child: const CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.primary,
-                                ),
-                              )
-                            : null,
-                      ),
-                      // Follow us footer hidden on Profile.
-                    ],
+                ),
+                SizedBox(height: r.scale(18)),
+                _OverviewCard(
+                  title: 'Body Overview',
+                  icon: Icons.monitor_heart_outlined,
+                  onTap: () => Get.toNamed(AppRoutes.personalInformation),
+                  children: [
+                    _MetricTile(
+                      icon: Icons.monitor_weight_outlined,
+                      label: 'Weight',
+                      value: user.weightKg != null && user.weightKg! > 0
+                          ? '${user.weightKg}kg'
+                          : '—',
+                    ),
+                    _MetricTile(
+                      icon: Icons.height_rounded,
+                      label: 'Height',
+                      value: user.heightCm != null && user.heightCm! > 0
+                          ? '${user.heightCm}cm'
+                          : '—',
+                    ),
+                    _MetricTile(
+                      icon: Icons.cake_outlined,
+                      label: 'Age',
+                      value: user.age != null && user.age! > 0
+                          ? '${user.age}yrs'
+                          : '—',
+                    ),
+                  ],
+                ),
+                SizedBox(height: r.scale(12)),
+                _OverviewCard(
+                  title: 'My Goal',
+                  icon: Icons.flag_outlined,
+                  onTap: () => Get.toNamed(AppRoutes.myGoals),
+                  children: [
+                    _MetricTile(
+                      icon: Icons.monitor_weight_outlined,
+                      label: 'Weight',
+                      value: user.goalWeightKg > 0
+                          ? '${user.goalWeightKg.round()}kg'
+                          : '—',
+                      trailing: _goalTrendIcon(user),
+                    ),
+                    _MetricTile(
+                      icon: Icons.local_fire_department_outlined,
+                      label: 'Daily Calories',
+                      value: user.dailyCalorieGoal > 0
+                          ? '${user.dailyCalorieGoal}kcal'
+                          : '—',
+                    ),
+                    _MetricTile(
+                      icon: Icons.calendar_today_outlined,
+                      label: 'Target Date',
+                      value: DateFormat('d MMM, yy').format(user.targetDate),
+                    ),
+                  ],
+                ),
+                SizedBox(height: r.scale(14)),
+                _ProfileMenuRow(
+                  icon: Icons.eco_outlined,
+                  title: 'Meal Plan',
+                  onTap: () => Get.toNamed(
+                    AppRoutes.dietPreferences,
+                    arguments: RouteArgs.fromProfileMap,
                   ),
+                ),
+                _ProfileMenuRow(
+                  icon: Icons.medical_services_outlined,
+                  title: 'Health Concern',
+                  onTap: () => Get.toNamed(
+                    AppRoutes.healthProblem,
+                    arguments: RouteArgs.fromProfileMap,
+                  ),
+                ),
+                _ProfileMenuRow(
+                  icon: Icons.headset_mic_outlined,
+                  title: 'Help & Support',
+                  onTap: () => Get.toNamed(AppRoutes.helpSupport),
+                ),
+                _ProfileMenuRow(
+                  icon: Icons.settings_outlined,
+                  title: 'Settings',
+                  onTap: () => Get.toNamed(AppRoutes.settings),
+                ),
+                _ProfileMenuRow(
+                  icon: Icons.shield_outlined,
+                  title: 'Privacy Policy',
+                  onTap: openPrivacyPolicy,
+                ),
+                _ProfileMenuRow(
+                  icon: Icons.description_outlined,
+                  title: 'Terms & Service',
+                  onTap: openTermsOfService,
+                ),
+                _ProfileMenuRow(
+                  icon: Icons.share_outlined,
+                  title: 'Share App',
+                  onTap: _shareApp,
+                ),
+                SizedBox(height: r.scale(8)),
+                _ActionButton(
+                  label: 'Log Out',
+                  color: AppColors.textPrimary,
+                  onTap: ctrl.isLoggingOut
+                      ? null
+                      : () => _confirmLogout(context, ctrl),
+                  isLoading: ctrl.isLoggingOut,
+                ),
+                SizedBox(height: r.scale(10)),
+                _ActionButton(
+                  label: 'Delete Account',
+                  color: AppColors.error,
+                  onTap: ctrl.isDeletingAccount || ctrl.isLoggingOut
+                      ? null
+                      : () => _confirmDeleteAccount(context, ctrl),
+                  isLoading: ctrl.isDeletingAccount,
                 ),
               ],
             ),
@@ -167,24 +199,27 @@ class ProfileView extends GetView<UserController> {
     );
   }
 
-  String _healthConcernsSummary(UserModel user) {
-    if (!user.hasHealthConcernsConfigured || user.hasNoHealthConcerns) {
-      return 'None selected';
+  Widget? _goalTrendIcon(UserModel user) {
+    final goal = user.pinnedGoalType ?? user.goal;
+    if (goal == GoalType.gainWeight) {
+      return Icon(
+        Icons.arrow_upward_rounded,
+        size: 14,
+        color: AppColors.primary,
+      );
     }
-    return user.healthProblemCategory;
+    if (goal == GoalType.loseWeight) {
+      return Icon(
+        Icons.arrow_downward_rounded,
+        size: 14,
+        color: AppColors.primary,
+      );
+    }
+    return null;
   }
 
-  String _dietPreferencesSummary(UserModel user) {
-    final diet = user.dietType;
-    if (diet == null) return 'Not set';
-    final meals = user.mealsPerDay;
-    if (meals == null) return diet.title;
-    return '${diet.title} · $meals meals';
-  }
-
-  Future<void> _shareApp(BuildContext context) async {
+  Future<void> _shareApp() async {
     const message = 'Check out MyCaloriePal — your smart nutrition tracker!';
-
     await SharePlus.instance.share(
       ShareParams(text: message, title: 'Share MyCaloriePal'),
     );
@@ -247,188 +282,230 @@ class ProfileView extends GetView<UserController> {
   }
 }
 
-class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({
+class _ProfileIdentityRow extends StatelessWidget {
+  const _ProfileIdentityRow({
     required this.user,
     required this.onAvatarTap,
+    required this.onEditTap,
     this.isAppleProfile = false,
-    this.onEditTap,
     this.isUploadingAvatar = false,
   });
 
   final UserModel user;
   final VoidCallback onAvatarTap;
+  final VoidCallback onEditTap;
   final bool isAppleProfile;
-  final VoidCallback? onEditTap;
   final bool isUploadingAvatar;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final topInset = MediaQuery.paddingOf(context).top;
-    final isDark = AppColors.isDark(context);
-    final avatarRadius = r.scale(42, tablet: 46, desktop: 50);
+    final avatarRadius = r.scale(34, tablet: 38);
     final displayName = user.name.trim();
-    final cardLabel = displayName.isEmpty ? 'MyCaloriePal' : displayName;
+    final nameLabel = displayName.isEmpty ? 'MyCaloriePal' : displayName;
+    final emailLabel = user.email.trim().isEmpty ? '—' : user.email.trim();
 
-    if (isAppleProfile) {
-      return Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.fromLTRB(
-              r.scale(20, tablet: 28, desktop: 32),
-              topInset + r.scale(12, tablet: 16),
-              r.scale(20, tablet: 28, desktop: 32),
-              r.scale(8),
-            ),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: isDark
-                    ? [AppColors.darkHeaderWash, AppColors.background]
-                    : const [Color(0xFFE8F5E9), Color(0xFFF5F5F5)],
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(height: r.scale(8)),
-                Center(
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.center,
-                    children: [
-                      ProfileAvatar(
-                        user: user,
-                        onTap: onAvatarTap,
-                        radius: avatarRadius,
-                        isUploading: isUploadingAvatar,
-                        onEditBadgeTap: onEditTap,
-                        tooltip: user.hasProfilePhoto
-                            ? 'View photo'
-                            : 'Profile photo',
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: r.scale(14)),
-                Center(
-                  child: Text(
-                    cardLabel,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: r.scale(20, tablet: 22),
-                      fontWeight: FontWeight.w800,
-                      color: displayName.isEmpty
-                          ? AppColors.primary
-                          : AppColors.textPrimary,
-                      letterSpacing: -0.3,
-                      height: 1.2,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            top: topInset + r.scale(4),
-            right: r.scale(12),
-            child: IgnorePointer(
-              child: Icon(
-                Icons.eco_outlined,
-                size: r.scale(72, tablet: 84),
-                color: AppColors.primary.withValues(alpha: 0.12),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Stack(
-      clipBehavior: Clip.none,
+    return Row(
       children: [
-        Container(
-          width: double.infinity,
-          padding: EdgeInsets.fromLTRB(
-            r.scale(20, tablet: 28, desktop: 32),
-            topInset + r.scale(12, tablet: 16),
-            r.scale(20, tablet: 28, desktop: 32),
-            r.scale(24, tablet: 28),
-          ),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: isDark
-                  ? [AppColors.darkHeaderWash, AppColors.background]
-                  : const [Color(0xFFE8F5E9), Color(0xFFF5F5F5)],
-            ),
-          ),
+        ProfileAvatar(
+          user: user,
+          onTap: onAvatarTap,
+          radius: avatarRadius,
+          isUploading: isUploadingAvatar,
+          showEditBadge: true,
+          onEditBadgeTap: onEditTap,
+          tooltip: isAppleProfile && user.hasProfilePhoto
+              ? 'View photo'
+              : 'Profile photo',
+        ),
+        SizedBox(width: r.scale(14)),
+        Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  ProfileAvatar(
-                    user: user,
-                    onTap: onAvatarTap,
-                    radius: avatarRadius,
-                    isUploading: isUploadingAvatar,
-                showEditBadge: true,
-                    tooltip: 'Profile photo',
-                  ),
-                ],
-              ),
-              SizedBox(height: r.scale(16)),
               Text(
-                user.name,
-                textAlign: TextAlign.center,
-                maxLines: 2,
+                nameLabel,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: r.scale(20, tablet: 22),
+                  fontSize: r.scale(18, tablet: 20),
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                  letterSpacing: -0.3,
+                  color: displayName.isEmpty
+                      ? AppColors.primary
+                      : AppColors.textPrimary,
+                  letterSpacing: -0.2,
                   height: 1.2,
                 ),
               ),
-              SizedBox(height: r.scale(6)),
+              SizedBox(height: r.scale(4)),
               Text(
-                user.email.isEmpty ? 'john.doe@email.com' : user.email,
-                textAlign: TextAlign.center,
-                maxLines: 2,
+                emailLabel,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: r.scale(13, tablet: 14),
                   color: AppColors.textSecondary,
                   fontWeight: FontWeight.w500,
-                  height: 1.3,
+                  height: 1.25,
                 ),
               ),
             ],
           ),
         ),
-        Positioned(
-          top: topInset + r.scale(4),
-          right: r.scale(12),
-          child: IgnorePointer(
-            child: Icon(
-              Icons.eco_outlined,
-              size: r.scale(72, tablet: 84),
-              color: AppColors.primary.withValues(alpha: 0.12),
+      ],
+    );
+  }
+}
+
+class _OverviewCard extends StatelessWidget {
+  const _OverviewCard({
+    required this.title,
+    required this.icon,
+    required this.onTap,
+    required this.children,
+  });
+
+  final String title;
+  final IconData icon;
+  final VoidCallback onTap;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Material(
+      color: AppColors.card,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.fromLTRB(
+            r.scale(14),
+            r.scale(14),
+            r.scale(12),
+            r.scale(14),
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: AppColors.border.withValues(alpha: 0.55),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.shadowColor,
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: AppColors.primary, size: r.scale(20)),
+                  SizedBox(width: r.scale(8)),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: r.scale(15, tablet: 16),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.textSecondary,
+                    size: r.scale(22),
+                  ),
+                ],
+              ),
+              SizedBox(height: r.scale(12)),
+              Row(
+                children: [
+                  for (var i = 0; i < children.length; i++) ...[
+                    if (i > 0) SizedBox(width: r.scale(8)),
+                    Expanded(child: children[i]),
+                  ],
+                ],
+              ),
+            ],
           ),
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: r.scale(8),
+        vertical: r.scale(10),
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: AppColors.primary, size: r.scale(18)),
+          SizedBox(height: r.scale(8)),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: r.scale(11),
+              fontWeight: FontWeight.w500,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          SizedBox(height: r.scale(2)),
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: r.scale(14, tablet: 15),
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                    height: 1.15,
+                  ),
+                ),
+              ),
+              if (trailing != null) ...[
+                SizedBox(width: r.scale(2)),
+                trailing!,
+              ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -438,24 +515,15 @@ class _ProfileMenuRow extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
-    this.subtitle,
-    this.showChevron = true,
-    this.trailing,
-    this.destructive = false,
   });
 
   final IconData icon;
   final String title;
-  final String? subtitle;
   final VoidCallback? onTap;
-  final bool showChevron;
-  final Widget? trailing;
-  final bool destructive;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final accent = destructive ? AppColors.error : AppColors.iconAccent;
 
     return Padding(
       padding: EdgeInsets.only(bottom: r.scale(10)),
@@ -486,55 +554,96 @@ class _ProfileMenuRow extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: r.scale(42, tablet: 44),
-                  height: r.scale(42, tablet: 44),
+                  width: r.scale(40, tablet: 42),
+                  height: r.scale(40, tablet: 42),
                   decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.12),
+                    color: AppColors.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(icon, color: accent, size: r.scale(22)),
+                  child: Icon(icon, color: AppColors.primary, size: r.scale(20)),
                 ),
                 SizedBox(width: r.scale(14)),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: r.scale(15, tablet: 16),
-                          fontWeight: FontWeight.w600,
-                          color: destructive
-                              ? AppColors.error
-                              : AppColors.textPrimary,
-                        ),
-                      ),
-                      if (subtitle != null) ...[
-                        SizedBox(height: r.scale(2)),
-                        Text(
-                          subtitle!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: r.scale(12, tablet: 13),
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ],
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: r.scale(15, tablet: 16),
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ),
-                if (trailing != null)
-                  trailing!
-                else if (showChevron)
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.textSecondary,
-                    size: r.scale(24),
-                  ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textSecondary,
+                  size: r.scale(24),
+                ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.isLoading = false,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+
+    return Material(
+      color: AppColors.card,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(vertical: r.scale(16)),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.border.withValues(alpha: 0.55),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.shadowColor,
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: isLoading
+              ? SizedBox(
+                  width: r.scale(20),
+                  height: r.scale(20),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: color,
+                  ),
+                )
+              : Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: r.scale(15, tablet: 16),
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
         ),
       ),
     );

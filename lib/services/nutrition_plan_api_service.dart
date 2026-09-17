@@ -18,19 +18,31 @@ class NutritionPlanApiException implements Exception {
   String toString() => message;
 }
 
-class NutritionPlanApiService {  
+class NutritionPlanApiService {
   NutritionPlanApiService({ApiClient? apiClient})
     : _apiClient = apiClient ?? ApiClient();
 
   final ApiClient _apiClient;
 
-  Future<NutritionPlanModel> createPlan({required String accessToken}) async {
+  /// Creates/regenerates the plan. Optional [body] sends profile + diet context
+  /// so the backend can persist meals even if onboarding fields were just saved.
+  Future<NutritionPlanModel> createPlan({
+    required String accessToken,
+    Map<String, dynamic>? body,
+  }) async {
     debugPrint(
       'NutritionPlanApiService: POST ${ApiEndpoints.nutritionPlanUrl}',
     );
+    if (kDebugMode && body != null) {
+      debugPrint(
+        'NutritionPlanApiService: request body:\n'
+        '${const JsonEncoder.withIndent('  ').convert(body)}',
+      );
+    }
 
     final response = await _apiClient.post(
       ApiEndpoints.nutritionPlan,
+      body: body ?? const <String, dynamic>{},
       headers: apiAuthHeaders(accessToken),
     );
 

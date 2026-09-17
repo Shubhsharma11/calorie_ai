@@ -1,4 +1,5 @@
 import 'package:calorie_ai/models/activity_level.dart';
+import 'package:calorie_ai/models/diet_type.dart';
 import 'package:calorie_ai/models/goal_type.dart';
 import 'package:calorie_ai/models/health_concern.dart';
 import 'package:calorie_ai/models/onboarding_request_model.dart';
@@ -61,6 +62,35 @@ void main() {
     ]);
     expect(json.containsKey('healthProblem'), isFalse);
     expect(json['foodAllergies'], isEmpty);
+    expect(json.containsKey('dietType'), isTrue);
+    expect(json.containsKey('foodsToAvoid'), isTrue);
+    expect(json.containsKey('mealsPerDay'), isTrue);
+  });
+
+  test('OnboardingRequestModel.fromUser always sends diet preference fields', () {
+    final user = UserModel()
+      ..age = 28
+      ..gender = 'Male'
+      ..heightCm = 175
+      ..weightKg = 70
+      ..goal = GoalType.gainWeight
+      ..manualGoalWeightKg = 75
+      ..targetDate = DateTime(2026, 10, 16)
+      ..activityLevel = ActivityLevel.moderatelyActive
+      ..healthConcerns = [HealthConcern.none()]
+      ..dietType = DietType.vegetarian
+      ..foodAllergies = ['Dairy', 'Nuts']
+      ..foodsToAvoid = 'mushrooms, spicy food'
+      ..mealsPerDay = 4;
+
+    final json = OnboardingRequestModel.fromUser(user).toJson();
+
+    expect(json['dietType'], 'vegetarian');
+    expect(json['foodAllergies'], ['Dairy', 'Nuts']);
+    expect(json['foodsToAvoid'], 'mushrooms, spicy food');
+    expect(json['mealsPerDay'], 4);
+    expect(json['goal'], 'gainWeight');
+    expect(json['activityLevel'], 'moderatelyActive');
   });
 
   test('OnboardingRequestModel.fromUser maps multiple health concerns', () {
@@ -110,7 +140,7 @@ void main() {
     expect(json.containsKey('healthProblem'), isFalse);
   });
 
-  test('OnboardingRequestModel.fromUser sends empty healthProblems for none', () {
+  test('OnboardingRequestModel.fromUser sends null healthProblems for none', () {
     final user = UserModel()
       ..age = 30
       ..gender = 'Female'
@@ -124,7 +154,7 @@ void main() {
     final json = OnboardingRequestModel.fromUser(user).toJson();
 
     expect(json['goal'], 'maintainWeight');
-    expect(json['healthProblems'], isEmpty);
+    expect(json['healthProblems'], isNull);
     expect(json.containsKey('healthProblem'), isFalse);
   });
 
@@ -148,7 +178,7 @@ void main() {
 
       final json = OnboardingRequestModel.fromUser(user).toJson();
       expect(json['goal'], entry.value);
-      expect(json['healthProblems'], isEmpty);
+      expect(json['healthProblems'], isNull);
     }
   });
 

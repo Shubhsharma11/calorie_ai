@@ -9,16 +9,20 @@
   import '../models/exercise_entry.dart';
   import '../models/exercise_type.dart';
   import '../models/meal_entry.dart';
+  import '../models/step_log_entry.dart';
   import '../models/water_log_entry.dart';
   import '../models/water_period.dart';
   import '../models/weight_entry.dart';
+  import '../repositories/steps_repository.dart';
   import '../repositories/water_repository.dart';
   import '../repositories/weight_repository.dart';
   import '../services/local_storage_service.dart';
   import '../services/step_tracking_service.dart';
+  import '../services/steps_api_service.dart';
   import '../services/water_api_service.dart';
   import '../services/weight_api_service.dart';
   import '../widgets/water_goal_success_dialog.dart';
+  import 'rewards_controller.dart';
   import 'settings_controller.dart';
   import 'user_controller.dart';
   import '../services/analytics_service.dart';
@@ -66,10 +70,12 @@
       StepTrackingService? stepTracking,
       WeightRepository? weightRepository,
       WaterRepository? waterRepository,
+      StepsRepository? stepsRepository,
     }) : _storage = storage ?? LocalStorageService(),
         _stepTracking = stepTracking ?? StepTrackingService(),
         _weightRepository = weightRepository ?? WeightRepository(),
-        _waterRepository = waterRepository ?? WaterRepository() {
+        _waterRepository = waterRepository ?? WaterRepository(),
+        _stepsRepository = stepsRepository ?? StepsRepository() {
       if (initialWeight != null) {
         currentWeight.value = initialWeight;
       }
@@ -79,6 +85,7 @@
     final StepTrackingService _stepTracking;
     final WeightRepository _weightRepository;
     final WaterRepository _waterRepository;
+    final StepsRepository _stepsRepository;
     final RxMap<DateTime, int> waterByDate = <DateTime, int>{}.obs;
     final RxList<WaterLogEntry> waterEntries = <WaterLogEntry>[].obs;
     final Rx<WaterPeriod> waterPeriod = WaterPeriod.week.obs;
@@ -87,6 +94,9 @@
     final RxList<WeightEntry> weightEntries = <WeightEntry>[].obs;
     final RxMap<DateTime, int> stepsByDate = <DateTime, int>{}.obs;
     final Map<String, int> _stepsBaselineByDate = {};
+    /// Day shown on Calories Burned (today by default).
+    final Rx<DateTime> selectedStepsDate =
+        MealEntry.normalizeDate(DateTime.now()).obs;
     final RxList<ExerciseEntry> exerciseEntries = <ExerciseEntry>[].obs;
     final RxInt activityRevision = 0.obs;
     final RxBool isStepTrackingActive = false.obs;
@@ -116,10 +126,17 @@
     bool _waterGoalCelebrationShown = false;
     bool _waterGoalListenerBound = false;
     bool _waterApi404Logged = false;
+    bool _stepsApi404Logged = false;
     WeightChartPeriod _weightChartPeriod = WeightChartPeriod.week;
     WeightChartCustomRange? _weightChartCustomRange;
 
     DateTime get _today => MealEntry.normalizeDate(DateTime.now());
+
+    Timer? _stepsSyncDebounce;
+    int? _pendingStepsSyncValue;
+    DateTime? _lastStepsSyncAt;
+    static const Duration _stepsSyncDebounceDuration = Duration(seconds: 20);
+    static const Duration _stepsSyncMinInterval = Duration(seconds: 45);
 
     void _bumpWaterRevision() {
       waterByDate.refresh();
@@ -147,6 +164,7 @@
       unawaited(_loadWeightHistory());
       unawaited(_loadActivityLog());
       unawaited(refreshWaterFromApi(force: true));
+      unawaited(refreshStepsFromApi(force: true));
       _bindWaterGoalListener();
     }
 
@@ -164,10 +182,16 @@
       exerciseEntries.clear();
       stepsByDate.clear();
       _stepsBaselineByDate.clear();
+      selectedStepsDate.value = MealEntry.normalizeDate(DateTime.now());
       _lastWaterRefreshAt = null;
       _lastWeightRefreshAt = null;
       _lastWeightRefreshKey = null;
+      _lastStepsSyncAt = null;
+      _pendingStepsSyncValue = null;
+      _stepsSyncDebounce?.cancel();
+      _stepsSyncDebounce = null;
       _waterApi404Logged = false;
+      _stepsApi404Logged = false;
       _waterGoalCelebrationShown = false;
       currentWeight.value = 0;
       activityRevision.value++;
@@ -177,14 +201,16 @@
       debugPrint('TrackerController: session data cleared');
     }
 
-    /// Reload water + weight from the API after login.
+    /// Reload water + weight + steps from the API after login.
     Future<void> reloadAfterLogin() async {
       _lastWaterRefreshAt = null;
       _lastWeightRefreshAt = null;
       _lastWeightRefreshKey = null;
+      _lastStepsSyncAt = null;
       await Future.wait([
         refreshWaterFromApi(force: true),
         refreshWeightFromApi(),
+        refreshStepsFromApi(force: true),
       ]);
     }
 
@@ -216,6 +242,7 @@
 
     @override
     void onClose() {
+      _stepsSyncDebounce?.cancel();
       unawaited(_stepTracking.dispose());
       super.onClose();
     }
@@ -229,7 +256,41 @@
 
     bool get isStepsGoalComplete => todaySteps >= stepsGoal;
 
-    int get stepsCalories => (todaySteps * 0.04).round();
+    int get stepsCalories =>
+        StepLogEntry.caloriesFromSteps(todaySteps);
+
+    bool get isViewingStepsToday =>
+        MealEntry.normalizeDate(selectedStepsDate.value) == _today;
+
+    int get selectedSteps => stepsForDate(selectedStepsDate.value);
+
+    double get selectedStepsProgress =>
+        (selectedSteps / stepsGoal).clamp(0.0, 1.0);
+
+    bool get isSelectedStepsGoalComplete => selectedSteps >= stepsGoal;
+
+    int get selectedStepsCalories =>
+        StepLogEntry.caloriesFromSteps(selectedSteps);
+
+    /// Force-save today's steps + caloriesBurned to the API.
+    Future<void> syncTodayStepsToApi({bool force = true}) async {
+      final steps = todaySteps;
+      if (steps <= 0) return;
+      await _syncStepsToApi(steps, force: force);
+    }
+
+    void setSelectedStepsDate(DateTime date) {
+      final day = MealEntry.normalizeDate(date);
+      final today = _today;
+      if (day.isAfter(today)) return;
+      selectedStepsDate.value = day;
+      _notifyActivityChanged();
+      unawaited(refreshStepsFromApi(date: day, force: true));
+    }
+
+    void backToStepsToday() {
+      setSelectedStepsDate(_today);
+    }
 
     int get todayExerciseMinutes => todayExercises.fold(
       0,
@@ -264,7 +325,7 @@
         0,
         (sum, entry) => sum + entry.calories,
       );
-      final fromSteps = (stepsForDate(date) * 0.04).round();
+      final fromSteps = StepLogEntry.caloriesFromSteps(stepsForDate(date));
       return fromExercises + fromSteps;
     }
 
@@ -900,6 +961,9 @@
         'TrackerController: bearer token ready '
         'source=${resolution.source} length=${resolution.tokenLength}',
       );
+      if (kDebugMode) {
+        debugPrint('TrackerController: accessToken=${resolution.token}');
+      }
       return resolution.token;
     }
 
@@ -1247,6 +1311,165 @@
       stepsByDate[today] = dailySteps;
       stepsByDate.refresh();
       unawaited(_persistActivityLog());
+      _scheduleStepsApiSync(dailySteps);
+    }
+
+    void _scheduleStepsApiSync(int steps) {
+      _pendingStepsSyncValue = steps;
+      _stepsSyncDebounce?.cancel();
+      _stepsSyncDebounce = Timer(_stepsSyncDebounceDuration, () {
+        final pending = _pendingStepsSyncValue;
+        if (pending == null) return;
+        unawaited(_syncStepsToApi(pending));
+      });
+    }
+
+    Future<void> _syncStepsToApi(int steps, {bool force = false}) async {
+      final accessToken = await _weightAccessToken();
+      if (accessToken == null) return;
+
+      final now = DateTime.now();
+      if (!force &&
+          _lastStepsSyncAt != null &&
+          now.difference(_lastStepsSyncAt!) < _stepsSyncMinInterval) {
+        return;
+      }
+
+      final caloriesBurned = StepLogEntry.caloriesFromSteps(steps);
+      try {
+        debugPrint(
+          'TrackerController: POST /api/v1/steps steps=$steps '
+          'caloriesBurned=$caloriesBurned',
+        );
+        final response = await _stepsRepository.syncSteps(
+          accessToken: accessToken,
+          steps: steps,
+          caloriesBurned: caloriesBurned,
+          date: _today,
+        );
+        _lastStepsSyncAt = DateTime.now();
+        _pendingStepsSyncValue = null;
+
+        final entry = response.entry;
+        if (entry != null) {
+          _mergeRemoteSteps(entry.normalizedDate, entry.steps);
+        }
+        final coins = response.coins;
+        if (coins != null && Get.isRegistered<RewardsController>()) {
+          Get.find<RewardsController>().applyClaimableResult(coins);
+        }
+        debugPrint('TrackerController: steps synced to API OK');
+      } on StepsApiException catch (error) {
+        _logStepsApi404Once(error);
+        debugPrint('TrackerController: steps sync failed: $error');
+      } catch (error) {
+        debugPrint('TrackerController: steps sync failed: $error');
+      }
+    }
+
+    void _logStepsApi404Once(StepsApiException error) {
+      if (error.statusCode != 404 || _stepsApi404Logged) return;
+      _stepsApi404Logged = true;
+      debugPrint(
+        'TrackerController: steps API route not found (404) — '
+        'local tracking continues. Deploy POST/GET /api/v1/steps.',
+      );
+    }
+
+    /// Pull steps for [date] (defaults to selected / today) and merge with local.
+    Future<void> refreshStepsFromApi({
+      bool force = false,
+      DateTime? date,
+    }) async {
+      final accessToken = await _weightAccessToken();
+      if (accessToken == null) return;
+
+      final day = MealEntry.normalizeDate(date ?? selectedStepsDate.value);
+
+      try {
+        final result = await _stepsRepository.fetchStepsByDate(
+          accessToken: accessToken,
+          date: day,
+        );
+        var changed = false;
+        for (final entry in result.stepsByDate.entries) {
+          if (_mergeRemoteSteps(entry.key, entry.value)) changed = true;
+        }
+        for (final entry in result.entries) {
+          if (_mergeRemoteSteps(entry.normalizedDate, entry.steps)) {
+            changed = true;
+          }
+        }
+        if (changed) {
+          await _persistActivityLog();
+        } else {
+          _notifyActivityChanged();
+        }
+
+        // Push today when local is ahead OR server is missing caloriesBurned.
+        if (day == _today) {
+          final localToday = todaySteps;
+          if (localToday > 0) {
+            final remoteToday = result.stepsFor(_today);
+            final expectedCalories =
+                StepLogEntry.caloriesFromSteps(localToday);
+            final needsPush = localToday > remoteToday ||
+                !result.hasServerCalories(_today) ||
+                result.caloriesFor(_today) < expectedCalories;
+            if (needsPush) {
+              unawaited(_syncStepsToApi(localToday, force: true));
+            }
+          }
+        }
+      } on StepsApiException catch (error) {
+        _logStepsApi404Once(error);
+        debugPrint('TrackerController: steps fetch failed: $error');
+      } catch (error) {
+        debugPrint('TrackerController: steps fetch failed: $error');
+      }
+    }
+
+    /// Prefetch recent step history so calendar days have data offline.
+    Future<void> refreshStepsHistoryFromApi() async {
+      final accessToken = await _weightAccessToken();
+      if (accessToken == null) return;
+
+      try {
+        final result = await _stepsRepository.fetchStepsHistory(
+          accessToken: accessToken,
+        );
+        var changed = false;
+        for (final entry in result.stepsByDate.entries) {
+          if (_mergeRemoteSteps(entry.key, entry.value)) changed = true;
+        }
+        for (final entry in result.entries) {
+          if (_mergeRemoteSteps(entry.normalizedDate, entry.steps)) {
+            changed = true;
+          }
+        }
+        if (changed) {
+          await _persistActivityLog();
+        } else {
+          _notifyActivityChanged();
+        }
+      } on StepsApiException catch (error) {
+        _logStepsApi404Once(error);
+        debugPrint('TrackerController: steps history fetch failed: $error');
+      } catch (error) {
+        debugPrint('TrackerController: steps history fetch failed: $error');
+      }
+    }
+
+    /// Returns true when local steps were updated from remote.
+    bool _mergeRemoteSteps(DateTime date, int remoteSteps) {
+      if (remoteSteps < 0) return false;
+      final day = MealEntry.normalizeDate(date);
+      final local = stepsForDate(day);
+      // Keep the higher count so a stale GET never wipes live pedometer progress.
+      if (remoteSteps <= local) return false;
+      stepsByDate[day] = remoteSteps;
+      stepsByDate.refresh();
+      return true;
     }
 
     Future<void> _startAutoStepTracking({bool force = false}) async {

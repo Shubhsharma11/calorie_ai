@@ -99,7 +99,7 @@ abstract final class AppCoachMarks {
       key: waterKey,
       title: 'Sip and track',
       description:
-          'Tap − to remove a glass, or + to add water and change glass size.',
+          'Tap + to log a glass, or open the card for your full day.',
       preferTooltipAbove: false,
       holePadding: 2,
       holeRadius: 18,

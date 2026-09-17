@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -30,6 +32,12 @@ class _WeeklyMealPlanViewState extends State<WeeklyMealPlanView> {
     super.initState();
     // DateTime.weekday: Mon=1 … Sun=7
     _selectedWeekday = DateTime.now().weekday;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final planController = Get.isRegistered<NutritionPlanController>()
+          ? Get.find<NutritionPlanController>()
+          : Get.put(NutritionPlanController(), permanent: true);
+      unawaited(planController.ensureWeeklyPlan());
+    });
   }
 
   String _goalLabel(GoalType? goal) {
@@ -56,121 +64,175 @@ class _WeeklyMealPlanViewState extends State<WeeklyMealPlanView> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const AppAppBar(title: 'Your Weekly Meal Plan'),
-      body: ResponsivePage(
-        scrollable: true,
-        child: Builder(
-          builder: (context) {
-            if (!Get.isRegistered<UserController>()) {
-              return const SizedBox.shrink();
-            }
-            final userController = Get.find<UserController>();
-            return Obx(() {
-              planController?.revision.value;
-              userController.calorieGoalRevision.value;
-              final user = userController.user;
-              final plan = planController?.plan.value;
-              final calories = plan?.calories ?? user.dailyCalorieGoal;
-              final goal = user.pinnedGoalType ?? user.goal;
-              final meals =
-                  SampleWeeklyMealPlan.mealsForWeekday(_selectedWeekday);
-              final nextMeals = meals
-                  .where((m) => m.status == PlannedMealStatus.next)
-                  .toList();
-              final upcoming = meals
-                  .where((m) => m.status == PlannedMealStatus.upcoming)
-                  .toList();
-              final completed = meals
-                  .where((m) => m.status == PlannedMealStatus.completed)
-                  .toList();
+      body: RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: () async {
+          final c = Get.isRegistered<NutritionPlanController>()
+              ? Get.find<NutritionPlanController>()
+              : null;
+          await c?.ensureWeeklyPlan();
+        },
+        child: ResponsivePage(
+          scrollable: true,
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Builder(
+            builder: (context) {
+              if (!Get.isRegistered<UserController>()) {
+                return const SizedBox.shrink();
+              }
+              final userController = Get.find<UserController>();
+              return Obx(() {
+                planController?.revision.value;
+                userController.calorieGoalRevision.value;
+                final user = userController.user;
+                final plan = planController?.plan.value;
+                final weekly = plan?.weeklyPlan;
+                final hasWeeklyApi = weekly != null && weekly.isNotEmpty;
+                final calories = weekly?.dailyCalorieTarget ??
+                    plan?.calories ??
+                    user.dailyCalorieGoal;
+                final goal = user.pinnedGoalType ?? user.goal;
+                final goalLabel = (plan?.goalLabel?.trim().isNotEmpty == true)
+                    ? plan!.goalLabel!.trim()
+                    : _goalLabel(goal);
+                // Strictly API weeklyMealPlan — no sample / local meal lists.
+                final meals = hasWeeklyApi
+                    ? weekly.mealsForWeekday(_selectedWeekday)
+                    : const <PlannedMeal>[];
+                final nextMeals = meals
+                    .where((m) => m.status == PlannedMealStatus.next)
+                    .toList();
+                final upcoming = meals
+                    .where((m) => m.status == PlannedMealStatus.upcoming)
+                    .toList();
+                final completed = meals
+                    .where((m) => m.status == PlannedMealStatus.completed)
+                    .toList();
+                final isLoading =
+                    planController?.isLoading.value == true && !hasWeeklyApi;
+                final error = planController?.errorMessage.value;
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(height: r.scale(4)),
-                  _TargetBanner(
-                    caloriesLabel:
-                        '${_formatKcal(calories)} kcal / day target',
-                    goalLabel: _goalLabel(goal),
-                  ),
-                  SizedBox(height: r.scale(14)),
-                  _WhitePanel(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: r.scale(12),
-                      vertical: r.scale(12),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(height: r.scale(4)),
+                    _TargetBanner(
+                      caloriesLabel:
+                          '${_formatKcal(calories)} kcal / day target',
+                      goalLabel: goalLabel,
                     ),
-                    child: _DaySelector(
-                      selectedWeekday: _selectedWeekday,
-                      labels: _dayLabels,
-                      onSelected: (weekday) {
-                        setState(() => _selectedWeekday = weekday);
-                      },
+                    SizedBox(height: r.scale(14)),
+                    _WhitePanel(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: r.scale(12),
+                        vertical: r.scale(12),
+                      ),
+                      child: _DaySelector(
+                        selectedWeekday: _selectedWeekday,
+                        labels: _dayLabels,
+                        onSelected: (weekday) {
+                          setState(() => _selectedWeekday = weekday);
+                        },
+                      ),
                     ),
-                  ),
-                  SizedBox(height: r.scale(12)),
-                  _WhitePanel(
-                    padding: EdgeInsets.fromLTRB(
-                      r.scale(14),
-                      r.scale(18),
-                      r.scale(14),
-                      r.scale(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (nextMeals.isNotEmpty) ...[
-                          const _SectionTitle(title: 'Next meal'),
-                          SizedBox(height: r.scale(10)),
-                          for (final meal in nextMeals) ...[
-                            _NextMealCard(
-                              meal: meal,
-                              onTap: () => showLogMealPlanDialog(
-                                context,
-                                meal: meal,
+                    SizedBox(height: r.scale(12)),
+                    _WhitePanel(
+                      padding: EdgeInsets.fromLTRB(
+                        r.scale(14),
+                        r.scale(18),
+                        r.scale(14),
+                        r.scale(12),
+                      ),
+                      child: isLoading
+                          ? Padding(
+                              padding:
+                                  EdgeInsets.symmetric(vertical: r.scale(28)),
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
                               ),
-                            ),
-                            SizedBox(height: r.scale(14)),
-                          ],
-                        ],
-                        if (upcoming.isNotEmpty) ...[
-                          const _SectionTitle(title: 'Upcoming meal'),
-                          SizedBox(height: r.scale(10)),
-                          for (final meal in upcoming) ...[
-                            _UpcomingMealCard(
-                              meal: meal,
-                              onTap: () => showLogMealPlanDialog(
-                                context,
-                                meal: meal,
-                              ),
-                            ),
-                            SizedBox(height: r.scale(10)),
-                          ],
-                          SizedBox(height: r.scale(6)),
-                        ],
-                        if (completed.isNotEmpty) ...[
-                          const _SectionTitle(title: 'Completed'),
-                          SizedBox(height: r.scale(10)),
-                          for (final meal in completed) ...[
-                            _CompletedMealCard(
-                              meal: meal,
-                              onTap: () => showLogMealPlanDialog(
-                                context,
-                                meal: meal,
-                              ),
-                            ),
-                            SizedBox(height: r.scale(10)),
-                          ],
-                        ],
-                      ],
+                            )
+                          : meals.isEmpty
+                              ? Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: r.scale(24),
+                                  ),
+                                  child: Text(
+                                    hasWeeklyApi
+                                        ? 'No meals planned for this day yet.'
+                                        : (error?.trim().isNotEmpty == true
+                                            ? error!
+                                            : 'Your weekly meal plan is not ready yet.\nPull to refresh or complete onboarding again.'),
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: r.scale(14),
+                                      color: AppColors.textSecondary,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                )
+                              : Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (nextMeals.isNotEmpty) ...[
+                                      const _SectionTitle(title: 'Next meal'),
+                                      SizedBox(height: r.scale(10)),
+                                      for (final meal in nextMeals) ...[
+                                        _NextMealCard(
+                                          meal: meal,
+                                          onTap: () => showLogMealPlanDialog(
+                                            context,
+                                            meal: meal,
+                                          ),
+                                        ),
+                                        SizedBox(height: r.scale(14)),
+                                      ],
+                                    ],
+                                    if (upcoming.isNotEmpty) ...[
+                                      const _SectionTitle(
+                                        title: 'Upcoming meal',
+                                      ),
+                                      SizedBox(height: r.scale(10)),
+                                      for (final meal in upcoming) ...[
+                                        _UpcomingMealCard(
+                                          meal: meal,
+                                          onTap: () => showLogMealPlanDialog(
+                                            context,
+                                            meal: meal,
+                                          ),
+                                        ),
+                                        SizedBox(height: r.scale(10)),
+                                      ],
+                                      SizedBox(height: r.scale(6)),
+                                    ],
+                                    if (completed.isNotEmpty) ...[
+                                      const _SectionTitle(title: 'Completed'),
+                                      SizedBox(height: r.scale(10)),
+                                      for (final meal in completed) ...[
+                                        _CompletedMealCard(
+                                          meal: meal,
+                                          onTap: () => showLogMealPlanDialog(
+                                            context,
+                                            meal: meal,
+                                          ),
+                                        ),
+                                        SizedBox(height: r.scale(10)),
+                                      ],
+                                    ],
+                                  ],
+                                ),
                     ),
-                  ),
-                  SizedBox(
-                    height: MediaQuery.viewPaddingOf(context).bottom +
-                        r.scale(24),
-                  ),
-                ],
-              );
-            });
-          },
+                    SizedBox(
+                      height: MediaQuery.viewPaddingOf(context).bottom +
+                          r.scale(24),
+                    ),
+                  ],
+                );
+              });
+            },
+          ),
         ),
       ),
     );
@@ -306,7 +368,7 @@ class _DaySelector extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: labels.length,
-        separatorBuilder: (_, __) => SizedBox(width: r.scale(8)),
+        separatorBuilder: (context, index) => SizedBox(width: r.scale(8)),
         itemBuilder: (context, i) {
           return SizedBox(
             width: chipWidth,

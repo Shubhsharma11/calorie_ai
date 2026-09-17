@@ -1,24 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../bindings/home_binding.dart';
 import '../controllers/nutrition_plan_controller.dart';
-import '../core/app_page_transitions.dart';
 import '../core/responsive.dart';
-import '../models/meal_type.dart';
+import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
-import '../views/weekly_meal_plan_view.dart';
 import 'meal_type_icon.dart';
 
-/// Promotional AI meal-plan teaser shown on Home below the calorie card.
+/// Home teaser for the AI meal plan — driven by GET `/nutrition/plan`.
 class AiMealPlanCard extends StatelessWidget {
   const AiMealPlanCard({super.key});
 
-  static const _previewMealType = MealType.lunch;
-  static const _previewMealName = 'Oats + Banana + Almonds';
-  static const _previewCalories = 420;
-  static const _previewProteinG = 20;
-  static const _previewTime = '9:30 AM';
+  static const _fallbackMealType = '';
+  static const _fallbackMealName = 'Your meal plan will appear here';
+  static const _fallbackCalories = 0;
+  static const _fallbackProteinG = 0;
+  static const _fallbackTime = '';
 
   @override
   Widget build(BuildContext context) {
@@ -31,41 +28,47 @@ class AiMealPlanCard extends StatelessWidget {
       return _buildCard(
         context,
         r: r,
-        mealType: _previewMealType,
-        mealName: _previewMealName,
-        calories: _previewCalories,
-        proteinG: _previewProteinG,
+        mealType: _fallbackMealType,
+        mealName: _fallbackMealName,
+        calories: _fallbackCalories,
+        proteinG: _fallbackProteinG,
+        timeLabel: _fallbackTime,
+        isLoading: false,
+        hasPlan: false,
       );
     }
 
     return Obx(() {
       final plan = planController.plan.value;
+      final isLoading = planController.isLoading.value;
       final _ = planController.revision.value;
+      final preview = plan?.previewMeal;
+      final hasPreview = preview != null &&
+          (preview.displayName.trim().isNotEmpty || preview.calories > 0);
 
-      final firstMeal =
-          plan?.meals.isNotEmpty == true ? plan!.meals.first : null;
-      final mealType = firstMeal?.title.trim().isNotEmpty == true
-          ? firstMeal!.title
-          : _previewMealType;
-      final mealName = firstMeal != null && firstMeal.items.isNotEmpty
-          ? firstMeal.items.take(3).join(' + ')
-          : _previewMealName;
-      final calories = firstMeal != null && firstMeal.calories > 0
-          ? firstMeal.calories
-          : _previewCalories;
-      final proteinG = plan != null && plan.proteinG > 0
-          ? (plan.proteinG / (plan.meals.isEmpty ? 4 : plan.meals.length))
-              .round()
-              .clamp(1, 999)
-          : _previewProteinG;
+      final mealType = hasPreview && preview.title.trim().isNotEmpty
+          ? preview.title
+          : _fallbackMealType;
+      final mealName = hasPreview
+          ? preview.displayName
+          : (isLoading ? 'Loading your meal plan…' : _fallbackMealName);
+      final calories = hasPreview && preview.calories > 0 ? preview.calories : 0;
+      final proteinG = hasPreview && preview.proteinG > 0 ? preview.proteinG : 0;
+      final timeLabel =
+          hasPreview && preview.timeLabel?.trim().isNotEmpty == true
+              ? preview.timeLabel!.trim()
+              : _fallbackTime;
 
       return _buildCard(
         context,
         r: r,
-        mealType: mealType,
+        mealType: mealType.isEmpty ? 'Meal' : mealType,
         mealName: mealName,
         calories: calories,
         proteinG: proteinG,
+        timeLabel: timeLabel,
+        isLoading: isLoading && plan == null,
+        hasPlan: hasPreview,
       );
     });
   }
@@ -77,6 +80,9 @@ class AiMealPlanCard extends StatelessWidget {
     required String mealName,
     required int calories,
     required int proteinG,
+    required String timeLabel,
+    required bool isLoading,
+    required bool hasPlan,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -120,7 +126,11 @@ class AiMealPlanCard extends StatelessWidget {
                       ),
                       SizedBox(height: r.scale(2)),
                       Text(
-                        'Personalized meals for your goals and taste',
+                        hasPlan
+                            ? 'Personalized meals for your goals and taste'
+                            : (isLoading
+                                ? 'Fetching your nutrition plan…'
+                                : 'Complete setup to unlock your meal plan'),
                         style: TextStyle(
                           fontSize: r.scale(12),
                           color: AppColors.textSecondary,
@@ -133,92 +143,111 @@ class AiMealPlanCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: r.scale(12)),
-            Container(
-              padding: EdgeInsets.all(r.scale(12)),
-              decoration: BoxDecoration(
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _openWeeklyPlan(),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppColors.border.withValues(alpha: 0.85),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      MealTypeIcon(meal: mealType, size: r.scale(28)),
-                      SizedBox(width: r.scale(8)),
-                      Expanded(
-                        child: Text(
-                          mealType,
-                          style: TextStyle(
-                            fontSize: r.scale(14),
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        _previewTime,
-                        style: TextStyle(
-                          fontSize: r.scale(13),
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: r.scale(18),
-                        color: AppColors.textSecondary,
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: r.scale(10)),
-                  Text(
-                    mealName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: r.scale(17),
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                      height: 1.2,
+                child: Container(
+                  padding: EdgeInsets.all(r.scale(12)),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.border.withValues(alpha: 0.85),
                     ),
                   ),
-                  SizedBox(height: r.scale(12)),
-                  Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _StatChip(
-                        value: '$calories',
-                        unit: 'kcal',
-                        label: 'Calories',
+                      Row(
+                        children: [
+                          MealTypeIcon(meal: mealType, size: r.scale(28)),
+                          SizedBox(width: r.scale(8)),
+                          Expanded(
+                            child: Text(
+                              mealType,
+                              style: TextStyle(
+                                fontSize: r.scale(14),
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                          if (timeLabel.isNotEmpty)
+                            Text(
+                              timeLabel,
+                              style: TextStyle(
+                                fontSize: r.scale(13),
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: r.scale(18),
+                            color: AppColors.textSecondary,
+                          ),
+                        ],
                       ),
-                      SizedBox(width: r.scale(8)),
-                      _StatChip(
-                        value: '$proteinG',
-                        unit: 'g',
-                        label: 'Protein',
-                      ),
-                      const Spacer(),
-                      _ViewPlanButton(
-                        onPressed: () {
-                          Get.to(
-                            () => const WeeklyMealPlanView(),
-                            binding: HomeBinding(),
-                            transition: AppPageTransitions.transition,
-                            duration: AppPageTransitions.duration,
-                          );
-                        },
+                      SizedBox(height: r.scale(10)),
+                      if (isLoading)
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: r.scale(8)),
+                          child: SizedBox(
+                            width: r.scale(22),
+                            height: r.scale(22),
+                            child: const CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        )
+                      else
+                        Text(
+                          mealName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: r.scale(17),
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                            height: 1.2,
+                          ),
+                        ),
+                      SizedBox(height: r.scale(12)),
+                      Row(
+                        children: [
+                          _StatChip(
+                            value: calories > 0 ? '$calories' : '—',
+                            unit: calories > 0 ? 'kcal' : '',
+                            label: 'Calories',
+                          ),
+                          SizedBox(width: r.scale(8)),
+                          _StatChip(
+                            value: proteinG > 0 ? '$proteinG' : '—',
+                            unit: proteinG > 0 ? 'g' : '',
+                            label: 'Protein',
+                          ),
+                          const Spacer(),
+                          _ViewPlanButton(onPressed: _openWeeklyPlan),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _openWeeklyPlan() {
+    if (Get.isRegistered<NutritionPlanController>()) {
+      Get.find<NutritionPlanController>().loadPlan();
+    }
+    Get.toNamed(AppRoutes.weeklyMealPlan);
   }
 }
 
@@ -260,14 +289,15 @@ class _StatChip extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                TextSpan(
-                  text: unit,
-                  style: TextStyle(
-                    fontSize: r.scale(11),
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                if (unit.isNotEmpty)
+                  TextSpan(
+                    text: unit,
+                    style: TextStyle(
+                      fontSize: r.scale(11),
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -318,7 +348,7 @@ class _ViewPlanButton extends StatelessWidget {
               ),
               SizedBox(width: r.scale(2)),
               Icon(
-                Icons.chevron_right_rounded,
+                Icons.arrow_forward_rounded,
                 size: r.scale(16),
                 color: AppColors.primaryDark,
               ),

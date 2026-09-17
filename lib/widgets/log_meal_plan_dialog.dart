@@ -197,7 +197,7 @@ class _LogMealPlanDialog extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: r.scale(8)),
-                  Expanded(
+                  Expanded(   
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -309,7 +309,7 @@ class _MacroTile extends StatelessWidget {
         children: [
           Text.rich(
             TextSpan(
-              children: [
+              children: [  
                 TextSpan(
                   text: value,
                   style: TextStyle(

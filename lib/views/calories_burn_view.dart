@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/tracker_controller.dart';
+import '../core/dashboard_actions.dart';
 import '../core/responsive.dart';
+import '../models/meal_entry.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
 import '../widgets/responsive_page.dart';
@@ -16,28 +20,118 @@ class CaloriesBurnView extends GetView<TrackerController> {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    // Pull today + recent history, then POST caloriesBurned if server is missing it.
+    unawaited(() async {
+      await controller.refreshStepsFromApi(force: true);
+      await controller.refreshStepsHistoryFromApi();
+      await controller.syncTodayStepsToApi(force: true);
+    }());
 
     return Scaffold(
-      appBar: const AppAppBar(title: 'Calories Burned'),
+      appBar: AppAppBar(
+        title: 'Calories Burned',
+        actions: [
+          IconButton(
+            onPressed: () => _openStepsCalendar(context),
+            tooltip: 'Pick a day',
+            icon: const Icon(Icons.calendar_today_rounded, size: 20),
+          ),
+        ],
+      ),
       body: ResponsivePage(
         scrollable: true,
         child: Obx(() {
-          final burned = controller.stepsCalories;
-          final steps = controller.todaySteps;
-          final stepsProgress = controller.stepsProgress;
-          final isComplete = controller.isStepsGoalComplete;
+          final viewingToday = controller.isViewingStepsToday;
+          final selectedDate = controller.selectedStepsDate.value;
+          final dateLabel = formatLogDateLabel(selectedDate);
+          final burned = controller.selectedStepsCalories;
+          final steps = controller.selectedSteps;
+          final stepsProgress = controller.selectedStepsProgress;
+          final isComplete = controller.isSelectedStepsGoalComplete;
           final isAutoTracking = controller.isStepTrackingActive.value;
           final trackingMessage = controller.stepTrackingMessage.value;
           final needsHealthConnectInstall =
               controller.needsHealthConnectInstall.value;
           final _ = controller.activityRevision.value;
           final remaining =
-              (TrackerController.stepsGoal - steps).clamp(0, TrackerController.stepsGoal);
+              (TrackerController.stepsGoal - steps)
+                  .clamp(0, TrackerController.stepsGoal);
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Center(
+                child: InkWell(
+                  onTap: () => _openStepsCalendar(context),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: r.scale(14),
+                      vertical: r.scale(8),
+                    ),
+                    decoration: BoxDecoration(
+                      color: viewingToday
+                          ? AppColors.selectionFill
+                          : const Color(0xFFFFF3E0),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: viewingToday
+                            ? AppColors.selectionBorder
+                            : const Color(0xFFFF9800).withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          viewingToday
+                              ? Icons.calendar_today_rounded
+                              : Icons.history_rounded,
+                          size: 16,
+                          color: viewingToday
+                              ? AppColors.primary
+                              : const Color(0xFFE65100),
+                        ),
+                        SizedBox(width: r.scale(6)),
+                        Text(
+                          dateLabel,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: viewingToday
+                                ? AppColors.primary
+                                : const Color(0xFFE65100),
+                            fontSize: r.scale(13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (!viewingToday) ...[
+                SizedBox(height: r.scale(8)),
+                Center(
+                  child: TextButton(
+                    onPressed: controller.backToStepsToday,
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFE65100),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: r.scale(12),
+                        vertical: r.scale(4),
+                      ),
+                      minimumSize: Size(0, r.scale(32)),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Today',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
+              SizedBox(height: r.scale(16)),
               Container(
+                width: double.infinity,
                 padding: EdgeInsets.all(r.scale(20)),
                 decoration: BoxDecoration(
                   color: AppColors.card,
@@ -74,7 +168,9 @@ class CaloriesBurnView extends GetView<TrackerController> {
                     ),
                     SizedBox(height: r.scale(6)),
                     Text(
-                      'kcal burned today',
+                      viewingToday
+                          ? 'kcal burned today'
+                          : 'kcal burned',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: AppColors.textSecondary,
@@ -106,7 +202,7 @@ class CaloriesBurnView extends GetView<TrackerController> {
                 ),
               ),
               SizedBox(height: r.scale(20)),
-              if (!isAutoTracking && steps == 0)
+              if (viewingToday && !isAutoTracking && steps == 0)
                 _EmptyConnectCard(
                   needsInstall: needsHealthConnectInstall,
                   onConnect: needsHealthConnectInstall
@@ -115,7 +211,7 @@ class CaloriesBurnView extends GetView<TrackerController> {
                 )
               else ...[
                 Text(
-                  'Daily step goal',
+                  viewingToday ? 'Daily step goal' : 'Step goal',
                   style: TextStyle(
                     fontSize: r.scale(18),
                     fontWeight: FontWeight.w700,
@@ -124,10 +220,16 @@ class CaloriesBurnView extends GetView<TrackerController> {
                 SizedBox(height: r.scale(6)),
                 Text(
                   isComplete
-                      ? 'Goal reached — great work today!'
-                      : isAutoTracking
-                          ? 'Auto-detected from your device'
-                          : 'Allow health access to keep your steps updated',
+                      ? viewingToday
+                          ? 'Goal reached — great work today!'
+                          : 'Goal was reached on this day.'
+                      : viewingToday
+                          ? isAutoTracking
+                              ? 'Auto-detected from your device'
+                              : 'Allow health access to keep your steps updated'
+                          : steps == 0
+                              ? 'No steps saved for this day yet.'
+                              : 'Saved steps for this day',
                   style: TextStyle(
                     fontSize: r.scale(13),
                     color: AppColors.textSecondary,
@@ -150,7 +252,8 @@ class CaloriesBurnView extends GetView<TrackerController> {
                             style: TextStyle(
                               fontSize: r.scale(16),
                               fontWeight: FontWeight.w800,
-                              color: isComplete ? AppColors.primary : _stepsBlue,
+                              color:
+                                  isComplete ? AppColors.primary : _stepsBlue,
                             ),
                           ),
                           Text(
@@ -165,7 +268,9 @@ class CaloriesBurnView extends GetView<TrackerController> {
                           Text(
                             isComplete
                                 ? 'Done'
-                                : '$remaining left',
+                                : viewingToday
+                                    ? '$remaining left'
+                                    : '${(stepsProgress * 100).round()}%',
                             style: TextStyle(
                               fontSize: r.scale(12),
                               fontWeight: FontWeight.w700,
@@ -189,16 +294,18 @@ class CaloriesBurnView extends GetView<TrackerController> {
                     ],
                   ),
                 ),
-                SizedBox(height: r.scale(12)),
-                _StepTrackingStatus(
-                  isActive: isAutoTracking,
-                  message: trackingMessage,
-                  onEnable: controller.syncActivity,
-                  onDisconnect: controller.disconnectStepTracking,
-                  onInstallHealthConnect: needsHealthConnectInstall
-                      ? controller.installHealthConnect
-                      : null,
-                ),
+                if (viewingToday) ...[
+                  SizedBox(height: r.scale(12)),
+                  _StepTrackingStatus(
+                    isActive: isAutoTracking,
+                    message: trackingMessage,
+                    onEnable: controller.syncActivity,
+                    onDisconnect: controller.disconnectStepTracking,
+                    onInstallHealthConnect: needsHealthConnectInstall
+                        ? controller.installHealthConnect
+                        : null,
+                  ),
+                ],
               ],
               SizedBox(height: MediaQuery.paddingOf(context).bottom + 8),
             ],
@@ -206,6 +313,19 @@ class CaloriesBurnView extends GetView<TrackerController> {
         }),
       ),
     );
+  }
+
+  Future<void> _openStepsCalendar(BuildContext context) async {
+    final today = MealEntry.normalizeDate(DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: controller.selectedStepsDate.value,
+      firstDate: today.subtract(const Duration(days: 365)),
+      lastDate: today,
+      helpText: 'Select a day to view steps',
+    );
+    if (picked == null) return;
+    controller.setSelectedStepsDate(picked);
   }
 
   static String _formatSteps(int steps) {

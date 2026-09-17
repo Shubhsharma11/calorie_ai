@@ -118,7 +118,7 @@ class _MacroColumn extends StatelessWidget {
                           height: innerSize,
                           fit: data.lottieFit,
                           repeat: true,
-                          errorBuilder: (_, __, ___) => Text(
+                          errorBuilder: (context, error, stackTrace) => Text(
                             data.emoji,
                             style: TextStyle(fontSize: r.scale(24)),
                           ),

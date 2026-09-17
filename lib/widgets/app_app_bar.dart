@@ -68,7 +68,7 @@ class AppAppBar extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: false,
       leading: automaticallyImplyLeading
           ? backButton(onPressed: onBack)
-          : null,
+          : null, 
       title: title.isEmpty
           ? null
           : Text(

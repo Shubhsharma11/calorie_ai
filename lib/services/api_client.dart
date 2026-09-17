@@ -13,7 +13,7 @@ class ApiClient {
     : _client = client ?? createPlatformHttpClient(),
       _baseUrl = baseUrl ?? ApiEndpoints.baseUrl;
 
-  static const _requestTimeout = Duration(seconds: 25);
+  static const _requestTimeout = Duration(seconds: 300);
   static const _uploadTimeout = Duration(seconds: 45);
 
   final http.Client _client;

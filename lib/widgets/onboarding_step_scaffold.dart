@@ -160,11 +160,11 @@ class OnboardingStepTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 48,
+      height: 44,
       child: Row(
         children: [
           OnboardingBackButton(onTap: onBack),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: showProgress && totalSteps > 1
                 ? OnboardingDotsProgress(
@@ -173,7 +173,8 @@ class OnboardingStepTopBar extends StatelessWidget {
                   )
                 : const SizedBox.shrink(),
           ),
-          const SizedBox(width: 48),
+          // Balance the back button so the bar stays visually centered.
+          const SizedBox(width: 40 + 16),
         ],
       ),
     );
@@ -189,34 +190,24 @@ class OnboardingBackButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = AppColors.isDark(context);
     return Material(
-      color: isDark ? AppColors.darkCard : Colors.white,
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.08)
+          : const Color(0xFFF2F2F7),
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
-        child: Container(
-          width: 44,
-          height: 44,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isDark
-                  ? AppColors.darkBorder
-                  : Colors.black.withValues(alpha: 0.06),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: WidgetStatePropertyAll(
+          AppColors.primary.withValues(alpha: 0.08),
+        ),
+        child: SizedBox(
+          width: 40,
+          height: 40,
           child: Icon(
             Icons.arrow_back_ios_new_rounded,
-            size: 18,
+            size: 16,
             color: AppColors.textPrimaryOf(context),
           ),
         ),
@@ -236,7 +227,7 @@ class OnboardingCircleBackButton extends StatelessWidget {
   }
 }
 
-/// Sleek progress track used across onboarding steps.
+/// Clean capsule progress — same pattern as modern onboarding apps.
 class OnboardingDotsProgress extends StatelessWidget {
   const OnboardingDotsProgress({
     super.key,
@@ -250,35 +241,29 @@ class OnboardingDotsProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = AppColors.isDark(context);
-    final track = isDark
-        ? AppColors.darkBorder
-        : AppColors.primary.withValues(alpha: 0.14);
+    final trackColor = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : const Color(0xFFE5E5EA);
     final progress = totalSteps <= 0
         ? 0.0
         : ((currentStep + 1) / totalSteps).clamp(0.0, 1.0);
 
-    return SizedBox(
-      height: 6,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(99),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                ColoredBox(color: track),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 350),
-                    curve: Curves.easeInOutCubic,
-                    width: constraints.maxWidth * progress,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ],
-            );
-          },
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(99),
+      child: SizedBox(
+        height: 4,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(color: trackColor),
+            AnimatedFractionallySizedBox(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.centerLeft,
+              widthFactor: progress,
+              child: const ColoredBox(color: AppColors.primary),
+            ),
+          ],
         ),
       ),
     );

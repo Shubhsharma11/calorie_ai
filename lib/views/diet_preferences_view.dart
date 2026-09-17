@@ -30,6 +30,9 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
   late final ProfileSyncSnapshot _baseline;
   late final TextEditingController _avoidController;
   late final TextEditingController _otherAllergyController;
+  late final FocusNode _otherAllergyFocus;
+  final _allergyScrollController = ScrollController();
+  final _otherAllergyFieldKey = GlobalKey();
 
   _DietStep _step = _DietStep.dietType;
   DietType? _dietType;
@@ -86,6 +89,7 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
     _mealsPerDay = profile.mealsPerDay;
     _avoidController = TextEditingController(text: profile.foodsToAvoid);
     _otherAllergyController = TextEditingController();
+    _otherAllergyFocus = FocusNode();
 
     final saved = profile.foodAllergies;
     if (saved.isEmpty) return;
@@ -129,6 +133,8 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
   void dispose() {
     _avoidController.dispose();
     _otherAllergyController.dispose();
+    _otherAllergyFocus.dispose();
+    _allergyScrollController.dispose();
     super.dispose();
   }
 
@@ -203,12 +209,15 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
 
   void _toggleAllergy(String allergy) {
     HapticFeedback.selectionClick();
+    final openingOther = allergy == FoodAllergyOptions.other &&
+        !_allergies.contains(FoodAllergyOptions.other);
     setState(() {
       if (allergy == FoodAllergyOptions.none) {
         _allergies
           ..clear()
           ..add(FoodAllergyOptions.none);
         _otherAllergyController.clear();
+        _otherAllergyFocus.unfocus();
       } else {
         _allergies.remove(FoodAllergyOptions.none);
         if (!_allergies.remove(allergy)) {
@@ -216,10 +225,32 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
         }
         if (!_allergies.contains(FoodAllergyOptions.other)) {
           _otherAllergyController.clear();
+          _otherAllergyFocus.unfocus();
         }
       }
     });
     _persistDraft();
+    if (openingOther) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _otherAllergyFocus.requestFocus();
+        _ensureOtherAllergyVisible();
+        Future<void>.delayed(const Duration(milliseconds: 280), () {
+          if (mounted) _ensureOtherAllergyVisible();
+        });
+      });
+    }
+  }
+
+  void _ensureOtherAllergyVisible() {
+    final ctx = _otherAllergyFieldKey.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      alignment: 0.2,
+    );
   }
 
   void _selectMeals(int count) {
@@ -228,48 +259,11 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
     _persistDraft();
   }
 
-  Future<void> _skip() async {
-    if (_saving || _transitioning) return;
-
-    // Diet type Skip jumps straight to nutrition plan (skip remaining diet steps).
-    if (_step == _DietStep.dietType) {
-      if (_fromProfile) {
-        Get.back<void>();
-        return;
-      }
-      setState(() {
-        _dietType ??= DietType.flexitarian;
-        if (_allergies.isEmpty) {
-          _allergies.add(FoodAllergyOptions.none);
-        }
-        _mealsPerDay ??= 3;
-      });
-      _persistDraft();
-      await _finish();
-      return;
-    }
-
-    switch (_step) {
-      case _DietStep.dietType:
-        return;
-      case _DietStep.allergies:
-        if (_allergies.isEmpty) {
-          setState(() => _allergies.add(FoodAllergyOptions.none));
-          _persistDraft();
-        }
-        await _animateTo(_DietStep.avoid, forward: true);
-        return;
-      case _DietStep.avoid:
-        await _animateTo(_DietStep.meals, forward: true);
-        return;
-      case _DietStep.meals:
-        if (_mealsPerDay == null) {
-          setState(() => _mealsPerDay = 3);
-          _persistDraft();
-        }
-        await _finish();
-        return;
-    }
+  Future<void> _skipAvoidFoods() async {
+    if (_saving || _transitioning || _step != _DietStep.avoid) return;
+    _avoidController.clear();
+    _persistDraft();
+    await _animateTo(_DietStep.meals, forward: true);
   }
 
   Future<void> _continue() async {
@@ -368,9 +362,14 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
       },
       child: Scaffold(
         backgroundColor: pageBg,
+        resizeToAvoidBottomInset: false,
         body: SafeArea(
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: r.scale(20, tablet: 28)),
+            padding: EdgeInsets.only(
+              left: r.scale(20, tablet: 28),
+              right: r.scale(20, tablet: 28),
+              bottom: MediaQuery.viewInsetsOf(context).bottom,
+            ),
             child: Column(
               children: [
                 SizedBox(height: r.scale(4)),
@@ -426,13 +425,63 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
                           ),
                           entrance.item(
                             index: 3,
-                            child: _ActionRow(
-                              skipLabel: 'Skip',
-                              continueLabel: _continueLabel,
-                              enabled: !_saving && !_transitioning,
-                              onSkip: () => unawaited(_skip()),
-                              onContinue: () => unawaited(_continue()),
-                            ),
+                            child: _step == _DietStep.avoid
+                                ? Row(
+                                    children: [
+                                      Expanded(
+                                        child: SizedBox(
+                                          height: r.scale(54, tablet: 58),
+                                          child: OutlinedButton(
+                                            onPressed:
+                                                !_saving && !_transitioning
+                                                    ? () => unawaited(
+                                                          _skipAvoidFoods(),
+                                                        )
+                                                    : null,
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor:
+                                                  AppColors.primary,
+                                              side: BorderSide(
+                                                color: AppColors.primary
+                                                    .withValues(alpha: 0.7),
+                                                width: 1.6,
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(28),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'Skip',
+                                              style: TextStyle(
+                                                fontSize:
+                                                    r.scale(16, tablet: 17),
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(width: r.scale(12)),
+                                      Expanded(
+                                        child: OnboardingContinueButton(
+                                          label: _continueLabel,
+                                          onPressed:
+                                              !_saving && !_transitioning
+                                                  ? () => unawaited(
+                                                        _continue(),
+                                                      )
+                                                  : null,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : OnboardingContinueButton(
+                                    label: _continueLabel,
+                                    onPressed: !_saving && !_transitioning
+                                        ? () => unawaited(_continue())
+                                        : null,
+                                  ),
                           ),
                           if (!_fromProfile &&
                               _step == _DietStep.meals) ...[
@@ -473,9 +522,19 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
             SizedBox(height: r.scale(12)),
             Expanded(
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
+                duration: const Duration(milliseconds: 180),
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
+                // Avoid stacking fading children — that creates a grey mush.
+                layoutBuilder: (currentChild, previousChildren) {
+                  return currentChild ?? const SizedBox.shrink();
+                },
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  );
+                },
                 child: _dietDropdownOpen
                     ? _DietDropdownList(
                         key: const ValueKey('diet-list'),
@@ -492,7 +551,10 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
           ],
         ),
       _DietStep.allergies => ListView(
+          controller: _allergyScrollController,
           physics: const BouncingScrollPhysics(),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.only(bottom: r.scale(16)),
           children: [
             _AllergyChipGrid(
               chips: FoodAllergyOptions.chips,
@@ -505,12 +567,16 @@ class _DietPreferencesViewState extends State<DietPreferencesView> {
               alignment: Alignment.topCenter,
               child: _showOtherAllergyField
                   ? Padding(
+                      key: _otherAllergyFieldKey,
                       padding: EdgeInsets.only(top: r.scale(14)),
                       child: TextField(
                         controller: _otherAllergyController,
+                        focusNode: _otherAllergyFocus,
                         onChanged: (_) => _persistDraft(),
+                        onTap: _ensureOtherAllergyVisible,
                         onTapOutside: (_) => FocusScope.of(context).unfocus(),
                         textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
                         style: TextStyle(
                           fontSize: r.scale(14, tablet: 15),
                           color: AppColors.textPrimaryOf(context),
@@ -655,6 +721,8 @@ class _DietDropdownHeader extends StatelessWidget {
       child: InkWell(
         onTap: onToggle,
         borderRadius: BorderRadius.circular(16),
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           width: double.infinity,
@@ -741,50 +809,56 @@ class _DietDropdownList extends StatelessWidget {
           itemBuilder: (context, index) {
             final diet = DietType.values[index];
             final isSelected = value == diet;
-            return InkWell(
-              onTap: () => onSelect(diet),
-              child: Container(
-                color: isSelected ? mintFill : Colors.transparent,
-                padding: EdgeInsets.symmetric(
-                  horizontal: r.scale(16),
-                  vertical: r.scale(14),
+            return Material(
+              color: isSelected ? mintFill : Colors.transparent,
+              child: InkWell(
+                onTap: () => onSelect(diet),
+                splashFactory: NoSplash.splashFactory,
+                overlayColor: WidgetStatePropertyAll(
+                  AppColors.primary.withValues(alpha: 0.06),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${diet.emoji}  ${diet.title}',
-                            style: TextStyle(
-                              fontSize: r.scale(15, tablet: 16),
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimaryOf(context),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: r.scale(16),
+                    vertical: r.scale(14),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${diet.emoji}  ${diet.title}',
+                              style: TextStyle(
+                                fontSize: r.scale(15, tablet: 16),
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimaryOf(context),
+                              ),
                             ),
-                          ),
-                          SizedBox(height: r.scale(2)),
-                          Text(
-                            diet.description,
-                            style: TextStyle(
-                              fontSize: r.scale(12, tablet: 13),
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textSecondaryOf(context),
-                              height: 1.3,
+                            SizedBox(height: r.scale(2)),
+                            Text(
+                              diet.description,
+                              style: TextStyle(
+                                fontSize: r.scale(12, tablet: 13),
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondaryOf(context),
+                                height: 1.3,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    if (isSelected) ...[
-                      SizedBox(width: r.scale(8)),
-                      Icon(
-                        Icons.check_rounded,
-                        size: r.scale(18),
-                        color: AppColors.primary,
-                      ),
+                      if (isSelected) ...[
+                        SizedBox(width: r.scale(8)),
+                        Icon(
+                          Icons.check_rounded,
+                          size: r.scale(18),
+                          color: AppColors.primary,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             );
@@ -831,64 +905,6 @@ class _DietHeroImage extends StatelessWidget {
         height: r.scale(200, tablet: 240),
         child: image,
       ),
-    );
-  }
-}
-
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
-    required this.skipLabel,
-    required this.continueLabel,
-    required this.enabled,
-    required this.onSkip,
-    required this.onContinue,
-  });
-
-  final String skipLabel;
-  final String continueLabel;
-  final bool enabled;
-  final VoidCallback onSkip;
-  final VoidCallback onContinue;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Row(
-      children: [
-        Expanded(
-          child: SizedBox(
-            height: r.scale(54, tablet: 58),
-            child: OutlinedButton(
-              onPressed: enabled ? onSkip : null,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: BorderSide(
-                  color: AppColors.primary.withValues(alpha: 0.7),
-                  width: 1.6,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28),
-                ),
-              ),
-              child: Text(
-                skipLabel,
-                style: TextStyle(
-                  fontSize: r.scale(16, tablet: 17),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ),
-        SizedBox(width: r.scale(12)),
-        Expanded(
-          child: OnboardingContinueButton(
-            label: continueLabel,
-            onPressed: enabled ? onContinue : null,
-          ),
-        ),
-      ],
     );
   }
 }

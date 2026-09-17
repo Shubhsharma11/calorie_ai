@@ -7,6 +7,29 @@ import 'app_colors.dart';
 abstract final class AppTheme {
   static const fontFamily = 'Manrope';
 
+  /// Status + navigation bar colors matched to the app page background
+  /// (same look as modern apps — no black system bars).
+  static SystemUiOverlayStyle systemOverlayStyleFor(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final barColor =
+        isDark ? AppColors.darkBackground : AppColors.lightPageBackground;
+    final iconBrightness = isDark ? Brightness.light : Brightness.dark;
+    return SystemUiOverlayStyle(
+      statusBarColor: barColor,
+      statusBarIconBrightness: iconBrightness,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: barColor,
+      systemNavigationBarIconBrightness: iconBrightness,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemStatusBarContrastEnforced: false,
+      systemNavigationBarContrastEnforced: false,
+    );
+  }
+
+  static void applySystemUiOverlay(Brightness brightness) {
+    SystemChrome.setSystemUIOverlayStyle(systemOverlayStyleFor(brightness));
+  }
+
   /// Cached instances — rebuilding ThemeData on every toggle is expensive and
   /// also breaks inactive-tab theme freezing (new instances always notify).
   static final ThemeData light = _buildTheme(
@@ -89,9 +112,8 @@ abstract final class AppTheme {
         ),
         iconTheme: IconThemeData(color: textPrimary, size: 20),
         actionsIconTheme: IconThemeData(color: textPrimary, size: 22),
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarBrightness: statusBarBrightness,
-          statusBarIconBrightness: statusBarIconBrightness,
+        systemOverlayStyle: systemOverlayStyleFor(
+          isDark ? Brightness.dark : Brightness.light,
         ),
       ),
       cardTheme: CardThemeData(

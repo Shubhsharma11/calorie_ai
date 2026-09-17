@@ -169,7 +169,7 @@ class CalorieOverviewCard extends StatelessWidget {
                                     accent: const Color(0xFFFF9500),
                                     icon: TrainingIcon(
                                       size: r.scale(24),
-                                      color: const Color(0xFFFF9500),
+                                      color: const Color(0xFFFF9500), 
                                     ),
                                     onTap: onCaloriesBurn,
                                   ),
@@ -596,7 +596,7 @@ class _RingPainter extends CustomPainter {
       old.strokeWidth != strokeWidth;
 }
 
-/// Flat goal / food / exercise row — clean list, no nested cards.
+/// Flat goal / food / exercise row — clean list, no hu nested cards.
 class _SideStatRow extends StatelessWidget {
   const _SideStatRow({
     required this.label,

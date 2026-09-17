@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark theme splash — matches logo12 black canvas -->
-    <color name="splash_background">#000000</color>
+    <!-- Matches AppColors.darkBackground -->
+    <color name="app_page_background">#121212</color>
+    <color name="splash_background">#121212</color>
 </resources>

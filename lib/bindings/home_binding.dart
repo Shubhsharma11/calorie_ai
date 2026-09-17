@@ -6,6 +6,7 @@ import '../controllers/food_controller.dart';
 import '../controllers/nutrition_plan_controller.dart';
 import '../controllers/main_controller.dart';
 import '../controllers/notifications_controller.dart';
+import '../controllers/rewards_controller.dart';
 import '../controllers/scan_controller.dart';
 import '../controllers/settings_controller.dart';
 import '../controllers/streak_controller.dart';
@@ -41,6 +42,9 @@ class HomeBinding extends Bindings {
     if (!Get.isRegistered<TrackerController>()) {
       // Weight is hydrated from GET /api/v1/weight — not local profile defaults.
       Get.put(TrackerController(), permanent: true);
+    }
+    if (!Get.isRegistered<RewardsController>()) {
+      Get.put(RewardsController(), permanent: true);
     }
     if (!Get.isRegistered<NutritionPlanController>()) {
       Get.put(NutritionPlanController(), permanent: true);

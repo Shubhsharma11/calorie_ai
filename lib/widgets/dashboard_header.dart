@@ -11,9 +11,8 @@ class DashboardHeader extends StatelessWidget {
     required this.firstName,
     this.scrollController,
     this.showNotificationBadge = false,
-    this.onGifts,
+    this.coinBalance,
     this.onSearch,
-    this.onCalendar,
     this.onNotifications,
     this.searchShowcaseKey,
     this.contentPadding,
@@ -23,9 +22,8 @@ class DashboardHeader extends StatelessWidget {
   final String firstName;
   final ScrollController? scrollController;
   final bool showNotificationBadge;
-  final VoidCallback? onGifts;
+  final Widget? coinBalance;
   final VoidCallback? onSearch;
-  final VoidCallback? onCalendar;
   final VoidCallback? onNotifications;
   final GlobalKey? searchShowcaseKey;
   final EdgeInsetsGeometry? contentPadding;
@@ -52,11 +50,11 @@ class DashboardHeader extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: r.scale(24),
-                      height: r.scale(24),
+                      width: r.scale(26),
+                      height: r.scale(26),
                       decoration: BoxDecoration(
-                        color: greeting.color.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(8),
+                        color: greeting.color.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(9),
                       ),
                       child: Icon(
                         greeting.icon,
@@ -71,7 +69,7 @@ class DashboardHeader extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: r.scale(13, tablet: 14),
+                          fontSize: r.scale(14, tablet: 15),
                           fontWeight: FontWeight.w700,
                           color: greeting.color,
                         ),
@@ -79,16 +77,17 @@ class DashboardHeader extends StatelessWidget {
                     ),
                   ],
                 ),
-                SizedBox(height: r.scale(4)),
+                SizedBox(height: r.scale(6)),
                 Text(
                   firstName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: r.scale(28, tablet: 30, desktop: 32),
-                    fontWeight: FontWeight.bold,
+                    fontSize: r.scale(30, tablet: 32, desktop: 34),
+                    fontWeight: FontWeight.w800,
                     color: AppColors.textPrimary,
                     height: 1.05,
+                    letterSpacing: -0.4,
                   ),
                 ),
                 SizedBox(height: r.scale(6)),
@@ -97,31 +96,32 @@ class DashboardHeader extends StatelessWidget {
                     fontSize: r.scale(14),
                     color: AppColors.textSecondary,
                     height: 1.3,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                SizedBox(height: r.scale(12)),
               ],
             ),
           ),
-          _HeaderIconButton(
-            icon: Icons.card_giftcard_rounded,
-            onTap: onGifts,
-          ),
           SizedBox(width: r.scale(8)),
-          _wrapSearchShowcase(
-            context,
-            _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearch),
-          ),
-          SizedBox(width: r.scale(8)),
-          _HeaderIconButton(
-            icon: Icons.calendar_today_rounded,
-            onTap: onCalendar,
-          ),
-          SizedBox(width: r.scale(8)),
-          _HeaderIconButton(
-            icon: Icons.notifications_none_rounded,
-            showBadge: showNotificationBadge,
-            onTap: onNotifications,
+          // Keep actions on one tidy top row like the design.
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (coinBalance != null) ...[
+                coinBalance!,
+                SizedBox(width: r.scale(8)),
+              ],
+              _wrapSearchShowcase(
+                context,
+                _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearch),
+              ),
+              SizedBox(width: r.scale(8)),
+              _HeaderIconButton(
+                icon: Icons.notifications_none_rounded,
+                showBadge: showNotificationBadge,
+                onTap: onNotifications,
+              ),
+            ],
           ),
         ],
       ),
@@ -241,28 +241,29 @@ class _HeaderIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
+      color: const Color(0xFFF2F2F7),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: SizedBox(
           width: 42,
           height: 42,
           child: Stack(
             alignment: Alignment.center,
             children: [
-              Icon(icon, size: 22, color: AppColors.textPrimary),
+              Icon(icon, size: 22, color: const Color(0xFF1C1C1E)),
               if (showBadge)
                 Positioned(
-                  top: 10,
-                  right: 10,
+                  top: 9,
+                  right: 9,
                   child: Container(
                     width: 8,
                     height: 8,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.error,
                       shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
                     ),
                   ),
                 ),

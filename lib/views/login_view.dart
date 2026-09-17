@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
 import '../core/responsive.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 import '../widgets/privacy_policy_dialog.dart';
 import '../widgets/terms_of_service_dialog.dart';
 
@@ -25,6 +26,11 @@ class LoginView extends GetView<AuthController> {
       child: _LoginScaffold(controller: controller),
     );
   }
+}
+
+/// Shared corner radius for phone field, Continue, and social buttons.
+abstract final class _LoginControlStyle {
+  static const double fieldRadius = 16;
 }
 
 class _LoginPhoneHintBootstrap extends StatefulWidget {
@@ -58,7 +64,6 @@ class _LoginScaffold extends StatefulWidget {
   static const _logoAsset = LoginView._logoAsset;
   static const _googleAsset = LoginView._googleAsset;
   static const _appleAsset = LoginView._appleAsset;
-  static const _buddyAsset = 'assets/image/buddy/buddy_wave_hello.png';
 
   @override
   State<_LoginScaffold> createState() => _LoginScaffoldState();
@@ -66,6 +71,9 @@ class _LoginScaffold extends StatefulWidget {
 
 class _LoginScaffoldState extends State<_LoginScaffold> {
   AuthController get controller => widget.controller;
+
+  static const _anim = Duration(milliseconds: 280);
+  static const _curve = Curves.easeOutCubic;
 
   @override
   Widget build(BuildContext context) {
@@ -76,151 +84,122 @@ class _LoginScaffoldState extends State<_LoginScaffold> {
     final padding = MediaQuery.paddingOf(context);
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     final keyboardOpen = keyboard > 0;
-    final headerPad = r.scale(20, tablet: 28);
-    final formPad = (size.width * 0.132).clamp(26.0, 40.0);
     final compact = size.height < 740;
 
-    final logoSize = r.scale(compact ? 48 : 54, tablet: 60);
-    final buttonHeight = r.scale(compact ? 48 : 52, tablet: 56);
-    final buttonGap = r.scale(compact ? 8 : 10);
-    final sectionGap = r.scale(compact ? 10 : 12);
-    final pageBg =
-        isDark ? AppColors.darkBackground : const Color(0xFFF1F8F1);
-
-    final restingSheetTop = size.height * 0.463;
-    final buddyHeight = size.height * 0.36;
-    // Buddy sits ~halfway onto the white sheet (same as before).
-    final visualInside = buddyHeight * 0.10;
-    final imageBottomPad = buddyHeight * 0.10;
-    final overlap = visualInside + imageBottomPad;
-    final sheetRadius = r.scale(44, tablet: 48);
-    final formTopPad = keyboardOpen
-        ? r.scale(16)
-        : (size.height * 0.074).clamp(
-            visualInside + r.scale(16),
-            visualInside + r.scale(36),
-          );
-    // Sheet sits above the keyboard; content scrolls if space is tight.
-    final focusedBlockHeight = formTopPad +
-        r.scale(compact ? 26 : 30) +
-        r.scale(8) +
-        r.scale(14) +
-        sectionGap +
-        buttonHeight +
-        buttonGap +
-        buttonHeight +
-        r.scale(12);
-    final availableAboveKeyboard = size.height - keyboard;
-    final raisedSheetTop =
-        (availableAboveKeyboard - focusedBlockHeight).clamp(
-      padding.top + r.scale(44),
-      restingSheetTop,
+    final sidePad = r.scale(18, tablet: 28);
+    final logoSize = r.scale(
+      keyboardOpen ? (compact ? 44 : 48) : (compact ? 52 : 58),
+      tablet: 64,
     );
-    final sheetTop = keyboardOpen ? raisedSheetTop : restingSheetTop;
-    final buddyTop = sheetTop - buddyHeight + overlap;
+    final controlHeight = r.scale(56, tablet: 60);
+    const loginMint = Color(0xFFF1F8F1);
+    final pageBg = isDark ? AppColors.darkBackground : loginMint;
+    final sheetRadius = r.scale(28, tablet: 32);
+    final cardPadH = r.scale(22, tablet: 28);
+    final cardPadV = r.scale(compact ? 22 : 26);
+    final brandGap = r.scale(keyboardOpen ? 18 : 22);
+    final overlay = AppTheme.systemOverlayStyleFor(
+      isDark ? Brightness.dark : Brightness.light,
+    ).copyWith(
+      statusBarColor: pageBg,
+      systemNavigationBarColor: pageBg,
+    );
 
-    return Scaffold(
-      backgroundColor: pageBg,
-      resizeToAvoidBottomInset: false,
-      body: Stack(
-        fit: StackFit.expand,
-        clipBehavior: Clip.none,
-        children: [
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            left: 0,
-            right: 0,
-            top: sheetTop,
-            bottom: keyboard,
-            child: Material(
-              color: isDark ? AppColors.darkCard : Colors.white,
-              elevation: 8,
-              shadowColor: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(sheetRadius),
-                topRight: Radius.circular(sheetRadius),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  Expanded(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlay,
+      child: Scaffold(
+        backgroundColor: pageBg,
+        resizeToAvoidBottomInset: true,
+        body: SafeArea(
+          child: AnimatedPadding(
+            duration: _anim,
+            curve: _curve,
+            padding: EdgeInsets.fromLTRB(
+              sidePad,
+              r.scale(compact ? 18 : 24),
+              sidePad,
+              keyboardOpen ? r.scale(8) : padding.bottom + r.scale(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AnimatedSize(
+                  duration: _anim,
+                  curve: _curve,
+                  alignment: Alignment.topLeft,
+                  child: _BrandHeader(
+                    logoSize: logoSize,
+                    compact: true,
+                    isDark: isDark,
+                    dense: keyboardOpen,
+                  ),
+                ),
+                AnimatedContainer(
+                  duration: _anim,
+                  curve: _curve,
+                  height: brandGap,
+                ),
+                Expanded(
+                  child: AnimatedAlign(
+                    duration: _anim,
+                    curve: _curve,
+                    alignment: keyboardOpen
+                        ? Alignment.topCenter
+                        : Alignment.center,
                     child: SingleChildScrollView(
                       physics: const ClampingScrollPhysics(),
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: EdgeInsets.fromLTRB(
-                        formPad,
-                        formTopPad,
-                        formPad,
-                        r.scale(8),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.darkCard : Colors.white,
+                          borderRadius: BorderRadius.circular(sheetRadius),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: isDark ? 0.28 : 0.07,
+                              ),
+                              blurRadius: 28,
+                              offset: const Offset(0, 12),
+                            ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            cardPadH,
+                            cardPadV,
+                            cardPadH,
+                            cardPadV,
+                          ),
+                          child: _LoginForm(
+                            controller: controller,
+                            controlHeight: controlHeight,
+                            compact: compact,
+                            isDark: isDark,
+                          ),
+                        ),
                       ),
-                      child: _LoginForm(
-                        controller: controller,
-                        buttonHeight: buttonHeight,
-                        buttonGap: buttonGap,
-                        sectionGap: sectionGap,
-                        compact: compact,
-                        isDark: isDark,
-                        keyboardOpen: keyboardOpen,
-                      ),
-                    ),
-                  ),
-                  if (!keyboardOpen)
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        formPad + 4,
-                        r.scale(8),
-                        formPad + 4,
-                        padding.bottom + r.scale(12),
-                      ),
-                      child: _TermsFooter(
-                        compact: compact,
-                        onTermsTap: openTermsOfService,
-                        onPrivacyTap: openPrivacyPolicy,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-
-          // Buddy on top of the sheet so it sits half on the box.
-          if (!keyboardOpen)
-            Positioned(
-              top: buddyTop,
-              left: 0,
-              right: 0,
-              height: buddyHeight,
-              child: IgnorePointer(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SizedBox(
-                    height: buddyHeight,
-                    width: size.width * 0.72,
-                    child: Image.asset(
-                      _LoginScaffold._buddyAsset,
-                      fit: BoxFit.contain,
-                      alignment: Alignment.bottomCenter,
-                      filterQuality: FilterQuality.high,
-                      gaplessPlayback: true,
                     ),
                   ),
                 ),
-              ),
-            ),
-
-          Positioned(
-            top: padding.top + r.scale(compact ? 4 : 8),
-            left: headerPad,
-            right: headerPad,
-            child: _BrandHeader(
-              logoSize: logoSize,
-              compact: compact,
-              isDark: isDark,
+                AnimatedSize(
+                  duration: _anim,
+                  curve: _curve,
+                  child: keyboardOpen
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: EdgeInsets.only(top: r.scale(14)),
+                          child: _TermsFooter(
+                            compact: compact,
+                            onTermsTap: openTermsOfService,
+                            onPrivacyTap: openPrivacyPolicy,
+                          ),
+                        ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -229,62 +208,66 @@ class _LoginScaffoldState extends State<_LoginScaffold> {
 class _LoginForm extends StatelessWidget {
   const _LoginForm({
     required this.controller,
-    required this.buttonHeight,
-    required this.buttonGap,
-    required this.sectionGap,
+    required this.controlHeight,
     required this.compact,
     required this.isDark,
-    required this.keyboardOpen,
   });
 
   final AuthController controller;
-  final double buttonHeight;
-  final double buttonGap;
-  final double sectionGap;
+  final double controlHeight;
   final bool compact;
   final bool isDark;
-  final bool keyboardOpen;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final labelColor = AppColors.textSecondaryOf(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           'Welcome back!',
-          textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: r.scale(compact ? 26 : 30, tablet: 34),
+            fontSize: r.scale(compact ? 24 : 28, tablet: 32),
             fontWeight: FontWeight.w800,
             color: AppColors.textPrimaryOf(context),
-            height: 1.12,
-            letterSpacing: -0.5,
+            height: 1.15,
+            letterSpacing: -0.4,
           ),
         ),
         SizedBox(height: r.scale(8)),
         Text(
           'Enter your mobile number to continue',
-          textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: r.scale(14, tablet: 15),
-            color: AppColors.textSecondaryOf(context),
+            color: labelColor,
             height: 1.4,
             fontWeight: FontWeight.w500,
           ),
         ),
-        SizedBox(height: sectionGap),
+        SizedBox(height: r.scale(compact ? 20 : 24)),
+        Text(
+          'Mobile number',
+          style: TextStyle(
+            fontSize: r.scale(13),
+            fontWeight: FontWeight.w500,
+            color: labelColor,
+            height: 1.2,
+          ),
+        ),
+        SizedBox(height: r.scale(10)),
         _PhoneNumberField(
-          height: buttonHeight,
+          height: controlHeight,
           isDark: isDark,
         ),
-        SizedBox(height: buttonGap),
+        SizedBox(height: r.scale(14)),
         Obx(() {
           final sending = controller.isSendingPhoneOtp.value;
           final anyLoading = controller.isSigningIn;
           return _PrimaryContinueButton(
-            height: buttonHeight,
+            height: controlHeight,
             label: sending ? 'Sending code...' : 'Continue',
             isLoading: anyLoading,
             onPressed: () {
@@ -293,62 +276,60 @@ class _LoginForm extends StatelessWidget {
             },
           );
         }),
-        if (!keyboardOpen) ...[
-          SizedBox(height: sectionGap),
-          _OrDivider(compact: compact),
-          SizedBox(height: sectionGap),
+        SizedBox(height: r.scale(compact ? 18 : 20)),
+        _OrDivider(compact: compact),
+        SizedBox(height: r.scale(compact ? 18 : 20)),
+        Obx(() {
+          final googleLoading = controller.isSigningInWithGoogle.value;
+          final anyLoading = controller.isSigningIn;
+          return _SocialLoginButton(
+            height: controlHeight,
+            isDark: isDark,
+            label: googleLoading ? 'Signing in...' : 'Continue with Google',
+            icon: googleLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : _SocialIcon(
+                    asset: _LoginScaffold._googleAsset,
+                    size: r.scale(22),
+                  ),
+            isLoading: anyLoading,
+            onPressed: controller.loginWithGoogle,
+          );
+        }),
+        if (Platform.isIOS) ...[
+          SizedBox(height: r.scale(12)),
           Obx(() {
-            final googleLoading = controller.isSigningInWithGoogle.value;
+            final appleLoading = controller.isSigningInWithApple.value;
             final anyLoading = controller.isSigningIn;
             return _SocialLoginButton(
-              height: buttonHeight,
+              height: controlHeight,
               isDark: isDark,
-              label: googleLoading ? 'Signing in...' : 'Continue with Google',
-              icon: googleLoading
+              label: appleLoading ? 'Signing in...' : 'Continue with Apple',
+              icon: appleLoading
                   ? const SizedBox(
-                      width: 24,
-                      height: 24,
+                      width: 22,
+                      height: 22,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2.3,
+                        strokeWidth: 2.2,
                         color: AppColors.primary,
                       ),
                     )
                   : _SocialIcon(
-                      asset: _LoginScaffold._googleAsset,
-                      size: r.scale(compact ? 22 : 24),
+                      asset: _LoginScaffold._appleAsset,
+                      size: r.scale(22),
+                      tintForDarkMode: true,
                     ),
               isLoading: anyLoading,
-              onPressed: controller.loginWithGoogle,
+              onPressed: controller.loginWithApple,
             );
           }),
-          if (Platform.isIOS) ...[
-            SizedBox(height: buttonGap),
-            Obx(() {
-              final appleLoading = controller.isSigningInWithApple.value;
-              final anyLoading = controller.isSigningIn;
-              return _SocialLoginButton(
-                height: buttonHeight,
-                isDark: isDark,
-                label: appleLoading ? 'Signing in...' : 'Continue with Apple',
-                icon: appleLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.3,
-                          color: AppColors.primary,
-                        ),
-                      )
-                    : _SocialIcon(
-                        asset: _LoginScaffold._appleAsset,
-                        size: r.scale(compact ? 22 : 24),
-                        tintForDarkMode: true,
-                      ),
-                isLoading: anyLoading,
-                onPressed: controller.loginWithApple,
-              );
-            }),
-          ],
         ],
       ],
     );
@@ -386,41 +367,34 @@ class _PhoneNumberFieldState extends State<_PhoneNumberField> {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<AuthController>();
-    final sheetColor = widget.isDark ? AppColors.darkCard : Colors.white;
     final idleBorder = widget.isDark
-        ? Colors.white.withValues(alpha: 0.14)
-        : const Color(0xFFD9DCE3);
+        ? Colors.white.withValues(alpha: 0.18)
+        : const Color(0xFFD5DAD6);
     final focused = _focusNode.hasFocus;
     final borderColor = focused ? AppColors.primary : idleBorder;
-    final radius = widget.height / 2;
     final muted = AppColors.textSecondaryOf(context);
 
     return Obx(() {
       final enabled = !controller.isSigningIn;
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: enabled
-            ? () {
-                _focusNode.requestFocus();
-                SystemChannels.textInput.invokeMethod('TextInput.show');
-              }
-            : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          height: widget.height,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: sheetColor,
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(
-              color: borderColor,
-              width: focused ? 1.5 : 1.2,
-            ),
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        height: widget.height,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(_LoginControlStyle.fieldRadius),
+          border: Border.all(
+            color: borderColor,
+            width: focused ? 1.5 : 1.1,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Padding(
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: enabled ? () => _focusNode.requestFocus() : null,
+              child: Padding(
                 padding: const EdgeInsets.only(left: 16),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -428,7 +402,7 @@ class _PhoneNumberFieldState extends State<_PhoneNumberField> {
                     Text(
                       '🇮🇳',
                       style: TextStyle(
-                        fontSize: widget.height < 54 ? 17 : 18,
+                        fontSize: widget.height < 56 ? 18 : 20,
                         height: 1,
                       ),
                     ),
@@ -446,70 +420,69 @@ class _PhoneNumberFieldState extends State<_PhoneNumberField> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Container(
                         width: 1,
-                        height: 18,
+                        height: 20,
                         color: muted.withValues(
-                          alpha: widget.isDark ? 0.35 : 0.28,
+                          alpha: widget.isDark ? 0.35 : 0.30,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              Expanded(
-                child: TextField(
-                  controller: controller.phoneController,
-                  focusNode: _focusNode,
-                  enabled: enabled,
-                  keyboardType: TextInputType.phone,
-                  textInputAction: TextInputAction.done,
-                  autofillHints: const [
-                    AutofillHints.telephoneNumberNational,
-                  ],
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  smartDashesType: SmartDashesType.disabled,
-                  smartQuotesType: SmartQuotesType.disabled,
-                  textAlignVertical: TextAlignVertical.center,
-                  maxLength: 10,
-                  onTapOutside: (_) =>
-                      FocusManager.instance.primaryFocus?.unfocus(),
-                  onSubmitted: (_) {
-                    _focusNode.unfocus();
-                    controller.sendPhoneOtp();
-                  },
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                  ],
-                  style: TextStyle(
+            ),
+            Expanded(
+              child: TextField(
+                controller: controller.phoneController,
+                focusNode: _focusNode,
+                enabled: enabled,
+                keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [
+                  AutofillHints.telephoneNumberNational,
+                ],
+                autocorrect: false,
+                enableSuggestions: false,
+                smartDashesType: SmartDashesType.disabled,
+                smartQuotesType: SmartQuotesType.disabled,
+                textAlignVertical: TextAlignVertical.center,
+                maxLength: 10,
+                onTapOutside: (_) => _focusNode.unfocus(),
+                onSubmitted: (_) {
+                  _focusNode.unfocus();
+                  controller.sendPhoneOtp();
+                },
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.35,
+                  height: 1.15,
+                  color: AppColors.textPrimaryOf(context),
+                ),
+                cursorColor: AppColors.primary,
+                decoration: InputDecoration(
+                  hintText: '98765 43210',
+                  hintStyle: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.35,
+                    fontWeight: FontWeight.w400,
                     height: 1.15,
-                    color: AppColors.textPrimaryOf(context),
+                    color: muted.withValues(alpha: 0.55),
                   ),
-                  cursorColor: AppColors.primary,
-                  decoration: InputDecoration(
-                    hintText: 'Mobile number',
-                    hintStyle: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      height: 1.15,
-                      color: muted.withValues(alpha: 0.8),
-                    ),
-                    counterText: '',
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    disabledBorder: InputBorder.none,
-                    isCollapsed: true,
-                    contentPadding: const EdgeInsets.only(right: 16),
-                  ),
+                  counterText: '',
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  isCollapsed: true,
+                  contentPadding: const EdgeInsets.only(right: 16),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     });
@@ -520,7 +493,7 @@ class _PrimaryContinueButton extends StatelessWidget {
   const _PrimaryContinueButton({
     required this.label,
     required this.onPressed,
-    this.height = 52,
+    this.height = 56,
     this.isLoading = false,
   });
 
@@ -531,7 +504,7 @@ class _PrimaryContinueButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = height / 2;
+    const radius = _LoginControlStyle.fieldRadius;
 
     return Material(
       color: Colors.transparent,
@@ -544,46 +517,43 @@ class _PrimaryContinueButton extends StatelessWidget {
             color: AppColors.primary,
             borderRadius: BorderRadius.circular(radius),
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 22),
-            child: Center(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                child: isLoading && label.contains('...')
-                    ? Row(
-                        key: ValueKey(label),
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              color: Colors.white,
-                            ),
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: isLoading && label.contains('...')
+                  ? Row(
+                      key: ValueKey(label),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            label,
-                            style: TextStyle(
-                              fontSize: height < 54 ? 15 : 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      )
-                    : Text(
-                        label,
-                        key: ValueKey(label),
-                        style: TextStyle(
-                          fontSize: height < 54 ? 15 : 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: -0.1,
                         ),
+                        const SizedBox(width: 10),
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Text(
+                      label,
+                      key: ValueKey(label),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: -0.1,
                       ),
-              ),
+                    ),
             ),
           ),
         ),
@@ -600,7 +570,7 @@ class _OrDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lineColor = AppColors.isDark(context)
-        ? Colors.white.withValues(alpha: 0.12)
+        ? Colors.white.withValues(alpha: 0.14)
         : AppColors.lightBorder;
 
     return Row(
@@ -628,32 +598,46 @@ class _BrandHeader extends StatelessWidget {
     required this.logoSize,
     required this.isDark,
     this.compact = false,
+    this.dense = false,
   });
 
   final double logoSize;
   final bool isDark;
   final bool compact;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
+    final titleSize = dense
+        ? r.scale(compact ? 22 : 24, tablet: 28)
+        : r.scale(compact ? 26 : 28, tablet: 32);
+    final tagSize = dense
+        ? r.scale(compact ? 13 : 13.5)
+        : r.scale(compact ? 14 : 15);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _AppLogo(size: logoSize, isDark: isDark),
-        SizedBox(height: r.scale(compact ? 8 : 10)),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+          width: logoSize,
+          height: logoSize,
+          child: _AppLogo(size: logoSize, isDark: isDark),
+        ),
+        SizedBox(height: r.scale(dense ? 8 : (compact ? 10 : 12))),
         RichText(
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           text: TextSpan(
             style: TextStyle(
-              fontSize: r.scale(compact ? 21 : 24, tablet: 26),
-              fontWeight: FontWeight.bold,
+              fontSize: titleSize,
+              fontWeight: FontWeight.w800,
               color: AppColors.textPrimaryOf(context),
               height: 1.15,
-              letterSpacing: -0.3,
+              letterSpacing: -0.4,
             ),
             children: const [
               TextSpan(text: 'MyCalorie'),
@@ -664,15 +648,15 @@ class _BrandHeader extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(height: r.scale(3)),
+        SizedBox(height: r.scale(dense ? 4 : 6)),
         Text(
           'Smarter tracking. Healthier you.',
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: r.scale(compact ? 12 : 13.5),
+            fontSize: tagSize,
             color: AppColors.textSecondaryOf(context),
-            height: 1.3,
+            height: 1.35,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -723,7 +707,7 @@ class _SocialLoginButton extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     required this.isDark,
-    this.height = 52,
+    this.height = 56,
     this.isLoading = false,
   });
 
@@ -736,11 +720,10 @@ class _SocialLoginButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = height / 2;
-    final background = isDark ? const Color(0xFF1F1F1F) : Colors.white;
+    const radius = _LoginControlStyle.fieldRadius;
     final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : const Color(0xFFE8E8ED);
+        ? Colors.white.withValues(alpha: 0.18)
+        : const Color(0xFFD5DAD6);
 
     return Material(
       color: Colors.transparent,
@@ -750,17 +733,18 @@ class _SocialLoginButton extends StatelessWidget {
         child: Ink(
           height: height,
           decoration: BoxDecoration(
-            color: background,
+            color: Colors.transparent,
             borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: borderColor),
+            border: Border.all(color: borderColor, width: 1.1),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 22),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: icon,
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: Center(child: icon),
                 ),
                 Expanded(
                   child: AnimatedSwitcher(
@@ -770,7 +754,7 @@ class _SocialLoginButton extends StatelessWidget {
                       key: ValueKey(label),
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: height < 54 ? 15 : 16,
+                        fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textPrimaryOf(context),
                         letterSpacing: -0.1,
@@ -778,7 +762,7 @@ class _SocialLoginButton extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 30),
+                const SizedBox(width: 22),
               ],
             ),
           ),

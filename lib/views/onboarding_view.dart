@@ -11,7 +11,7 @@ import '../routes/app_routes.dart';
 import '../services/local_storage_service.dart';
 import '../theme/app_colors.dart';
 
-/// Welcome carousel: Fitness Buddy → AI meal plan → streak gifts.
+/// Welcome carousel: track home → AI meal plan → coins & gifts.
 class OnboardingView extends StatefulWidget {
   const OnboardingView({super.key});
 
@@ -27,19 +27,19 @@ class _OnboardingViewState extends State<OnboardingView> {
 
   static const List<_OnboardPage> _pages = [
     _OnboardPage(
-      image: 'assets/image/buddy/buddy_hero.png',
+      image: 'assets/image/buddy/onboard_hero_track.png',
       title: 'Meet Your',
-      titleAccent: 'Fitness Buddy',
-      body: 'Your friendly coach for healthier, happier days.',
+      titleAccent: 'Smart Coach',
+      body: 'Track calories, steps, and coins in one calm home screen.',
       featureStyle: _FeatureStyle.outlineIcons,
       features: [
         _FeatureItem(title: 'Personalized', icon: Icons.person_outline_rounded),
         _FeatureItem(title: 'Daily Tips', icon: Icons.lightbulb_outline_rounded),
-        _FeatureItem(title: 'Motivation', icon: Icons.star_outline_rounded),
+        _FeatureItem(title: 'Earn Coins', icon: Icons.monetization_on_outlined),
       ],
     ),
     _OnboardPage(
-      image: 'assets/image/buddy/buddy_meal_plan.png',
+      image: 'assets/image/buddy/onboard_hero_meals.png',
       title: 'AI Meal Plan',
       titleAccent: 'Made For You',
       body:
@@ -61,20 +61,20 @@ class _OnboardingViewState extends State<OnboardingView> {
       ],
     ),
     _OnboardPage(
-      image: 'assets/image/buddy/buddy_streak.png',
-      title: 'Stay Consistent',
-      titleAccent: 'Earn Gifts',
+      image: 'assets/image/buddy/onboard_hero_coins.png',
+      title: 'Walk & Claim',
+      titleAccent: 'Earn Rewards',
       body:
-          'Log meals every day. Hit big streaks and we gift you real rewards.',
+          'Earn coins from steps, claim them to your wallet, unlock real gifts.',
       featureStyle: _FeatureStyle.tags,
       giftHighlights: [
-        _GiftHighlight(label: '50 days', value: 'Gym Shaker'),
-        _GiftHighlight(label: '100 days', value: 'T-Shirt'),
+        _GiftHighlight(label: 'Steps', value: 'Coins'),
+        _GiftHighlight(label: 'Claim', value: 'Wallet'),
       ],
       features: [
         _FeatureItem(title: 'Streaks'),
-        _FeatureItem(title: 'Gym Shaker'),
-        _FeatureItem(title: 'Free T-Shirt'),
+        _FeatureItem(title: 'Wallet'),
+        _FeatureItem(title: 'Gift Shop'),
       ],
     ),
   ];

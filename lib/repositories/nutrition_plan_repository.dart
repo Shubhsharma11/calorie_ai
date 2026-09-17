@@ -7,9 +7,15 @@ class NutritionPlanRepository {
 
   final NutritionPlanApiService _apiService;
 
-  Future<NutritionPlanModel> createPlan({required String accessToken}) async {
+  Future<NutritionPlanModel> createPlan({
+    required String accessToken,
+    Map<String, dynamic>? body,
+  }) async {
     try {
-      return await _apiService.createPlan(accessToken: accessToken);
+      return await _apiService.createPlan(
+        accessToken: accessToken,
+        body: body,
+      );
     } on NutritionPlanApiException {
       rethrow;
     } catch (error) {

@@ -6,7 +6,7 @@ import 'package:get/get.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
-import '../controllers/streak_controller.dart';
+import '../controllers/rewards_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_coach_marks.dart';
@@ -23,7 +23,7 @@ import '../widgets/dashboard_header.dart';
 import '../widgets/macro_nutrition_card.dart';
 import '../widgets/past_date_banner.dart';
 import '../widgets/responsive_page.dart';
-import '../widgets/streak_badge.dart';
+import '../widgets/steps_claim_banner.dart';
 import '../widgets/water_intake_banner.dart';
 import '../widgets/weight_tracker_banner.dart';
 import '../widgets/meal_type_icon.dart';
@@ -54,9 +54,10 @@ class DashboardView extends GetView<DashboardController> {
                 firstName: homeTitle,
                 scrollController: controller.homeScrollController,
                 showNotificationBadge: hasBadge,
-                onGifts: DashboardActions.openBuddyGifts,
+                coinBalance: CoinBalanceChip(
+                  onTap: StepsClaimBanner.openRewardsShop,
+                ),
                 onSearch: DashboardActions.openFoodSearch,
-                onCalendar: () => DashboardActions.openCalendar(context),
                 onNotifications: () =>
                     DashboardActions.openNotifications(context),
                 searchShowcaseKey: AppCoachMarks.searchKey,
@@ -73,7 +74,12 @@ class DashboardView extends GetView<DashboardController> {
         }),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: food.refreshMealsFromApi,
+            onRefresh: () async {
+              await food.refreshMealsFromApi();
+              if (Get.isRegistered<RewardsController>()) {
+                await Get.find<RewardsController>().refreshCoinsFromApi();
+              }
+            },
             color: AppColors.primary,
             child: ResponsivePage(
               scrollable: true,
@@ -90,7 +96,7 @@ class DashboardView extends GetView<DashboardController> {
                   Obx(() {
                     food.selectedLogDate.value;
                     if (controller.isViewingToday) {
-                      return SizedBox(height: r.scale(10));
+                      return SizedBox(height: r.scale(16));
                     }
                     return Column(
                       children: [
@@ -104,13 +110,13 @@ class DashboardView extends GetView<DashboardController> {
                       ],
                     );
                   }),
-                  const _StreakSection(),
-                  SizedBox(height: r.scale(20)),
+                  const StepsClaimBanner(),
+                  SizedBox(height: r.scale(12)),
                   const _CalorieSection(),
                   SizedBox(height: r.scale(12)),
-                  const AiMealPlanCard(),
-                  SizedBox(height: r.scale(12)),
                   WaterIntakeBanner(coachKey: AppCoachMarks.waterKey),
+                  SizedBox(height: r.scale(12)),
+                  const AiMealPlanCard(),
                   SizedBox(height: r.scale(12)),
                   WeightTrackerBanner(coachKey: AppCoachMarks.weightKey),
                   SizedBox(height: r.scale(28)),
@@ -122,24 +128,6 @@ class DashboardView extends GetView<DashboardController> {
         ),
       ],
     );
-  }
-}
-
-class _StreakSection extends GetView<DashboardController> {
-  const _StreakSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      if (Get.isRegistered<StreakController>()) {
-        Get.find<StreakController>().revision.value;
-      }
-      return StreakBadge(
-        streakDays: controller.loggingStreak,
-        isAtRisk: controller.isStreakAtRisk,
-        onTap: () => Get.toNamed(AppRoutes.streak),
-      );
-    });
   }
 }
 

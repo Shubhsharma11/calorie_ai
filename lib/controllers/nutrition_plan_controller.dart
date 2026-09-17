@@ -21,6 +21,8 @@ class NutritionPlanController extends GetxController {
   final plan = Rxn<NutritionPlanModel>();
   final revision = 0.obs;
 
+  bool get hasWeeklyPlan => plan.value?.weeklyPlan?.isNotEmpty == true;
+
   @override
   void onInit() {
     super.onInit();
@@ -75,7 +77,12 @@ class NutritionPlanController extends GetxController {
       }
       plan.value = fetchedPlan;
       debugPrint(
-        'NutritionPlanController: loaded plan with ${fetchedPlan.tips.length} tips',
+        'NutritionPlanController: loaded plan '
+        'calories=${fetchedPlan.calories} '
+        'meals=${fetchedPlan.meals.length} '
+        'weeklyDays=${fetchedPlan.weeklyPlan?.days.length ?? 0} '
+        'weeklyMeals=${fetchedPlan.weeklyPlan?.days.fold<int>(0, (n, d) => n + d.meals.length) ?? 0} '
+        'preview=${fetchedPlan.previewMeal?.displayName}',
       );
       await userController.applyNutritionPlan(
         fetchedPlan,
@@ -90,6 +97,76 @@ class NutritionPlanController extends GetxController {
       debugPrint('NutritionPlanController: load failed: $error');
       errorMessage.value =
           'Unable to load your nutrition plan. Please check your connection and try again.';
+    } finally {
+      if (generation == _fetchGeneration) {
+        _isFetching = false;
+        isLoading.value = false;
+      }
+      revision.value++;
+    }
+  }
+
+  /// Force-refresh for Weekly Meal Plan. If GET has no weekly meals, regenerate
+  /// via POST so day schedules can appear.
+  Future<void> ensureWeeklyPlan({bool regenerateIfEmpty = true}) async {
+    await loadPlan(force: true);
+    if (!regenerateIfEmpty) return;
+    if (hasWeeklyPlan) return;
+
+    final userController = Get.find<UserController>();
+    if (!userController.isLoggedIn || userController.accessToken.isEmpty) {
+      return;
+    }
+
+    final generation = ++_fetchGeneration;
+    final token = userController.accessToken;
+    _isFetching = true;
+    isLoading.value = true;
+    errorMessage.value = null;
+    revision.value++;
+
+    try {
+      debugPrint(
+        'NutritionPlanController: weekly empty — POST /nutrition/plan',
+      );
+      final body = userController.nutritionPlanRequestBody();
+      final created = await _repository.createPlan(
+        accessToken: token,
+        body: body,
+      );
+      final hasMeals = created.previewMeal != null ||
+          created.meals.isNotEmpty ||
+          (created.weeklyPlan?.isNotEmpty ?? false);
+      final refreshed = hasMeals
+          ? created
+          : await _repository.fetchPlan(accessToken: token);
+      if (generation != _fetchGeneration) return;
+      if (!userController.isLoggedIn || userController.accessToken != token) {
+        return;
+      }
+      plan.value = refreshed;
+      debugPrint(
+        'NutritionPlanController: regenerated plan '
+        'weeklyDays=${refreshed.weeklyPlan?.days.length ?? 0} '
+        'weeklyMeals=${refreshed.weeklyPlan?.days.fold<int>(0, (n, d) => n + d.meals.length) ?? 0}',
+      );
+      await userController.applyNutritionPlan(
+        refreshed,
+        applyTargetWeight: false,
+      );
+      if (!hasWeeklyPlan) {
+        errorMessage.value =
+            'Weekly meal plan is not available yet. Please try again later.';
+      }
+    } on NutritionPlanApiException catch (error) {
+      if (generation != _fetchGeneration) return;
+      debugPrint('NutritionPlanController: regenerate failed: $error');
+      errorMessage.value = error.message;
+    } catch (error) {
+      if (generation != _fetchGeneration) return;
+      debugPrint('NutritionPlanController: regenerate failed: $error');
+      errorMessage.value =
+          'Unable to refresh your weekly meal plan. Please try again.';
     } finally {
       if (generation == _fetchGeneration) {
         _isFetching = false;

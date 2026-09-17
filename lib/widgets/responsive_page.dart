@@ -12,6 +12,7 @@ class ResponsivePage extends StatelessWidget {
     this.maxWidth,
     this.alignment = Alignment.topCenter,
     this.scrollController,
+    this.physics,
   });
 
   final Widget child;
@@ -20,6 +21,7 @@ class ResponsivePage extends StatelessWidget {
   final double? maxWidth;
   final Alignment alignment;
   final ScrollController? scrollController;
+  final ScrollPhysics? physics;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +46,7 @@ class ResponsivePage extends StatelessWidget {
       final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
       return SingleChildScrollView(
         controller: scrollController,
+        physics: physics,
         clipBehavior: Clip.hardEdge,
         padding: EdgeInsets.only(
           bottom: r.scale(24) + (keyboardInset > 0 ? r.scale(12) : 0),

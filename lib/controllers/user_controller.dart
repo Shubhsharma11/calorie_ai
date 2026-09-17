@@ -40,6 +40,7 @@ import 'food_controller.dart';
 import 'main_controller.dart';
 import 'notifications_controller.dart';
 import 'nutrition_plan_controller.dart';
+import 'rewards_controller.dart';
 import 'scan_controller.dart';
 // import 'streak_controller.dart';
 import 'tracker_controller.dart';
@@ -252,10 +253,13 @@ class UserController extends GetxController with WidgetsBindingObserver {
       return null;
     }
 
+    
+
     debugPrint(
       'UserController.resolveAccessToken: OK '
       'source=${resolution.source} length=${resolution.tokenLength}',
     );
+
     return resolution.token;
   }
 
@@ -1201,7 +1205,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
     user.foodsToAvoid = foodsToAvoid.trim();
     user.mealsPerDay = mealsPerDay;
     update();
-    scheduleOnboardingDraftSave();
+    // Flush immediately so PUT /onboarding never races a debounced draft save.
+    await saveOnboardingDraft();
   }
 
   @Deprecated('Use saveHealthConcerns')
@@ -1427,6 +1432,57 @@ class UserController extends GetxController with WidgetsBindingObserver {
           ? null
           : recommendedTargetKg());
 
+  /// Body for POST /nutrition/plan — same profile + diet context as onboarding.
+  Map<String, dynamic> nutritionPlanRequestBody() {
+    try {
+      return OnboardingRequestModel.fromUser(user).toJson();
+    } catch (_) {
+      // Partial profile (e.g. mid-edit refresh) — send whatever diet fields we have.
+      return {
+        if (user.dietType != null) 'dietType': user.dietType!.apiValue,
+        'foodAllergies': List<String>.from(user.foodAllergies),
+        'foodsToAvoid': user.foodsToAvoid,
+        if (user.mealsPerDay != null) 'mealsPerDay': user.mealsPerDay,
+        if (user.goal != null) 'goal': user.goal!.apiValue,
+        if (user.activityLevel != null)
+          'activityLevel': user.activityLevel!.name,
+      };
+    }
+  }
+
+  Future<NutritionPlanModel> _createAndLoadNutritionPlan({
+    required String accessToken,
+    bool applyTargetWeight = false,
+  }) async {
+    final body = nutritionPlanRequestBody();
+    debugPrint(
+      'UserController: POST /nutrition/plan with dietType=${body['dietType']}, '
+      'mealsPerDay=${body['mealsPerDay']}',
+    );
+    final created = await _nutritionPlanRepository.createPlan(
+      accessToken: accessToken,
+      body: body,
+    );
+
+    // Prefer POST response when it already has meals / homePreview.
+    final hasMeals = created.previewMeal != null ||
+        created.meals.isNotEmpty ||
+        (created.weeklyPlan?.isNotEmpty ?? false);
+    final plan = hasMeals
+        ? created
+        : await _nutritionPlanRepository.fetchPlan(accessToken: accessToken);
+
+    await applyNutritionPlan(plan, applyTargetWeight: applyTargetWeight);
+    _syncNutritionPlanController(plan);
+    debugPrint(
+      'UserController: nutrition plan ready '
+      'calories=${plan.calories} '
+      'preview=${plan.previewMeal?.displayName} '
+      'weeklyDays=${plan.weeklyPlan?.days.length ?? 0}',
+    );
+    return plan;
+  }
+
   Future<void> _ensurePlanMatchesSelectedWeightTarget({
     required String accessToken,
   }) async {
@@ -1456,12 +1512,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
     }
 
     user.pinGoalWeight(targetKg);
-    await _nutritionPlanRepository.createPlan(accessToken: accessToken);
-    final refreshed = await _nutritionPlanRepository.fetchPlan(
+    await _createAndLoadNutritionPlan(
       accessToken: accessToken,
+      applyTargetWeight: true,
     );
-    await applyNutritionPlan(refreshed, applyTargetWeight: true);
-    _syncNutritionPlanController(refreshed);
   }
 
   Future<String?> selectWeightTarget(WeightTargetSource source) async {
@@ -1510,7 +1564,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
         return patchError;
       }
 
-      await _nutritionPlanRepository.createPlan(accessToken: token);
+      await _nutritionPlanRepository.createPlan(
+        accessToken: token,
+        body: nutritionPlanRequestBody(),
+      );
       final plan = await _nutritionPlanRepository.fetchPlan(accessToken: token);
       await applyNutritionPlan(plan, applyTargetWeight: true);
       _syncNutritionPlanController(plan);
@@ -1918,10 +1975,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
       final token = await resolveAccessToken();
       if (token == null || token.isEmpty) return;
 
-      await _nutritionPlanRepository.createPlan(accessToken: token);
-      final plan = await _nutritionPlanRepository.fetchPlan(accessToken: token);
-      await applyNutritionPlan(plan, applyTargetWeight: false);
-      _syncNutritionPlanController(plan);
+      await _createAndLoadNutritionPlan(
+        accessToken: token,
+        applyTargetWeight: false,
+      );
       debugPrint('UserController: nutrition plan refreshed after profile change');
     } catch (error, stackTrace) {
       debugPrint(
@@ -1992,10 +2049,17 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
     try {
       _captureUserOnboardingGoalWeightIfNeeded();
+      // Same endpoint as before: PUT /api/v1/onboarding
+      // Body always includes dietType, foodAllergies, foodsToAvoid, mealsPerDay.
+      await saveOnboardingDraft();
       final request = OnboardingRequestModel.fromUser(user);
+      final payload = request.toJson();
       debugPrint(
-        'UserController: calling onboarding API with token '
-        '${accessToken.isNotEmpty ? 'present' : 'missing'}',
+        'UserController: PUT /api/v1/onboarding diet fields '
+        'dietType=${payload['dietType']}, '
+        'foodAllergies=${payload['foodAllergies']}, '
+        'foodsToAvoid=${payload['foodsToAvoid']}, '
+        'mealsPerDay=${payload['mealsPerDay']}',
       );
       final response = await _onboardingRepository.submitOnboarding(
         accessToken: accessToken,
@@ -2007,15 +2071,12 @@ class UserController extends GetxController with WidgetsBindingObserver {
       onProgress(1 / 3, 1);
 
       debugPrint('UserController: calling POST nutrition plan API');
-      await _nutritionPlanRepository.createPlan(accessToken: accessToken);
+      await _createAndLoadNutritionPlan(
+        accessToken: accessToken,
+        applyTargetWeight: true,
+      );
       onProgress(2 / 3, 2);
 
-      debugPrint('UserController: calling GET nutrition plan API');
-      final plan = await _nutritionPlanRepository.fetchPlan(
-        accessToken: accessToken,
-      );
-      await applyNutritionPlan(plan, applyTargetWeight: true);
-      _syncNutritionPlanController(plan);
       await _ensurePlanMatchesSelectedWeightTarget(accessToken: accessToken);
       onProgress(1, 3);
 
@@ -2494,6 +2555,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
       }
     }
 
+    if (Get.isRegistered<RewardsController>()) {
+      unawaited(Get.find<RewardsController>().load());
+    }
+
     // Profile first (with retries), then diary — never stampede the API.
     await _reloadApiOwnedDataAfterLogin();
 
@@ -2554,6 +2619,9 @@ class UserController extends GetxController with WidgetsBindingObserver {
     }
     if (Get.isRegistered<NotificationsController>()) {
       Get.find<NotificationsController>().clearSessionData();
+    }
+    if (Get.isRegistered<RewardsController>()) {
+      Get.find<RewardsController>().clearSessionData();
     }
     _notifyDashboard();
   }

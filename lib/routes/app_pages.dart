@@ -48,6 +48,7 @@ import '../views/water_tracker_view.dart';
 import '../views/weight_tracker_view.dart';
 import '../views/weekly_meal_plan_view.dart';
 import '../views/buddy_gifts_view.dart';
+import '../views/rewards_shop_view.dart';
 import '../core/app_page_transitions.dart';
 import 'app_routes.dart';
 
@@ -241,6 +242,11 @@ abstract final class AppPages {
     AppPageTransitions.getPage(
       name: AppRoutes.buddyGifts,
       page: () => const BuddyGiftsView(),
+    ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.rewardsShop,
+      page: () => const RewardsShopView(),
+      binding: HomeBinding(),
     ),
     AppPageTransitions.getPage(
       name: AppRoutes.dailySummary,
