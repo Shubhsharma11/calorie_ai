@@ -32,6 +32,8 @@ class StreakController extends GetxController {
   late final Future<void> _ready;
   bool _isFetchingApi = false;
   bool _pendingRefresh = false;
+  DateTime? _lastStreakFetchAt;
+  static const Duration _streakRefreshCooldown = Duration(seconds: 15);
 
   bool get usesApiStreak => _apiStreak != null;
 
@@ -81,10 +83,11 @@ class StreakController extends GetxController {
   void onInit() {
     super.onInit();
     _ready = _loadMetadata();
-    unawaited(_bootstrap());
+    // Only created from the streak route now — safe to load here.
+    unawaited(ensureLoaded());
   }
 
-  Future<void> _bootstrap() async {
+  Future<void> ensureLoaded() async {
     await _ready;
     revision.value++;
     await refreshFromApi();
@@ -115,10 +118,20 @@ class StreakController extends GetxController {
     }
   }
 
-  Future<void> refreshFromApi() async {
+  Future<void> refreshFromApi({bool force = false}) async {
     debugPrint('StreakController: refreshFromApi entered');
     if (_isFetchingApi) {
       _pendingRefresh = true;
+      return;
+    }
+    if (!force &&
+        _lastStreakFetchAt != null &&
+        DateTime.now().difference(_lastStreakFetchAt!) <
+            _streakRefreshCooldown) {
+      debugPrint(
+        'StreakController: skipping streak refresh '
+        '(within ${_streakRefreshCooldown.inSeconds}s cooldown)',
+      );
       return;
     }
     if (!Get.isRegistered<UserController>()) return;
@@ -151,6 +164,7 @@ class StreakController extends GetxController {
         streak: streak,
       );
       _apiStreak = streak;
+      _lastStreakFetchAt = DateTime.now();
       revision.value++;
       await _maybeCelebrateMilestone(streak.currentStreak);
     } on MealStreakApiException catch (error) {

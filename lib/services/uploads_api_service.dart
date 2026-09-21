@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../core/image_downscale.dart';
 import '../models/image_upload_result.dart';
@@ -87,7 +88,7 @@ class UploadsApiService {
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw UploadsApiException(
-        message ?? '$fallback (${response.statusCode}). $body',
+        message ?? '$fallback (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }

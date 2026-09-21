@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/api_custom_meal_mapper.dart';
 import '../models/custom_meal_preset.dart';
@@ -59,7 +60,7 @@ class CustomMealsApiService {
     final body = ApiCustomMealMapper.toCreateRequestBody(preset);
 
     debugPrint(
-      'CustomMealsApiService: POST ${ApiEndpoints.myMealsUrl} $body',
+      'CustomMealsApiService: POST ${ApiEndpoints.myMealsUrl} (payload redacted)',
     );
 
     final response = await _apiClient.post(
@@ -85,7 +86,7 @@ class CustomMealsApiService {
     );
 
     debugPrint(
-      'CustomMealsApiService: PATCH ${ApiEndpoints.url(endpoint)} $body',
+      'CustomMealsApiService: PATCH ${ApiEndpoints.url(endpoint)} (payload redacted)',
     );
 
     final response = await _apiClient.patch(
@@ -175,7 +176,7 @@ class CustomMealsApiService {
     required CustomMealPreset source,
   }) {
     final body = response.body.trim();
-    debugPrint('CustomMealsApiService: response ${response.statusCode}: $body');
+    debugPrint('CustomMealsApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 
@@ -218,9 +219,7 @@ class CustomMealsApiService {
     required String url,
   }) {
     final body = response.body.trim();
-    debugPrint(
-      'CustomMealsApiService: PATCH update ${response.statusCode}: $body',
-    );
+    debugPrint('CustomMealsApiService: PATCH update ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 
@@ -263,9 +262,7 @@ class CustomMealsApiService {
     required String url,
   }) {
     final body = response.body.trim();
-    debugPrint(
-      'CustomMealsApiService: $action ${response.statusCode}: $body',
-    );
+    debugPrint('CustomMealsApiService: $action ${safeHttpResponseLog(response.statusCode, body)}');
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return;

@@ -36,6 +36,15 @@ class ProfileView extends GetView<UserController> {
         builder: (ctrl) {
           final isAppleProfile = Platform.isIOS && ctrl.authProvider == 'apple';
           final user = ctrl.user;
+          final profileSettling =
+              ctrl.isLoadingProfile || !user.hasProfileBasics;
+
+          if (profileSettling) {
+            return _ProfileSettlingState(
+              horizontalPadding: horizontalPadding,
+              bottomPad: bottomPad,
+            );
+          }
 
           return SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
@@ -645,6 +654,86 @@ class _ActionButton extends StatelessWidget {
                   ),
                 ),
         ),
+      ),
+    );
+  }
+}
+
+class _ProfileSettlingState extends StatelessWidget {
+  const _ProfileSettlingState({
+    required this.horizontalPadding,
+    required this.bottomPad,
+  });
+
+  final double horizontalPadding;
+  final double bottomPad;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        r.scale(8),
+        horizontalPadding,
+        bottomPad,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Profile',
+            style: TextStyle(
+              fontSize: r.scale(28, tablet: 30),
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.4,
+              height: 1.15,
+            ),
+          ),
+          SizedBox(height: r.scale(28)),
+          Center(
+            child: SizedBox(
+              width: r.scale(28),
+              height: r.scale(28),
+              child: const CircularProgressIndicator(strokeWidth: 2.4),
+            ),
+          ),
+          SizedBox(height: r.scale(16)),
+          Text(
+            'Loading your profile…',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: r.scale(14),
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          SizedBox(height: r.scale(24)),
+          _PulseBlock(height: r.scale(88)),
+          SizedBox(height: r.scale(12)),
+          _PulseBlock(height: r.scale(120)),
+          SizedBox(height: r.scale(12)),
+          _PulseBlock(height: r.scale(120)),
+        ],
+      ),
+    );
+  }
+}
+
+class _PulseBlock extends StatelessWidget {
+  const _PulseBlock({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
       ),
     );
   }

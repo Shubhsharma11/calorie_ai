@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:developer';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/onboarding_request_model.dart';
 import '../models/onboarding_response_model.dart';
@@ -58,9 +58,7 @@ class OnboardingApiService {
     );
 
     final body = response.body.trim();
-    log(
-      'OnboardingApiService: GET response ${response.statusCode}: $body',
-    );
+    debugPrint('OnboardingApiService: GET response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 
@@ -70,7 +68,7 @@ class OnboardingApiService {
           : null;
       throw OnboardingApiException(
         message ??
-            'Onboarding request failed (${response.statusCode}). $body',
+            'Onboarding request failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }
@@ -89,10 +87,7 @@ class OnboardingApiService {
   }) async {
     debugPrint('OnboardingApiService: $method ${ApiEndpoints.onboardingUrl}');
     if (kDebugMode) {
-      debugPrint(
-        'OnboardingApiService: request body:\n'
-        '${const JsonEncoder.withIndent('  ').convert(payload)}',
-      );
+      debugPrint('OnboardingApiService: request body redacted');
     }
 
     final response = method == 'PATCH'
@@ -108,9 +103,7 @@ class OnboardingApiService {
           );
 
     final body = response.body.trim();
-    log(
-      'OnboardingApiService: response ${response.statusCode}: $body',
-    );
+    debugPrint('OnboardingApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 
@@ -120,7 +113,7 @@ class OnboardingApiService {
           : null;
       throw OnboardingApiException(
         message ??
-            'Onboarding submission failed (${response.statusCode}). $body',
+            'Onboarding submission failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }

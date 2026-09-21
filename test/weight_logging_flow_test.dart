@@ -23,15 +23,33 @@ class _FakeAuthRepository extends AuthRepository {
   Future<Map<String, dynamic>> loadSession() async => _session;
 }
 
+Future<void> _waitUntil(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 2),
+}) async {
+  final end = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(end)) {
+      fail('Condition not met within $timeout');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
 void main() {
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     Get.testMode = true;
     Get.reset();
+    // Shared process-wide slots / 429 cooldown must not leak across tests.
+    ApiClient.debugReset();
   });
 
-  tearDown(Get.reset);
+  tearDown(() {
+    ApiClient.debugReset();
+    Get.reset();
+  });
 
   test('resolveAccessTokenWithDiagnostics returns session token after login', () async {
     final controller = UserController(
@@ -169,12 +187,15 @@ void main() {
     );
 
     expect(postCount, 1);
-    expect(getCount, 1);
     expect(outcome.status, WeightLogStatus.savedAndSynced);
     expect(tracker.currentWeight.value, 68);
     expect(tracker.weightEntries, hasLength(1));
     expect(tracker.weightEntries.first.kg, 68);
     expect(tracker.weightRevision.value, greaterThan(0));
+
+    // Chart history refresh is intentionally fire-and-forget after Save.
+    await _waitUntil(() => getCount >= 1);
+    expect(getCount, 1);
   });
 
   test('logCurrentWeight keeps saved weight when GET history is stale', () async {
@@ -246,9 +267,12 @@ void main() {
     );
 
     expect(postCount, 1);
-    expect(getCount, 1);
     expect(outcome.status, WeightLogStatus.savedAndSynced);
     expect(tracker.currentWeight.value, 72.5);
+
+    // Chart history refresh is intentionally fire-and-forget after Save.
+    await _waitUntil(() => getCount >= 1);
+    expect(getCount, 1);
     expect(tracker.weightEntries, hasLength(2));
     expect(
       tracker.weightEntries
@@ -294,7 +318,9 @@ void main() {
     );
     Get.put(userController, permanent: true);
     await userController.localProfileReady;
-    expect(userController.user.weightKg, 70);
+    // Profile metrics stay null until onboarding/API supplies them — no 70kg placeholder.
+    expect(userController.user.weightKg, isNull);
+    userController.user.weightKg = 70;
 
     final tracker = TrackerController(
       weightRepository: WeightRepository(
@@ -305,7 +331,8 @@ void main() {
     await tracker.refreshWeightFromApi();
 
     expect(tracker.currentWeight.value, 81.2);
-    expect(userController.user.weightKg, 81);
+    // Weight history refresh updates the progress display only — not onboarding profile.
+    expect(userController.user.weightKg, 70);
     expect(tracker.weightRevision.value, greaterThan(0));
   });
 

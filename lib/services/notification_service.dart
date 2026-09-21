@@ -9,11 +9,14 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../controllers/user_controller.dart';
 import '../core/android_sdk.dart';
+import '../core/auth_token_debug.dart';
+import '../core/home_hydrate.dart';
 import '../core/notification_navigation.dart';
 import '../models/notification_model.dart';
 import '../models/notification_type.dart';
 import '../repositories/notification_repository.dart';
 import 'analytics_service.dart';
+import 'api_client.dart';
 import 'notification_api_service.dart';
 
 /// Handles FCM, local notifications, token sync, and notification navigation.
@@ -127,9 +130,7 @@ class NotificationService {
     final token = _currentToken ?? await _safeGetFcmToken();
     _currentToken = token;
     if (kDebugMode) {
-      debugPrint('═══════════════════════════════════════');
-      debugPrint('FCM TOKEN: $token');
-      debugPrint('═══════════════════════════════════════');
+      debugPrint('FCM token ready ${AuthTokenDebug.fingerprint(token)}');
     }
     return token;
   }
@@ -168,6 +169,21 @@ class NotificationService {
 
     final authToken = accessToken ?? _readAccessToken();
     if (authToken == null || authToken.isEmpty) return;
+
+    if (ApiClient.isRateLimited) {
+      if (kDebugMode) {
+        debugPrint('FCM token upload skipped (rate-limited)');
+      }
+      return;
+    }
+
+    // Never compete with HomeHydrate's primary sequential sync.
+    if (HomeHydrate.isBootstrapQuiet) {
+      if (kDebugMode) {
+        debugPrint('FCM token upload skipped (HomeHydrate bootstrap quiet)');
+      }
+      return;
+    }
 
     final now = DateTime.now();
     if (_lastSyncedFcmToken == token &&
@@ -375,9 +391,7 @@ class NotificationService {
     }
     _currentToken = token;
     if (kDebugMode) {
-      debugPrint('═══════════════════════════════════════');
-      debugPrint('FCM TOKEN REFRESHED: $token');
-      debugPrint('═══════════════════════════════════════');
+      debugPrint('FCM token refreshed ${AuthTokenDebug.fingerprint(token)}');
     }
     // Force upload when FCM rotates the token.
     _lastSyncedFcmAt = null;

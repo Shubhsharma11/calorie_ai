@@ -143,9 +143,7 @@ class DailyLogMealBlock extends GetView<FoodController> {
                         children: [
                           for (final group in visible)
                             _MealItemDeleteCard(
-                              key: ValueKey(
-                                'meal-item-${group.representative.id}',
-                              ),
+                              key: ValueKey('meal-item-${group.listKey}'),
                               group: group,
                               isDeleting: controller.deletingMealIds
                                   .contains(group.representative.id),

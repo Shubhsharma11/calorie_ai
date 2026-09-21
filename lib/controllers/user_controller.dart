@@ -20,17 +20,23 @@ import '../repositories/auth_repository.dart';
 import '../repositories/nutrition_plan_repository.dart';
 import '../repositories/onboarding_repository.dart';
 import '../routes/app_routes.dart';
+import '../core/app_log.dart';
 import '../core/app_snackbar.dart';
+import '../core/auth_token_debug.dart';
 import '../core/body_measurement_units.dart';
+import '../core/home_hydrate.dart';
+import '../core/home_stuck_debug.dart'; // TEMPORARY — HOME_STUCK_DEBUG
 import '../core/image_downscale.dart';
 import '../core/media_url.dart';
 import '../core/photo_permission.dart';
 import '../core/pick_cropped_image.dart';
 import '../core/route_args.dart';
+import '../core/signed_out_navigation.dart';
 import '../core/wait_for_resume.dart';
 import '../core/weight_goal_calculator.dart';
 import '../services/auth_api_service.dart';
 import '../services/analytics_service.dart';
+import '../services/api_client.dart';
 import '../services/notification_service.dart';
 import '../services/nutrition_plan_api_service.dart';
 import '../services/onboarding_api_service.dart';
@@ -95,6 +101,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
   Future<String?>? _fetchProfileInFlight;
   DateTime? _profileFetchedAt;
   DateTime? _profileRateLimitedUntil;
+  Future<void>? _clearInvalidSessionInFlight;
 
   static const Duration _profileFreshnessTtl = Duration(seconds: 60);
   static const Duration _profileRateLimitCooldown = Duration(seconds: 60);
@@ -204,8 +211,36 @@ class UserController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<void> loadAuthSession() async {
+    // Ignore stale disk reads that started before login/logout flipped the epoch.
+    final epoch = _sessionEpoch;
+    if (isLoggingOut || isDeletingAccount) {
+      appLog('Auth: loadAuthSession skipped (logout/delete in progress)');
+      return;
+    }
+
     final saved = await _authRepository.loadSession();
+    if (epoch != _sessionEpoch) {
+      appLog(
+        'Auth: loadAuthSession discarded stale read '
+        '(epoch $epoch → $_sessionEpoch)',
+      );
+      return;
+    }
+    if (isLoggingOut || isDeletingAccount) {
+      appLog('Auth: loadAuthSession skipped after disk read (logout/delete)');
+      return;
+    }
+
     if (saved.isEmpty) {
+      // Mid-login gap: memory already has the new token but disk write has not
+      // finished. Do not wipe the live session.
+      if (isLoggedIn && accessToken.isNotEmpty) {
+        appLog(
+          'Auth: loadAuthSession empty disk — keep memory '
+          '${AuthTokenDebug.fingerprint(accessToken)}',
+        );
+        return;
+      }
       isLoggedIn = false;
       userId = '';
       authProvider = '';
@@ -216,10 +251,41 @@ class UserController extends GetxController with WidgetsBindingObserver {
       return;
     }
 
+    final diskToken = saved['accessToken'] as String? ?? '';
+    // Prefer a fresher in-memory token over a concurrent stale disk snapshot.
+    if (isLoggedIn &&
+        accessToken.isNotEmpty &&
+        diskToken.isNotEmpty &&
+        accessToken != diskToken) {
+      appLog(
+        'Auth: loadAuthSession keep memory '
+        '${AuthTokenDebug.fingerprint(accessToken)} over disk '
+        '${AuthTokenDebug.fingerprint(diskToken)}',
+      );
+      // Still refresh non-token fields from disk when safe.
+      userId = saved['userId'] as String? ?? userId;
+      authProvider = saved['provider'] as String? ?? authProvider;
+      user.email = saved['email'] as String? ?? user.email;
+      user.name = saved['name'] as String? ?? user.name;
+      if (saved['setupComplete'] == true) _onboardingCompleted = true;
+      final savedBackendResponse = saved['backendResponse'];
+      if (savedBackendResponse is Map<String, dynamic>) {
+        backendLoginResponse = savedBackendResponse;
+      }
+      final diskRefresh = saved['refreshToken'] as String? ?? '';
+      if (refreshToken.isEmpty && diskRefresh.isNotEmpty) {
+        refreshToken = diskRefresh;
+      }
+      _applyAvatarFromResponse(backendLoginResponse);
+      _applyStoredAvatar(saved);
+      update();
+      return;
+    }
+
     isLoggedIn = true;
     userId = saved['userId'] as String? ?? '';
     authProvider = saved['provider'] as String? ?? '';
-    accessToken = saved['accessToken'] as String? ?? '';
+    accessToken = diskToken;
     refreshToken = saved['refreshToken'] as String? ?? '';
     user.email = saved['email'] as String? ?? user.email;
     user.name = saved['name'] as String? ?? user.name;
@@ -239,6 +305,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     // dedicated session avatarUrl so a custom upload from /auth/me wins.
     _applyAvatarFromResponse(backendLoginResponse);
     _applyStoredAvatar(saved);
+    AuthTokenDebug.log('Auth: loadAuthSession applied', accessToken, source: 'disk');
     update();
   }
 
@@ -253,11 +320,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
       return null;
     }
 
-    
-
-    debugPrint(
-      'UserController.resolveAccessToken: OK '
-      'source=${resolution.source} length=${resolution.tokenLength}',
+    AuthTokenDebug.log(
+      'Auth: resolveAccessToken OK',
+      resolution.token,
+      source: resolution.source ?? 'unknown',
     );
 
     return resolution.token;
@@ -550,6 +616,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
       final scaled = await downscaleImageBytes(bytes);
       if (scaled.isEmpty || isClosed) return;
       await _uploadAvatarBytes(scaled);
+    } on UnimplementedError {
+      // iOS / desktop image_picker does not implement getLostData().
     } catch (error, stackTrace) {
       debugPrint('UserController: retrieveLostData: $error\n$stackTrace');
     } finally {
@@ -617,6 +685,11 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   Future<void> refreshAvatarUrl({bool force = false}) async {
     if (_avatarRemovedLocally && !force) return;
+    // Never burn /auth/me while the API is rate-limiting us.
+    if (ApiClient.isRateLimited) {
+      debugPrint('UserController: avatar refresh skipped (rate-limited)');
+      return;
+    }
     final token = await resolveAccessToken();
     if (token == null || token.isEmpty) return;
 
@@ -1010,12 +1083,13 @@ class UserController extends GetxController with WidgetsBindingObserver {
     final now = DateTime.now();
 
     // Active 429 window — do not spend more quota (even on force).
-    if (_profileRateLimitedUntil != null &&
-        now.isBefore(_profileRateLimitedUntil!)) {
+    if ((_profileRateLimitedUntil != null &&
+            now.isBefore(_profileRateLimitedUntil!)) ||
+        ApiClient.isRateLimited) {
       lastProfileFetchStatusCode = 429;
+      final until = _profileRateLimitedUntil ?? ApiClient.rateLimitedUntil;
       debugPrint(
-        'UserController: fetchProfile skipped — rate-limited until '
-        '$_profileRateLimitedUntil',
+        'UserController: fetchProfile skipped — rate-limited until $until',
       );
       // Cached profile is fine for UI; only surface an error when we have nothing.
       if (user.hasProfileBasics || _onboardingCompleted) {
@@ -1071,63 +1145,57 @@ class UserController extends GetxController with WidgetsBindingObserver {
     update();
 
     try {
-      // One attempt for normal / 429. Retry 502/503 once with a longer pause.
-      const maxAttempts = 2;
-      OnboardingApiException? lastError;
-      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-        if (epoch != _sessionEpoch) return 'Profile fetch cancelled.';
-        try {
-          final response = await _onboardingRepository.fetchOnboarding(
-            accessToken: token,
-          );
-          if (epoch != _sessionEpoch) return 'Profile fetch cancelled.';
-          lastProfileFetchStatusCode = 200;
-          _profileFetchedAt = DateTime.now();
-          _profileRateLimitedUntil = null;
-          // Once the user has a pinned target (lose/gain/maintain), casual profile
-          // refreshes must not adopt server mutations caused by weight logs
-          // (goalWeight rewritten ≈ current).
-          final hasPinnedTarget = user.pinnedGoalWeightKg != null &&
-              (user.pinnedGoalType ?? user.goal) != null;
-          _applyOnboardingResponse(
-            response,
-            applyGoalFields: refreshGoalTarget || !hasPinnedTarget,
-          );
-          syncWeightFromProfile();
-          // Profile loaded from API — treat setup as done when personal basics exist.
-          if (user.hasProfileBasics) {
-            _onboardingCompleted = true;
-            _onboardingStep = null;
-            _onboardingDraft = null;
-            hasOnboardingDraft = false;
-            unawaited(_persistCurrentAuthSession());
-          }
-          return null;
-        } on OnboardingApiException catch (error) {
-          lastError = error;
-          lastProfileFetchStatusCode = error.statusCode;
-          debugPrint(
-            'UserController: fetchProfile failed '
-            '(attempt $attempt/$maxAttempts): $error',
-          );
-          if (error.statusCode == 429) {
-            _profileRateLimitedUntil =
-                DateTime.now().add(_profileRateLimitCooldown);
-            debugPrint(
-              'UserController: rate-limited — cooling down until '
-              '$_profileRateLimitedUntil',
-            );
-            return error.message;
-          }
-          final isGateway =
-              error.statusCode == 503 || error.statusCode == 502;
-          if (!isGateway || attempt >= maxAttempts) {
-            return error.message;
-          }
-          await Future<void>.delayed(Duration(seconds: 2 * attempt));
-        }
+      // Single logical GET — ApiClient owns 502/503/network GET retries.
+      final response = await _onboardingRepository.fetchOnboarding(
+        accessToken: token,
+      );
+      if (epoch != _sessionEpoch) return 'Profile fetch cancelled.';
+      lastProfileFetchStatusCode = 200;
+      _profileFetchedAt = DateTime.now();
+      _profileRateLimitedUntil = null;
+      // Once the user has a pinned target (lose/gain/maintain), casual profile
+      // refreshes must not adopt server mutations caused by weight logs
+      // (goalWeight rewritten ≈ current).
+      final hasPinnedTarget = user.pinnedGoalWeightKg != null &&
+          (user.pinnedGoalType ?? user.goal) != null;
+      _applyOnboardingResponse(
+        response,
+        applyGoalFields: refreshGoalTarget || !hasPinnedTarget,
+      );
+      syncWeightFromProfile();
+      // Do NOT mark setup complete from profile basics alone.
+      // PUT onboarding can succeed while POST /nutrition/plan fails; cold
+      // start must resume plan loading instead of opening Home.
+      return null;
+    } on OnboardingApiException catch (error) {
+      lastProfileFetchStatusCode = error.statusCode;
+      debugPrint('UserController: fetchProfile failed: $error');
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        AuthTokenDebug.log(
+          'Auth: fetchProfile ${error.statusCode} — clearing session',
+          token,
+          source: 'memory_at_request',
+        );
+        await clearInvalidSession(
+          // TEMPORARY — HOME_STUCK_DEBUG
+          debugController: 'UserController.fetchProfile',
+          debugEndpoint: 'GET /onboarding',
+          debugStatusCode: error.statusCode,
+          debugRequestType: 'GET',
+        );
+        return error.message;
       }
-      return lastError?.message ?? 'Unable to load your profile. Please try again.';
+      if (error.statusCode == 429) {
+        _profileRateLimitedUntil =
+            DateTime.now().add(_profileRateLimitCooldown);
+        ApiClient.noteRateLimited(cooldown: _profileRateLimitCooldown);
+        debugPrint(
+          'UserController: rate-limited — cooling down until '
+          '$_profileRateLimitedUntil',
+        );
+        return error.message;
+      }
+      return error.message;
     } catch (error) {
       debugPrint('UserController: fetchProfile failed: $error');
       return 'Unable to load your profile. Please try again.';
@@ -1140,12 +1208,81 @@ class UserController extends GetxController with WidgetsBindingObserver {
   }
 
   /// Drops a restored session that the API rejected (401/403) without navigating.
-  Future<void> clearInvalidSession() async {
-    _clearApiOwnedControllers();
-    _clearInMemoryAuthState();
-    user.resetToDefaults();
-    await _authRepository.clearLocalAuthData();
-    update();
+  ///
+  /// Concurrent 401/403 callers share a single in-flight clear so we do not
+  /// stampede local cleanup / controller resets.
+  ///
+  /// Optional [debug*] args are TEMPORARY — HOME_STUCK_DEBUG only (no behavior).
+  Future<void> clearInvalidSession({
+    String? debugController,
+    String? debugEndpoint,
+    int? debugStatusCode,
+    String? debugRequestType,
+  }) {
+    final inFlight = _clearInvalidSessionInFlight;
+    if (inFlight != null) {
+      // TEMPORARY — HOME_STUCK_DEBUG
+      HomeStuckDebug.log(
+        'clearInvalidSession JOIN in-flight',
+        {
+          'controller': debugController,
+          'endpoint': debugEndpoint,
+          'status': debugStatusCode,
+          'requestType': debugRequestType,
+        },
+      );
+      return inFlight;
+    }
+
+    late final Future<void> future;
+    future = () async {
+      try {
+        // TEMPORARY — HOME_STUCK_DEBUG
+        final shellBefore = Get.isRegistered<MainController>()
+            ? Get.find<MainController>().shellReady.value
+            : null;
+        HomeStuckDebug.log(
+          'clearInvalidSession START',
+          {
+            'controller': debugController,
+            'endpoint': debugEndpoint,
+            'status': debugStatusCode,
+            'requestType': debugRequestType,
+            ...HomeStuckDebug.snapshotAuthShell(
+              isLoggedIn: isLoggedIn,
+              shellReady: shellBefore ?? false,
+              userSessionEpoch: _sessionEpoch,
+              homeHydrateGeneration: HomeHydrate.stuckDebugGeneration,
+            ),
+          },
+        );
+        _clearApiOwnedControllers();
+        _clearInMemoryAuthState();
+        user.resetToDefaults();
+        await _authRepository.clearLocalAuthData();
+        update();
+        // TEMPORARY — HOME_STUCK_DEBUG
+        final shellAfter = Get.isRegistered<MainController>()
+            ? Get.find<MainController>().shellReady.value
+            : null;
+        HomeStuckDebug.log(
+          'clearInvalidSession AFTER',
+          HomeStuckDebug.snapshotAuthShell(
+            isLoggedIn: isLoggedIn,
+            shellReady: shellAfter ?? false,
+            userSessionEpoch: _sessionEpoch,
+            homeHydrateGeneration: HomeHydrate.stuckDebugGeneration,
+          ),
+        );
+        HomeStuckDebug.logNavigation('after clearInvalidSession');
+      } finally {
+        if (identical(_clearInvalidSessionInFlight, future)) {
+          _clearInvalidSessionInFlight = null;
+        }
+      }
+    }();
+    _clearInvalidSessionInFlight = future;
+    return future;
   }
 
   Future<PickTargetDateResult> pickTargetDate(
@@ -1837,11 +1974,69 @@ class UserController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<String> resolveSetupResumeRoute() async {
-    // API profile / persisted setupComplete are the cold-start source of truth
-    // (in-memory flags alone reset when the process dies).
-    if (user.hasProfileBasics || _onboardingCompleted) {
+    // Already finished setup with a local plan → Home.
+    if (_onboardingCompleted && _hasLocalNutritionPlan) {
+      _onboardingStep = null;
+      return AppRoutes.main;
+    }
+
+    // Rate-limited: do not burn quota on nutrition/plan — open Home with cache.
+    if (ApiClient.isRateLimited &&
+        (user.hasProfileBasics || _onboardingCompleted)) {
+      debugPrint(
+        'UserController: resume → Home (rate-limited; using cached profile)',
+      );
       _onboardingCompleted = true;
       _onboardingStep = null;
+      return AppRoutes.main;
+    }
+
+    // Profile exists (PUT onboarding done). Plan may still be missing.
+    if (user.hasProfileBasics || _onboardingCompleted) {
+      if (!_hasLocalNutritionPlan) {
+        final gate = await _tryHydrateNutritionPlanFromApi();
+        if (gate == _NutritionPlanGateResult.missing) {
+          // Confirmed empty / 404 — resume creation.
+          _onboardingCompleted = false;
+          await persistOnboardingStep(AppRoutes.nutritionPlanLoading);
+          await _persistCurrentAuthSession();
+          debugPrint(
+            'UserController: resume → nutrition plan loading '
+            '(profile exists, plan missing)',
+          );
+          return AppRoutes.nutritionPlanLoading;
+        }
+        if (gate == _NutritionPlanGateResult.unavailable) {
+          // 429 / 5xx / network — do not treat as “no plan” for existing users.
+          debugPrint(
+            'UserController: resume → Home '
+            '(profile exists, plan fetch unavailable — retry later)',
+          );
+          _onboardingCompleted = true;
+          _onboardingStep = null;
+          await _persistCurrentAuthSession();
+          return AppRoutes.main;
+        }
+        // ready — local plan hydrated; fall through to Home.
+      }
+
+      // Same-session only: user just finished plan create and is confirming calories.
+      // Re-login / cold start with an existing plan must open Home — not
+      // "Your nutrition plan is ready" again.
+      final confirmingCaloriesThisSession = !_onboardingCompleted &&
+          _onboardingStep == AppRoutes.dailyCalorieGoal;
+      if (confirmingCaloriesThisSession) {
+        return AppRoutes.dailyCalorieGoal;
+      }
+
+      _onboardingCompleted = true;
+      _onboardingStep = null;
+      await clearOnboardingProgress();
+      await _persistCurrentAuthSession();
+      debugPrint(
+        'UserController: resume → Home '
+        '(profile + nutrition plan ready)',
+      );
       return AppRoutes.main;
     }
 
@@ -1855,6 +2050,68 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
     // Signed in but setup not finished — continue onboarding, never login.
     return AppRoutes.personalDetails;
+  }
+
+  bool get _hasLocalNutritionPlan {
+    final daily = user.nutritionPlanDailyCalories ?? 0;
+    final base = user.nutritionPlanBaseCalories ?? 0;
+    return daily > 0 || base > 0;
+  }
+
+  /// Quiet GET /nutrition/plan used for cold-start gating.
+  ///
+  /// - [ready]: plan applied locally
+  /// - [missing]: empty body / 404 — user still needs plan creation
+  /// - [unavailable]: 429 / 5xx / network — do not force plan loading
+  Future<_NutritionPlanGateResult> _tryHydrateNutritionPlanFromApi() async {
+    if (ApiClient.isRateLimited) {
+      return _NutritionPlanGateResult.unavailable;
+    }
+    final token = await resolveAccessToken();
+    if (token == null || token.isEmpty) {
+      return _NutritionPlanGateResult.unavailable;
+    }
+    try {
+      final plan = await _nutritionPlanRepository.fetchPlan(accessToken: token);
+      if (plan.calories <= 0 &&
+          plan.previewMeal == null &&
+          plan.meals.isEmpty &&
+          !(plan.weeklyPlan?.isNotEmpty ?? false)) {
+        return _NutritionPlanGateResult.missing;
+      }
+      await applyNutritionPlan(plan, applyTargetWeight: false);
+      _syncNutritionPlanController(plan);
+      return _hasLocalNutritionPlan
+          ? _NutritionPlanGateResult.ready
+          : _NutritionPlanGateResult.missing;
+    } on NutritionPlanApiException catch (error) {
+      debugPrint(
+        'UserController: nutrition plan gate fetch failed: $error',
+      );
+      if (_isTransientNutritionPlanFailure(error)) {
+        return _NutritionPlanGateResult.unavailable;
+      }
+      // 404 and other client “not found / empty” style failures → create plan.
+      if (error.statusCode == 404) {
+        return _NutritionPlanGateResult.missing;
+      }
+      // Unknown 4xx — safer as unavailable than kicking into plan recreate.
+      return _NutritionPlanGateResult.unavailable;
+    } catch (error) {
+      debugPrint(
+        'UserController: nutrition plan gate fetch failed: $error',
+      );
+      return _NutritionPlanGateResult.unavailable;
+    }
+  }
+
+  bool _isTransientNutritionPlanFailure(NutritionPlanApiException error) {
+    final code = error.statusCode;
+    if (code == 429) return true;
+    if (code != null && code >= 500) return true;
+    final message = error.message.toLowerCase();
+    return message.contains('too many requests') ||
+        message.contains('rate limit');
   }
 
   Future<void> clearOnboardingProgress() async {
@@ -2512,6 +2769,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
     // Drop previous account's in-memory profile + diary before applying new identity.
     // Otherwise a new email briefly (or permanently) shows the last user's /
     // placeholder John / 70kg / calorie numbers.
+    appLog('Auth: LOGIN begin provider=$provider');
+    final previousToken = this.accessToken;
     _clearApiOwnedControllers();
     user.resetToDefaults();
     _clearInMemoryAuthState();
@@ -2531,6 +2790,12 @@ class UserController extends GetxController with WidgetsBindingObserver {
     _applyNameFromAuthResponse(backendResponse);
     update();
 
+    appLog(
+      'Auth: LOGIN token '
+      '${AuthTokenDebug.fingerprint(previousToken)} → '
+      '${AuthTokenDebug.describe(this.accessToken, source: 'login_response')}',
+    );
+
     // Persist tokens first. Defer FCM until after profile — parallel bursts
     // right after Google login were triggering 429 rate limits.
     await _authRepository.saveSession(
@@ -2541,7 +2806,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
       accessToken: accessToken,
       refreshToken: refreshToken,
       backendResponse: backendResponse,
-      setupComplete: _onboardingCompleted || user.hasProfileBasics,
+      setupComplete: _onboardingCompleted,
       avatarUrl: user.avatarUrl,
       avatarExpiresAt: user.avatarExpiresAt?.toIso8601String(),
     );
@@ -2562,33 +2827,72 @@ class UserController extends GetxController with WidgetsBindingObserver {
     // Profile first (with retries), then diary — never stampede the API.
     await _reloadApiOwnedDataAfterLogin();
 
-    unawaited(
-      NotificationService.instance.syncTokenWithBackend(
+    // FCM is never on the critical login path — quiet delay after Home hydrate.
+    unawaited(() async {
+      await Future<void>.delayed(const Duration(seconds: 8));
+      if (ApiClient.isRateLimited) {
+        appLog('Auth: FCM sync skipped (rate-limited)');
+        return;
+      }
+      if (HomeHydrate.isBootstrapQuiet) {
+        appLog('Auth: FCM sync waiting — HomeHydrate still quiet');
+        await Future<void>.delayed(const Duration(seconds: 5));
+      }
+      if (ApiClient.isRateLimited || HomeHydrate.isBootstrapQuiet) {
+        appLog('Auth: FCM sync skipped (still rate-limited/quiet)');
+        return;
+      }
+      appLog('Auth: FCM sync start');
+      await NotificationService.instance.syncTokenWithBackend(
         accessToken: accessToken,
-      ),
-    );
+      );
+    }());
+    appLog('Auth: LOGIN session saved — HomeHydrate will sync');
   }
 
   Future<void> _reloadApiOwnedDataAfterLogin() async {
     debugPrint('UserController: reloading API-owned data after login');
 
-    // Gate every other call on profile — this decides home vs setup.
-    await fetchProfile(refreshGoalTarget: false, force: true);
-    await refreshAvatarUrl(force: true);
+    // Existing accounts: open Home from cache — do NOT force GET /onboarding.
+    // [HomeHydrate] syncs quietly after the first frame (like other apps).
+    final existing = isSetupComplete ||
+        isLikelyExistingBackendUser ||
+        user.hasProfileBasics;
+    if (existing) {
+      debugPrint(
+        'UserController: existing user — skip forced profile; '
+        'HomeHydrate will sync',
+      );
+      if (!isSetupComplete &&
+          (user.hasProfileBasics || isLikelyExistingBackendUser)) {
+        _onboardingCompleted = true;
+      }
+      _notifyDashboard();
+      return;
+    }
 
-    if (Get.isRegistered<FoodController>()) {
-      await Get.find<FoodController>().reloadAfterLogin();
+    // Already cooling down — do not spend more quota on avatar / diary.
+    if (ApiClient.isRateLimited) {
+      lastProfileFetchStatusCode = 429;
+      debugPrint(
+        'UserController: post-login reload skipped (already rate-limited)',
+      );
+      _notifyDashboard();
+      return;
     }
-    if (Get.isRegistered<TrackerController>()) {
-      await Get.find<TrackerController>().reloadAfterLogin();
+
+    // New / incomplete setup — need profile to decide routing.
+    await fetchProfile(refreshGoalTarget: false, force: true);
+
+    if (lastProfileFetchStatusCode == 429 || ApiClient.isRateLimited) {
+      debugPrint(
+        'UserController: post-login cascade stopped after profile 429',
+      );
+      _notifyDashboard();
+      return;
     }
-    if (Get.isRegistered<NutritionPlanController>()) {
-      await Get.find<NutritionPlanController>().loadPlan(force: true);
-    }
-    // Notifications are non-blocking for routing — don't delay / cause 429s.
-    if (Get.isRegistered<NotificationsController>()) {
-      unawaited(Get.find<NotificationsController>().refreshUnreadCount());
-    }
+
+    await refreshAvatarUrl(force: false);
     _notifyDashboard();
   }
 
@@ -2608,6 +2912,22 @@ class UserController extends GetxController with WidgetsBindingObserver {
   }
 
   void _clearApiOwnedControllers() {
+    appLog('Auth: clearApiOwnedControllers');
+    // TEMPORARY — HOME_STUCK_DEBUG
+    HomeStuckDebug.log(
+      'clearApiOwnedControllers START',
+      {
+        'isLoggedIn': isLoggedIn,
+        'userSessionEpoch': _sessionEpoch,
+        'homeHydrateGen': HomeHydrate.stuckDebugGeneration,
+        'shellReady': Get.isRegistered<MainController>()
+            ? Get.find<MainController>().shellReady.value
+            : null,
+      },
+    );
+    // One session's 429 cooldown must not throttle the next login.
+    ApiClient.clearRateLimit();
+    HomeHydrate.resetSession();
     if (Get.isRegistered<FoodController>()) {
       Get.find<FoodController>().clearSessionData();
     }
@@ -2622,6 +2942,9 @@ class UserController extends GetxController with WidgetsBindingObserver {
     }
     if (Get.isRegistered<RewardsController>()) {
       Get.find<RewardsController>().clearSessionData();
+    }
+    if (Get.isRegistered<MainController>()) {
+      Get.find<MainController>().clearShellReady();
     }
     _notifyDashboard();
   }
@@ -2642,7 +2965,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
       accessToken: accessToken,
       refreshToken: refreshToken.isEmpty ? null : refreshToken,
       backendResponse: backendLoginResponse,
-      setupComplete: _onboardingCompleted || user.hasProfileBasics,
+      setupComplete: _onboardingCompleted,
       avatarUrl: user.avatarUrl,
       avatarExpiresAt: user.avatarExpiresAt?.toIso8601String(),
     );
@@ -2688,11 +3011,15 @@ class UserController extends GetxController with WidgetsBindingObserver {
       _clearInMemoryAuthState();
       user.resetToDefaults();
 
-      MainController.resetHomeTabIfRegistered();
-      Get.offAllNamed(AppRoutes.login);
-      AppSnackbar.success(
-        'Your account has been permanently deleted.',
-        title: 'Account deleted',
+      MainController.resetHomeTabIfRegistered(hydrate: false);
+      SignedOutNavigation.goToLoginAndClearAuthenticatedStack(
+        afterFrame: () {
+          if (Get.testMode) return;
+          AppSnackbar.success(
+            'Your account has been permanently deleted.',
+            title: 'Account deleted',
+          );
+        },
       );
       return true;
     } on AuthApiException catch (e) {
@@ -2714,44 +3041,72 @@ class UserController extends GetxController with WidgetsBindingObserver {
   Future<void> performLogout() async {
     if (isLoggingOut) return;
 
+    appLog('Auth: LOGOUT begin');
+
+    // Resolve tokens before flipping isLoggingOut (loadAuthSession skips after).
+    var refresh = refreshToken;
+    var access = accessToken;
+    if (refresh.isEmpty || access.isEmpty) {
+      await loadAuthSession();
+      refresh = refreshToken;
+      access = accessToken;
+    }
+
     isLoggingOut = true;
     isSessionBusy.value = true;
     update();
 
     try {
-      if (refreshToken.isEmpty || accessToken.isEmpty) {
-        await loadAuthSession();
-      }
-
-      debugPrint(
-        'UserController: logout — refresh=${refreshToken.isNotEmpty} '
-        'access=${accessToken.isNotEmpty}',
-      );
-      final result = await _authRepository.logout(
-        refreshToken: refreshToken,
-        accessToken: accessToken,
-      );
+      AuthTokenDebug.log('Auth: LOGOUT clearing memory', access);
+      // Clear memory BEFORE the revoke API so concurrent loadAuthSession cannot
+      // re-apply a revoked token during the logout→login window.
       _clearApiOwnedControllers();
       _clearInMemoryAuthState();
       user.resetToDefaults();
-      unawaited(AnalyticsService.clearUser());
+      appLog(
+        'Auth: LOGOUT memory cleared '
+        'access=${AuthTokenDebug.fingerprint(accessToken)}',
+      );
 
-      MainController.resetHomeTabIfRegistered();
-      Get.offAllNamed(AppRoutes.login);
+      debugPrint(
+        'UserController: logout — refresh=${refresh.isNotEmpty} '
+        'access=${access.isNotEmpty}',
+      );
+      final result = await _authRepository.logout(
+        refreshToken: refresh,
+        accessToken: access,
+      );
+      // Best-effort analytics — never block signed-out navigation.
+      unawaited(() async {
+        try {
+          await AnalyticsService.clearUser();
+        } catch (_) {}
+      }());
 
-      if (result.backendRevoked) {
-        AppSnackbar.success(
-          'You’ve been logged out.',
-          title: 'Logged out',
-        );
-      } else if (result.hasBackendError) {
-        AppSnackbar.info(
-          'Could not reach the server, but your session was cleared.',
-          title: 'Signed out on this device',
-        );
-      } else {
-        AppSnackbar.success('Your session was cleared.', title: 'Logged out');
-      }
+      MainController.resetHomeTabIfRegistered(hydrate: false);
+      SignedOutNavigation.goToLoginAndClearAuthenticatedStack(
+        afterFrame: () {
+          // Snackbars keep an Overlay ticker; skip in widget tests.
+          if (Get.testMode) return;
+          if (result.backendRevoked) {
+            AppSnackbar.success(
+              'You’ve been logged out.',
+              title: 'Logged out',
+            );
+          } else if (result.hasBackendError) {
+            AppSnackbar.info(
+              'Could not reach the server, but your session was cleared.',
+              title: 'Signed out on this device',
+            );
+          } else {
+            AppSnackbar.success(
+              'Your session was cleared.',
+              title: 'Logged out',
+            );
+          }
+        },
+      );
+      appLog('Auth: LOGOUT complete (hydrate=false)');
     } finally {
       isLoggingOut = false;
       isSessionBusy.value = false;
@@ -2796,6 +3151,18 @@ class UserController extends GetxController with WidgetsBindingObserver {
 }
 
 enum WeightTargetSource { user, ai }
+
+/// Outcome of quiet GET /nutrition/plan during setup resume gating.
+enum _NutritionPlanGateResult {
+  /// Plan hydrated into local user state.
+  ready,
+
+  /// Confirmed missing (empty / 404) — send user to plan creation.
+  missing,
+
+  /// Transient failure (429 / 5xx / network) — do not force plan creation.
+  unavailable,
+}
 
 /// In-memory checkpoint for a My Goals → Goal Setup/Amount/Weight edit journey.
     class _GoalEditCheckpoint {

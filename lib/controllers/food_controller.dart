@@ -24,16 +24,16 @@ import '../repositories/favourite_meals_repository.dart';
 import '../repositories/meals_repository.dart';
 import '../repositories/my_foods_repository.dart';
 import '../repositories/uploads_repository.dart';
-import '../services/food_api_service.dart';
+import '../services/api_client.dart';
 import '../services/api_endpoints.dart';
 import '../services/custom_meals_api_service.dart';
 import '../services/favourite_meals_api_service.dart';
+import '../services/food_api_service.dart';
 import '../services/meals_api_service.dart';
 import '../services/my_foods_api_service.dart';
 import '../services/uploads_api_service.dart';
 import '../widgets/calorie_goal_success_dialog.dart';
 import 'dashboard_controller.dart';
-import 'streak_controller.dart';
 import 'user_controller.dart';
 
 import '../services/analytics_service.dart';
@@ -93,6 +93,8 @@ class FoodController extends GetxController {
 
   final RxBool isSearching = false.obs;
   final RxBool isLoadingMealsApi = false.obs;
+  /// True after at least one meals GET attempt finished (success or error).
+  final RxBool hasCompletedMealsFetch = false.obs;
   final RxnString searchErrorMessage = RxnString();
   final RxnString mealsApiErrorMessage = RxnString();
   final Rx<DateTime> selectedLogDate = MealEntry.normalizeDate(
@@ -102,9 +104,13 @@ class FoodController extends GetxController {
   Timer? _debounce;
   final Set<String> _goalCelebratedDates = <String>{};
   Future<void>? _refreshMealsFuture;
+  /// Args for the in-flight meals GET so identical retries can coalesce.
+  _MealsRefreshArgs? _refreshMealsArgs;
   Future<void>? _refreshCustomMealsFuture;
   Future<void>? _refreshMyFoodsFuture;
   Future<void>? _refreshFavouritesFuture;
+  /// Bumped in [clearSessionData] so in-flight meal GETs cannot apply to a new session.
+  int _sessionGeneration = 0;
   DateTime? _lastCustomMealsFetchAt;
   DateTime? _lastMyFoodsFetchAt;
   DateTime? _lastFavouritesFetchAt;
@@ -120,6 +126,11 @@ class FoodController extends GetxController {
   final Map<String, String> _catalogPhotoByName = <String, String>{};
   final Map<String, FoodItem> _catalogFoodByName = <String, FoodItem>{};
   final Set<String> _catalogPhotoMisses = <String>{};
+  /// In-flight `GET /search/foods` by normalized query — join, don't duplicate.
+  final Map<String, Future<List<FoodItem>>> _searchFoodsInFlight =
+      <String, Future<List<FoodItem>>>{};
+  /// Latest post-meals catalog enrichment (supplementary; never blocks meals success).
+  Future<void>? _mealCatalogHydrateInFlight;
   String? _dismissedBreakfastSuggestionDate;
   static const Duration _listRefreshCooldown = Duration(seconds: 20);
 
@@ -128,13 +139,18 @@ class FoodController extends GetxController {
     super.onInit();
 
     debugPrint("🔥 FoodController onInit called");
-
-    unawaited(_bootstrapFromServer());
+    // Network bootstrap is owned by [HomeHydrate] — no parallel onInit GETs.
     unawaited(loadRepeatYesterdayCardState());
   }
 
   /// Wipe in-memory meals so logout never leaves the previous user's diary.
   void clearSessionData() {
+    _sessionGeneration++;
+    _refreshMealsFuture = null;
+    _refreshMealsArgs = null;
+    _refreshCustomMealsFuture = null;
+    _refreshMyFoodsFuture = null;
+    _refreshFavouritesFuture = null;
     entries.clear();
     apiMeals.clear();
     favoriteMeals.clear();
@@ -153,19 +169,30 @@ class FoodController extends GetxController {
     _catalogPhotoByName.clear();
     _catalogFoodByName.clear();
     _catalogPhotoMisses.clear();
+    _searchFoodsInFlight.clear();
+    _mealCatalogHydrateInFlight = null;
     _lastCustomMealsFetchAt = null;
     _lastMyFoodsFetchAt = null;
     _lastFavouritesFetchAt = null;
     searchErrorMessage.value = null;
     mealsApiErrorMessage.value = null;
+    isLoadingMealsApi.value = false;
+    hasCompletedMealsFetch.value = false;
     entriesRevision.value++;
     debugPrint('FoodController: session data cleared');
   }
 
+  @visibleForTesting
+  int get debugSessionGeneration => _sessionGeneration;
+
+  /// In-flight post-meals catalog enrichment (if any).
+  @visibleForTesting
+  Future<void>? get debugMealCatalogHydrateInFlight =>
+      _mealCatalogHydrateInFlight;
+
   /// Pull fresh meals/catalog from the API after a new login.
   Future<void> reloadAfterLogin() => _bootstrapFromServer();
 
-  /// Always start empty and pull meals/catalog from the API (no disk cache).
   Future<void> _bootstrapFromServer() async {
     entries.clear();
     favoriteMeals.clear();
@@ -173,13 +200,21 @@ class FoodController extends GetxController {
     customFoodPresets.clear();
     entriesRevision.value++;
 
+    if (ApiClient.isRateLimited) {
+      debugPrint('FoodController: bootstrap deferred (rate-limited)');
+      return;
+    }
+
     await refreshMealsFromApi();
+    // Yesterday / last-logged day is only needed for "Repeat yesterday" — defer
+    // so home calorie overview is not blocked and we avoid an extra meals GET.
+    unawaited(_deferSecondaryBootstrap());
+  }
+
+  Future<void> _deferSecondaryBootstrap() async {
+    await Future<void>.delayed(const Duration(seconds: 5));
+    if (isClosed || ApiClient.isRateLimited) return;
     await ensureLastLoggedMealsLoaded();
-    await Future.wait([
-      refreshFavouritesFromApi(force: true),
-      refreshMyFoodsFromApi(force: true),
-      refreshCustomMealsFromApi(force: true),
-    ]);
   }
 
   Future<void> refreshFavouritesFromApi({bool force = false}) {
@@ -761,10 +796,10 @@ class FoodController extends GetxController {
     CustomMealPreset preset,
   ) async {
     var updated = withItemPhotos(preset);
-    final missing = {
-      for (final item in updated.items)
-        if ((item.food.imageUrl ?? '').trim().isEmpty) item.food.name.trim(),
-    }..removeWhere((name) => name.isEmpty);
+    final missing = _uniqueFoodNamesNeedingCatalog(
+      updated.items.map((item) => item.food),
+      needsImageOnly: true,
+    );
 
     if (missing.isNotEmpty) {
       await Future.wait(missing.map(_lookupCatalogPhoto));
@@ -805,10 +840,10 @@ class FoodController extends GetxController {
 
   Future<void> _hydrateFavouritePhotos() async {
     _rememberKnownFoodPhotos();
-    final missing = <String>{
-      for (final item in favoriteMeals)
-        if ((item.food.imageUrl ?? '').trim().isEmpty) item.food.name.trim(),
-    }..removeWhere((name) => name.isEmpty);
+    final missing = _uniqueFoodNamesNeedingCatalog(
+      favoriteMeals.map((item) => item.food),
+      needsImageOnly: true,
+    );
     if (missing.isEmpty) return;
 
     await Future.wait(missing.map(_lookupCatalogPhoto));
@@ -2230,10 +2265,19 @@ class FoodController extends GetxController {
     DateTime? fromDate,
     DateTime? toDate,
   }) {
+    final args = _MealsRefreshArgs(
+      date: date,
+      period: period,
+      fromDate: fromDate,
+      toDate: toDate,
+    );
     // Never coalesce onto an in-flight GET with different args — that can
     // restore a stale list and wipe an optimistic create/delete.
     final inFlight = _refreshMealsFuture;
     if (inFlight != null) {
+      if (_refreshMealsArgs == args) {
+        return inFlight;
+      }
       return inFlight.then(
         (_) => refreshMealsFromApi(
           date: date,
@@ -2244,6 +2288,7 @@ class FoodController extends GetxController {
       );
     }
 
+    _refreshMealsArgs = args;
     _refreshMealsFuture =
         _refreshMealsFromApi(
           date: date,
@@ -2252,6 +2297,7 @@ class FoodController extends GetxController {
           toDate: toDate,
         ).whenComplete(() {
           _refreshMealsFuture = null;
+          _refreshMealsArgs = null;
         });
 
     return _refreshMealsFuture!;
@@ -2276,11 +2322,14 @@ class FoodController extends GetxController {
     DateTime? fromDate,
     DateTime? toDate,
   }) async {
+    final sessionGen = _sessionGeneration;
     if (!Get.isRegistered<UserController>()) return;
 
     final userController = Get.find<UserController>();
     await userController.localProfileReady;
+    if (sessionGen != _sessionGeneration) return;
     await userController.loadAuthSession();
+    if (sessionGen != _sessionGeneration) return;
 
     if (!userController.isLoggedIn || userController.accessToken.isEmpty) {
       mealsApiErrorMessage.value = null;
@@ -2310,6 +2359,10 @@ class FoodController extends GetxController {
         fromDate: fromDate,
         toDate: toDate,
       );
+      if (sessionGen != _sessionGeneration) {
+        debugPrint('FoodController: meals result discarded (session cleared)');
+        return;
+      }
 
       debugPrint('FoodController: meals API returned ${fetched.length} meals');
       for (final meal in fetched.take(8)) {
@@ -2338,21 +2391,53 @@ class FoodController extends GetxController {
         entries.assignAll(preserved);
         _markEntriesDirty();
       }
-
-      _notifyStreakController();
-      unawaited(_hydrateMissingMealCatalog(preserved));
+      final catalogHydrate = _hydrateMissingMealCatalog(preserved);
+      _mealCatalogHydrateInFlight = catalogHydrate;
+      unawaited(
+        catalogHydrate.whenComplete(() {
+          if (identical(_mealCatalogHydrateInFlight, catalogHydrate)) {
+            _mealCatalogHydrateInFlight = null;
+          }
+        }),
+      );
     } on MealsApiException catch (error) {
+      if (sessionGen != _sessionGeneration) return;
       debugPrint('FoodController: meals API failed: $error');
       mealsApiErrorMessage.value = error.message;
+      // Never retry 401/403 — clear the dead session once.
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await _clearSessionOnAuthFailure(statusCode: error.statusCode);
+      }
     } catch (error) {
+      if (sessionGen != _sessionGeneration) return;
       debugPrint('FoodController: meals API failed: $error');
       mealsApiErrorMessage.value =
           'Unable to load meals. Please check your connection.';
     } finally {
-      isLoadingMealsApi.value = false;
-      pruneDeletingAnimations();
-      entriesRevision.value++;
+      if (sessionGen == _sessionGeneration) {
+        isLoadingMealsApi.value = false;
+        hasCompletedMealsFetch.value = true;
+        pruneDeletingAnimations();
+        entriesRevision.value++;
+      }
     }
+  }
+
+  Future<void> _clearSessionOnAuthFailure({
+    required int? statusCode,
+  }) async {
+    if (!Get.isRegistered<UserController>()) return;
+    final user = Get.find<UserController>();
+    if (user.isLoggingOut || user.isDeletingAccount || !user.isLoggedIn) {
+      return;
+    }
+    await user.clearInvalidSession(
+      // TEMPORARY — HOME_STUCK_DEBUG
+      debugController: 'FoodController',
+      debugEndpoint: 'GET /meals',
+      debugStatusCode: statusCode,
+      debugRequestType: 'GET',
+    );
   }
 
   List<MealEntry> _hydrateMealsFromCatalog(List<MealEntry> fetched) {
@@ -2364,16 +2449,34 @@ class FoodController extends GetxController {
   }
 
   Future<void> _hydrateMissingMealCatalog(List<MealEntry> meals) async {
-    final missing = <String>{
-      for (final meal in meals)
-        if (!meal.food.hasDisplayServing ||
-            (meal.food.imageUrl ?? '').trim().isEmpty)
-          meal.food.name.trim(),
-    }..removeWhere((name) => name.isEmpty);
+    final missing = _uniqueFoodNamesNeedingCatalog(
+      meals.map((meal) => meal.food),
+    );
     if (missing.isEmpty) return;
 
+    // Deduped names only; identical queries join via [searchFoodsEphemeral].
+    // Failures stay isolated — meals already loaded successfully above.
     await Future.wait(missing.map(_lookupCatalogFood));
     _applyCatalogToLoadedMeals();
+  }
+
+  /// Case-normalized unique food names that still need catalog enrichment.
+  ///
+  /// "Paneer" and "paneer" share one search; unrelated names stay separate.
+  List<String> _uniqueFoodNamesNeedingCatalog(
+    Iterable<FoodItem> foods, {
+    bool needsImageOnly = false,
+  }) {
+    final byKey = <String, String>{};
+    for (final food in foods) {
+      final name = food.name.trim();
+      if (name.isEmpty) continue;
+      final needsImage = (food.imageUrl ?? '').trim().isEmpty;
+      final needsServing = !needsImageOnly && !food.hasDisplayServing;
+      if (!needsImage && !needsServing) continue;
+      byKey.putIfAbsent(name.toLowerCase(), () => name);
+    }
+    return byKey.values.toList(growable: false);
   }
 
   void _applyCatalogToLoadedMeals() {
@@ -2631,9 +2734,30 @@ class FoodController extends GetxController {
   }
 
   /// Search without updating [searchQuery] / [searchResults] — for pickers.
-  Future<List<FoodItem>> searchFoodsEphemeral(String query) async {
+  ///
+  /// Concurrent callers with the same normalized query join one in-flight GET.
+  Future<List<FoodItem>> searchFoodsEphemeral(String query) {
     final trimmed = query.trim();
-    if (trimmed.isEmpty) return [];
+    if (trimmed.isEmpty) return Future.value(const []);
+
+    final key = trimmed.toLowerCase();
+    final inFlight = _searchFoodsInFlight[key];
+    if (inFlight != null) {
+      debugPrint('FoodController: searchFoods JOIN in-flight q=$key');
+      return inFlight;
+    }
+
+    late final Future<List<FoodItem>> started;
+    started = _searchFoodsEphemeral(trimmed).whenComplete(() {
+      if (identical(_searchFoodsInFlight[key], started)) {
+        _searchFoodsInFlight.remove(key);
+      }
+    });
+    _searchFoodsInFlight[key] = started;
+    return started;
+  }
+
+  Future<List<FoodItem>> _searchFoodsEphemeral(String trimmed) async {
     final accessToken = await _mealAccessToken();
     if (accessToken == null || accessToken.isEmpty) {
       throw const FoodApiException('Sign in to search foods.');
@@ -2935,13 +3059,7 @@ class FoodController extends GetxController {
   void _markEntriesDirty({DateTime? celebrationDay}) {
     entries.refresh();
     entriesRevision.value++;
-    _notifyStreakController();
     _maybeCelebrateCalorieGoal(day: celebrationDay);
-  }
-
-  void _notifyStreakController() {
-    if (!Get.isRegistered<StreakController>()) return;
-    Get.find<StreakController>().onMealsChanged();
   }
 
   void _maybeCelebrateCalorieGoal({DateTime? day}) {
@@ -3706,4 +3824,31 @@ class FoodController extends GetxController {
     _debounce?.cancel();
     super.onClose();
   }
+}
+
+class _MealsRefreshArgs {
+  const _MealsRefreshArgs({
+    this.date,
+    this.period,
+    this.fromDate,
+    this.toDate,
+  });
+
+  final DateTime? date;
+  final String? period;
+  final DateTime? fromDate;
+  final DateTime? toDate;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is _MealsRefreshArgs &&
+        other.date == date &&
+        other.period == period &&
+        other.fromDate == fromDate &&
+        other.toDate == toDate;
+  }
+
+  @override
+  int get hashCode => Object.hash(date, period, fromDate, toDate);
 }

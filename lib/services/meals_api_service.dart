@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/api_meal_mapper.dart';
 import '../models/meal_entry.dart';
@@ -53,7 +54,7 @@ class MealsApiService {
     required MealEntry entry,
   }) async {
     final body = ApiMealMapper.toCreateRequestBody(entry);
-    debugPrint('MealsApiService: POST ${ApiEndpoints.mealsUrl} $body');
+    debugPrint('MealsApiService: POST ${ApiEndpoints.mealsUrl} (payload redacted)');
 
     final response = await _apiClient.post(
       ApiEndpoints.meals,
@@ -75,7 +76,7 @@ class MealsApiService {
 
     final endpoint = ApiEndpoints.mealById(mealId);
     final body = ApiMealMapper.toUpdateRequestBody(entry);
-    debugPrint('MealsApiService: PATCH ${ApiEndpoints.url(endpoint)} $body');
+    debugPrint('MealsApiService: PATCH ${ApiEndpoints.url(endpoint)} (payload redacted)');
 
     final response = await _apiClient.patch(
       endpoint,
@@ -106,7 +107,7 @@ class MealsApiService {
     required MealEntry source,
   }) {
     final body = response.body.trim();
-    debugPrint('MealsApiService: response ${response.statusCode}: $body');
+    debugPrint('MealsApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 
@@ -132,7 +133,7 @@ class MealsApiService {
 
   void _parseDeleteResponse(http.Response response, {required String mealId}) {
     final body = response.body.trim();
-    debugPrint('MealsApiService: response ${response.statusCode}: $body');
+    debugPrint('MealsApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return;
@@ -158,7 +159,7 @@ class MealsApiService {
     required MealEntry source,
   }) {
     final body = response.body.trim();
-    debugPrint('MealsApiService: response ${response.statusCode}: $body');
+    debugPrint('MealsApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 
@@ -189,7 +190,7 @@ class MealsApiService {
     DateTime? fallbackDate,
   }) {
     final body = response.body.trim();
-    debugPrint('MealsApiService: response ${response.statusCode}: $body');
+    debugPrint('MealsApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 

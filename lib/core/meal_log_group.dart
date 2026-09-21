@@ -18,6 +18,11 @@ class MealLogGroup {
   /// Most recently added entry in the group (used for swipe-to-delete).
   MealEntry get lastEntry => entries.last;
 
+  /// Stable Flutter list key — must stay unique even if two corrupt rows
+  /// share the same server/local [MealEntry.id] but differ by name/portion.
+  String get listKey =>
+      '${representative.id}|${_groupKey(representative)}';
+
   static List<MealLogGroup> fromEntries(List<MealEntry> entries) {
     if (entries.isEmpty) return const [];
 

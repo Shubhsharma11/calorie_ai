@@ -164,7 +164,7 @@ class CalorieOverviewCard extends StatelessWidget {
                                   ),
                                   SizedBox(height: r.scale(14)),
                                   _SideStatRow(
-                                    label: 'Exercise',
+                                    label: 'Burned',
                                     value: burned,
                                     accent: const Color(0xFFFF9500),
                                     icon: TrainingIcon(
@@ -184,7 +184,7 @@ class CalorieOverviewCard extends StatelessWidget {
                         // Align with macros box inner content (Carbs / Fat / Protein).
                         padding: EdgeInsets.symmetric(horizontal: r.scale(10)),
                         child: Text(
-                          'Remaining = Goal − Food + Exercise',
+                          'Remaining = Goal − Food + Burned',
                           textAlign: TextAlign.left,
                           style: TextStyle(
                             fontSize: r.scale(12.5),
@@ -354,7 +354,7 @@ class _TodayIntakeHeader extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(width: r.scale(8)),
+        SizedBox(width: r.scale(8)),     
         IconButton(
           onPressed: onViewSummary,
           tooltip: 'View today',

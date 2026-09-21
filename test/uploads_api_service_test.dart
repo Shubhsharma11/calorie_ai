@@ -67,7 +67,7 @@ void main() {
   test('MediaUrl keeps API-relative catalog /uploads/ paths on the API host', () {
     expect(
       MediaUrl.resolve('/uploads/aam-panna.png'),
-      'https://fitbuddyai.srhsoftwares.com/uploads/aam-panna.png',
+      '${ApiEndpoints.baseUrl}/uploads/aam-panna.png',
     );
     expect(MediaUrl.apiImageKey('/uploads/aam-panna.png'), isNull);
   });
@@ -99,7 +99,7 @@ void main() {
       MediaUrl.fromJson({
         'icon': '/uploads/aam-panna.png',
       }),
-      'https://fitbuddyai.srhsoftwares.com/uploads/aam-panna.png',
+      '${ApiEndpoints.baseUrl}/uploads/aam-panna.png',
     );
     expect(MediaUrl.fromJson({'icon': '🥣', 'image': ''}), isNull);
   });

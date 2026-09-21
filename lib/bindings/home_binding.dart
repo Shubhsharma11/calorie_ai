@@ -9,11 +9,10 @@ import '../controllers/notifications_controller.dart';
 import '../controllers/rewards_controller.dart';
 import '../controllers/scan_controller.dart';
 import '../controllers/settings_controller.dart';
-import '../controllers/streak_controller.dart';
 import '../controllers/tracker_controller.dart';
 
 /// Registers controllers for the main app shell (tabs + features).
-class HomeBinding extends Bindings {  
+class HomeBinding extends Bindings {
   @override
   void dependencies() {
     if (!Get.isRegistered<MainController>()) {
@@ -23,10 +22,6 @@ class HomeBinding extends Bindings {
       Get.put(FoodController(), permanent: true);
     }
 
-    if (!Get.isRegistered<StreakController>()) {
-      Get.put(StreakController(), permanent: true);
-    }
-  
     if (!Get.isRegistered<DashboardController>()) {
       Get.put(DashboardController(), permanent: true);
     }

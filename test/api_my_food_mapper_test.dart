@@ -3,6 +3,7 @@ import 'package:calorie_ai/models/custom_food_preset.dart';
 import 'package:calorie_ai/models/food_item.dart';
 import 'package:calorie_ai/models/meal_type.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:calorie_ai/services/api_endpoints.dart';
 
 void main() {
   group('ApiMyFoodMapper', () {
@@ -285,7 +286,7 @@ void main() {
       expect(parsed, isNotNull);
       expect(
         parsed!.food.imageUrl,
-        'https://fitbuddyai.srhsoftwares.com/uploads/aam-panna.png',
+        '${ApiEndpoints.baseUrl}/uploads/aam-panna.png',
       );
     });
   });

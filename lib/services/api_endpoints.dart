@@ -1,14 +1,14 @@
 abstract final class ApiEndpoints {
 
   
-    // static const String baseUrl = 'https://mycaloriepal.com';
+    static const String baseUrl = 'https://mycaloriepal.com';
 
   /// Public S3 host for uploaded avatars (`avatars/<file>`).
   static const String s3PublicBaseUrl =
       'https://fitbuddyai.s3.ap-south-1.amazonaws.com';
 
 
-  static const String baseUrl = 'https://opposed-ozone-minority-moms.trycloudflare.com';
+  // static const String baseUrl = 'https://plc-modes-britannica-beaches.trycloudflare.com';
 
 
 
@@ -35,7 +35,7 @@ abstract final class ApiEndpoints {
   static const String weight = '$apiVersion/weight';
   static const String water = '$apiVersion/water';
   static const String steps = '$apiVersion/steps';
-  static const String claimable = '$apiVersion/claimable';
+  static const String claimable = '$apiVersion/coins/claimable';
   static const String coins = '$apiVersion/coins';
   static const String coinsClaim = '$apiVersion/coins/claim';
   static const String myFoods = '$apiVersion/my-foods';
@@ -111,6 +111,7 @@ abstract final class ApiEndpoints {
   static String favouriteMealLog(String favouriteMealId) =>
       '$favouriteMeals/${Uri.encodeComponent(favouriteMealId)}/log';
 
+
   static String myMealById(String myMealId) =>
       '$myMeals/${Uri.encodeComponent(myMealId)}';
 
@@ -160,7 +161,7 @@ abstract final class ApiEndpoints {
     return '$steps?$query';
   }
 
-  /// `GET /api/v1/claimable?date=YYYY-MM-DD&timezone=Asia/Kolkata`
+  /// `GET /api/v1/coins/claimable?date=YYYY-MM-DD&timezone=Asia/Kolkata`
   static String claimableWithQuery({
     required String date,
     required String timezone,

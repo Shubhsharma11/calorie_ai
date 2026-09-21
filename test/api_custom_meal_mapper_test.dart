@@ -4,6 +4,7 @@ import 'package:calorie_ai/models/food_item.dart';
 import 'package:calorie_ai/models/meal_type.dart';
 import 'package:calorie_ai/models/saved_meal_item.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:calorie_ai/services/api_endpoints.dart';
 
 void main() {
   test('ApiCustomMealMapper builds POST /api/v1/my-meals body', () {
@@ -201,7 +202,8 @@ void main() {
 
     final body = ApiCustomMealMapper.toCreateRequestBody(preset);
     expect(body['mealTime'], 'snack');
-    expect(body['visibility'], 'private');
+    // Default share visibility is public unless the preset sets onlyMe.
+    expect(body['visibility'], 'public');
   });
 
   test('ApiCustomMealMapper maps wrapped create response', () {
@@ -581,7 +583,7 @@ void main() {
     expect(presets.first.items[0].food.imageUrl, signed);
     expect(
       presets.first.items[1].food.imageUrl,
-      'https://fitbuddyai.srhsoftwares.com/uploads/chana-dal.png',
+      '${ApiEndpoints.baseUrl}/uploads/chana-dal.png',
     );
     expect(
       presets.first.items[2].food.imageUrl,

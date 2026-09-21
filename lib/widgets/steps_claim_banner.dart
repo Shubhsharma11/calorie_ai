@@ -1,11 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../controllers/rewards_controller.dart';
 import '../controllers/tracker_controller.dart';
+import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
 import '../routes/app_routes.dart';
 import 'coin_claim_lottery_dialog.dart';
@@ -26,14 +25,6 @@ class _StepsClaimBannerState extends State<StepsClaimBanner> {
   static const _iconFg = Color(0xFF1B8F3A);
 
   @override
-  void initState() {
-    super.initState();
-    if (Get.isRegistered<RewardsController>()) {
-      unawaited(Get.find<RewardsController>().refreshCoinsFromApi());
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final r = context.responsive;
     if (!Get.isRegistered<RewardsController>()) {
@@ -49,17 +40,39 @@ class _StepsClaimBannerState extends State<StepsClaimBanner> {
       final steps = rewards.todaySteps;
       final goal = rewards.stepsGoal;
       final claimed = rewards.hasClaimedToday;
-      final pending = rewards.pendingCoins;
+      final todayPending = rewards.pendingCoins;
+      final yesterdayPending = rewards.yesterdayPendingCoins;
+      final pending = todayPending > 0 ? todayPending : yesterdayPending;
+      final claimingYesterday = todayPending <= 0 && yesterdayPending > 0;
       final canClaim = pending > 0 && !rewards.isClaiming.value;
       final claiming = rewards.isClaiming.value;
+      final claimableLoading = rewards.isLoadingClaimable.value;
+      final claimableCompleted = rewards.hasCompletedClaimableFetch.value;
+      final claimableError = rewards.claimableApiErrorMessage.value;
       rewards.claimableCoins.value;
+      rewards.claimableByDate.length;
       rewards.balance.value;
 
-      final subtitle = canClaim
-          ? '+$pending coins ready — claim to update balance'
-          : claimed
-              ? 'Open store to unlock gifts with your balance'
-              : 'Keep walking — claimable coins show here when ready';
+      final showClaimableLoading = !claimableCompleted && claimableLoading;
+      final showClaimableError =
+          claimableError != null && !claimableLoading;
+
+      final String subtitle;
+      if (showClaimableLoading) {
+        subtitle = 'Loading today’s rewards…';
+      } else if (showClaimableError) {
+        subtitle = claimableError;
+      } else if (canClaim) {
+        subtitle = claimingYesterday
+            ? '+$pending from yesterday — claim to update balance'
+            : todayPending > 0 && yesterdayPending > 0
+                ? '+$todayPending today, +$yesterdayPending yesterday — claim'
+                : '+$pending coins ready — claim to update balance';
+      } else if (claimed && yesterdayPending <= 0) {
+        subtitle = 'Open store to unlock gifts with your balance';
+      } else {
+        subtitle = 'Keep walking — claimable coins show here when ready';
+      }
 
       return Container(
         padding: EdgeInsets.fromLTRB(
@@ -124,7 +137,9 @@ class _StepsClaimBannerState extends State<StepsClaimBanner> {
                     style: TextStyle(
                       fontSize: r.scale(12.5),
                       fontWeight: FontWeight.w500,
-                      color: const Color(0xFF8E8E93),
+                      color: showClaimableError
+                          ? const Color(0xFFB42318)
+                          : const Color(0xFF8E8E93),
                       height: 1.25,
                     ),
                   ),
@@ -132,19 +147,44 @@ class _StepsClaimBannerState extends State<StepsClaimBanner> {
               ),
             ),
             SizedBox(width: r.scale(8)),
-            // Claim only updates wallet. Store opens from the coin chip.
-            if (canClaim || claiming)
+            if (showClaimableLoading)
               _ClaimPill(
-                label: 'Claim $pending',
+                label: '…',
+                enabled: false,
+                loading: true,
+                claimed: false,
+                onTap: () {},
+              )
+            else if (showClaimableError)
+              _ClaimPill(
+                label: 'Retry',
+                enabled: true,
+                loading: false,
+                claimed: false,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  rewards.retryClaimableToday();
+                },
+              )
+            else if (canClaim || claiming)
+              _ClaimPill(
+                label: todayPending > 0 && yesterdayPending > 0
+                    ? 'Claim ${todayPending + yesterdayPending}'
+                    : 'Claim $pending',
                 enabled: canClaim && !claiming,
                 loading: claiming,
                 claimed: false,
                 onTap: () async {
                   HapticFeedback.mediumImpact();
-                  final claimedAmount = rewards.pendingCoins;
-                  final ok = await rewards.claimDailyStepReward();
-                  if (ok) {
-                    await CoinClaimLotteryDialog.show(coins: claimedAmount);
+                  final total = await rewards.claimPendingStepRewards();
+                  if (total > 0) {
+                    await CoinClaimLotteryDialog.show(coins: total);
+                  } else {
+                    AppSnackbar.error(
+                      rewards.lastClaimError.value ??
+                          'Couldn’t claim coins. Try again.',
+                      title: 'Claim failed',
+                    );
                   }
                 },
               )
@@ -154,6 +194,7 @@ class _StepsClaimBannerState extends State<StepsClaimBanner> {
                 enabled: true,
                 loading: false,
                 claimed: claimed,
+                showChevron: true,
                 onTap: StepsClaimBanner.openRewardsShop,
               ),
           ],
@@ -177,6 +218,7 @@ class _ClaimPill extends StatelessWidget {
     required this.loading,
     required this.claimed,
     required this.onTap,
+    this.showChevron = false,
   });
 
   final String label;
@@ -184,6 +226,7 @@ class _ClaimPill extends StatelessWidget {
   final bool loading;
   final bool claimed;
   final VoidCallback onTap;
+  final bool showChevron;
 
   static const _readyGreen = Color(0xFF34C759);
   static const _lockedBg = Color(0xFFF2F2F7);
@@ -197,10 +240,10 @@ class _ClaimPill extends StatelessWidget {
 
     final Color bg;
     final Color fg;
-    if (claimed) {
+    if (claimed && !showChevron) {
       bg = _claimedBg;
       fg = _claimedText;
-    } else if (enabled || loading) {
+    } else if (enabled || loading || showChevron) {
       bg = _readyGreen;
       fg = Colors.white;
     } else {
@@ -212,13 +255,13 @@ class _ClaimPill extends StatelessWidget {
       color: bg,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
-        onTap: enabled ? onTap : null,
+        onTap: (enabled || showChevron) ? onTap : null,
         borderRadius: BorderRadius.circular(20),
         child: Container(
           height: r.scale(38),
           padding: EdgeInsets.only(
             left: r.scale(14),
-            right: r.scale(10),
+            right: r.scale(showChevron ? 8 : 10),
           ),
           alignment: Alignment.center,
           child: loading
@@ -242,17 +285,21 @@ class _ClaimPill extends StatelessWidget {
                         height: 1,
                       ),
                     ),
-                    if (!claimed) ...[
-                      SizedBox(width: r.scale(6)),
-                      RewardCoinIcon(size: r.scale(17)),
-                    ] else ...[
-                      SizedBox(width: r.scale(4)),
+                    SizedBox(width: r.scale(showChevron ? 2 : 6)),
+                    if (showChevron)
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: r.scale(20),
+                        color: fg,
+                      )
+                    else if (!claimed)
+                      RewardCoinIcon(size: r.scale(17))
+                    else
                       Icon(
                         Icons.chevron_right_rounded,
                         size: r.scale(18),
                         color: fg,
                       ),
-                    ],
                   ],
                 ),
         ),
@@ -268,6 +315,8 @@ class CoinBalanceChip extends StatelessWidget {
 
   static const _chipBg = Color(0xFFFFF4D6);
   static const _chipText = Color(0xFF9A6700);
+  static const _errorBg = Color(0xFFFFF0F0);
+  static const _errorText = Color(0xFFB42318);
 
   @override
   Widget build(BuildContext context) {
@@ -278,7 +327,68 @@ class CoinBalanceChip extends StatelessWidget {
     final rewards = Get.find<RewardsController>();
 
     return Obx(() {
+      final loading = rewards.isLoadingWallet.value;
+      final completed = rewards.hasCompletedWalletFetch.value;
+      final error = rewards.walletApiErrorMessage.value;
       final value = rewards.balance.value;
+
+      if (error != null && !loading) {
+        return Material(
+          color: _errorBg,
+          borderRadius: BorderRadius.circular(22),
+          child: InkWell(
+            onTap: () => rewards.refreshWalletFromApi(),
+            borderRadius: BorderRadius.circular(22),
+            child: Container(
+              height: 42,
+              padding: EdgeInsets.symmetric(horizontal: r.scale(12)),
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.error_outline_rounded,
+                    size: r.scale(16),
+                    color: _errorText,
+                  ),
+                  SizedBox(width: r.scale(6)),
+                  Text(
+                    'Retry',
+                    style: TextStyle(
+                      fontSize: r.scale(13),
+                      fontWeight: FontWeight.w800,
+                      color: _errorText,
+                      height: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Never paint a pre-API / invented balance — wait for wallet GET.
+      if (!completed) {
+        return Material(
+          color: _chipBg,
+          borderRadius: BorderRadius.circular(22),
+          child: Container(
+            height: 42,
+            padding: EdgeInsets.symmetric(horizontal: r.scale(14)),
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: r.scale(16),
+              height: r.scale(16),
+              child: const CircularProgressIndicator(
+                strokeWidth: 2.2,
+                color: _chipText,
+              ),
+            ),
+          ),
+        );
+      }
+
       return Material(
         color: _chipBg,
         borderRadius: BorderRadius.circular(22),

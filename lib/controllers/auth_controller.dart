@@ -9,6 +9,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../routes/app_routes.dart';
 import '../core/app_snackbar.dart';
+import '../core/auth_token_debug.dart';
 import '../services/analytics_service.dart';
 import '../services/auth_api_service.dart';
 import '../services/phone_hint_service.dart';
@@ -115,7 +116,7 @@ class AuthController extends GetxController {
       // Account chosen — now show loading for backend auth.
       isSigningInWithGoogle.value = true;
 
-      debugPrint('AuthController: Google sign-in returned ${googleUser.email}');
+      debugPrint('AuthController: Google sign-in returned account');
 
       final googleAuth = googleUser.authentication;
       final idToken = googleAuth.idToken;
@@ -130,13 +131,24 @@ class AuthController extends GetxController {
       final backendResponse = await _authApi.loginWithGoogleIdToken(idToken);
       debugPrint('AuthController: backend Google login completed');
 
-      final accessToken = _readBackendString(backendResponse, 'accessToken');
-      final refreshToken = _readBackendString(backendResponse, 'refreshToken');
+      final accessToken = UserController.readBackendString(
+        backendResponse,
+        'accessToken',
+      );
+      final refreshToken = UserController.readBackendString(
+        backendResponse,
+        'refreshToken',
+      );
       if (accessToken.isEmpty) {
         throw const AuthApiException(
           'Backend login did not return an access token.',
         );
       }
+      AuthTokenDebug.log(
+        'Auth: Google login extracted accessToken',
+        accessToken,
+        source: 'backend_response',
+      );
       final accessTokenClaims = _decodeJwtClaims(accessToken);
 
       final user = Get.find<UserController>();
@@ -160,25 +172,25 @@ class AuthController extends GetxController {
         'AuthController: access token saved length=${accessToken.length}',
       );
 
-      // Profile is loaded inside saveGoogleLoginDetails. Rate limits (429) must
-      // not send an existing account through personal-details again.
-      if (user.user.hasProfileBasics || user.isSetupComplete) {
-        await user.markOnboardingComplete();
-        MainController.resetHomeTabIfRegistered();
-        Get.offAllNamed(AppRoutes.main);
-      } else if (user.lastProfileFetchStatusCode == 429 &&
-          (UserController.readEmailVerified(backendResponse) ||
-              user.isLikelyExistingBackendUser)) {
+      // Existing accounts open Home immediately (cached). Profile sync is quiet.
+      if (user.isSetupComplete ||
+          user.isLikelyExistingBackendUser ||
+          user.user.hasProfileBasics ||
+          user.lastProfileFetchStatusCode == 429) {
         debugPrint(
-          'AuthController: profile rate-limited for existing user — opening home',
+          'AuthController: existing Google user — opening home (quiet sync)',
         );
-        await user.markOnboardingComplete();
+        if (!user.isSetupComplete) {
+          await user.markOnboardingComplete();
+        }
         MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);
-        // Do not refetch while rate-limited — cooldown in UserController owns the next try.
       } else {
         await user.restoreOnboardingProgress();
         final resumeRoute = await user.resolveSetupResumeRoute();
+        if (resumeRoute == AppRoutes.main) {
+          MainController.resetHomeTabIfRegistered();
+        }
         Get.offAllNamed(resumeRoute);
       }
     } on GoogleSignInException catch (e) {
@@ -236,9 +248,9 @@ class AuthController extends GetxController {
       }
 
       debugPrint('AuthController: Apple sign-in success');
-      debugPrint('Apple email: ${credential.email}');
       debugPrint(
-        'Apple name: ${credential.givenName} ${credential.familyName}',
+        'Apple name present: '
+        '${credential.givenName != null || credential.familyName != null}',
       );
 
       final appleName = appleDisplayName(
@@ -257,14 +269,25 @@ class AuthController extends GetxController {
 
       debugPrint('APPLE BACKEND RESPONSE: $backendResponse');
 
-      final accessToken = _readBackendString(backendResponse, 'accessToken');
-      final refreshToken = _readBackendString(backendResponse, 'refreshToken');
+      final accessToken = UserController.readBackendString(
+        backendResponse,
+        'accessToken',
+      );
+      final refreshToken = UserController.readBackendString(
+        backendResponse,
+        'refreshToken',
+      );
 
       if (accessToken.isEmpty) {
         throw const AuthApiException(
           'Backend Apple login did not return access token.',
         );
       }
+      AuthTokenDebug.log(
+        'Auth: Apple login extracted accessToken',
+        accessToken,
+        source: 'backend_response',
+      );
 
       final claims = _decodeJwtClaims(accessToken);
       final user = Get.find<UserController>();
@@ -289,13 +312,25 @@ class AuthController extends GetxController {
 
       debugPrint('AuthController: Apple user saved');
 
-      if (user.user.hasProfileBasics || user.isSetupComplete) {
-        await user.markOnboardingComplete();
+      // Existing accounts open Home immediately (cached). Profile sync is quiet.
+      if (user.isSetupComplete ||
+          user.isLikelyExistingBackendUser ||
+          user.user.hasProfileBasics ||
+          user.lastProfileFetchStatusCode == 429) {
+        debugPrint(
+          'AuthController: existing Apple user — opening home (quiet sync)',
+        );
+        if (!user.isSetupComplete) {
+          await user.markOnboardingComplete();
+        }
         MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);
       } else {
         await user.restoreOnboardingProgress();
         final route = await user.resolveSetupResumeRoute();
+        if (route == AppRoutes.main) {
+          MainController.resetHomeTabIfRegistered();
+        }
         Get.offAllNamed(route);
       }
     } on SignInWithAppleAuthorizationException catch (e) {
@@ -514,13 +549,24 @@ class AuthController extends GetxController {
 
       debugPrint('AuthController: sending phone ID token to backend');
       final backendResponse = await _authApi.loginWithPhoneIdToken(idToken);
-      final accessToken = _readBackendString(backendResponse, 'accessToken');
-      final refreshToken = _readBackendString(backendResponse, 'refreshToken');
+      final accessToken = UserController.readBackendString(
+        backendResponse,
+        'accessToken',
+      );
+      final refreshToken = UserController.readBackendString(
+        backendResponse,
+        'refreshToken',
+      );
       if (accessToken.isEmpty) {
         throw const AuthApiException(
           'Backend phone login did not return an access token.',
         );
       }
+      AuthTokenDebug.log(
+        'Auth: Phone login extracted accessToken',
+        accessToken,
+        source: 'backend_response',
+      );
 
       final claims = _decodeJwtClaims(accessToken);
       final user = Get.find<UserController>();
@@ -535,11 +581,7 @@ class AuthController extends GetxController {
       );
       await _logAuthAnalytics(user: user, method: 'phone');
 
-      if (user.user.hasProfileBasics || user.isSetupComplete) {
-        await user.markOnboardingComplete();
-        MainController.resetHomeTabIfRegistered();
-        Get.offAllNamed(AppRoutes.main);
-      } else if (user.lastProfileFetchStatusCode == 429 &&
+      if (user.lastProfileFetchStatusCode == 429 &&
           (UserController.readEmailVerified(backendResponse) ||
               user.isLikelyExistingBackendUser)) {
         await user.markOnboardingComplete();
@@ -548,6 +590,9 @@ class AuthController extends GetxController {
       } else {
         await user.restoreOnboardingProgress();
         final resumeRoute = await user.resolveSetupResumeRoute();
+        if (resumeRoute == AppRoutes.main) {
+          MainController.resetHomeTabIfRegistered();
+        }
         Get.offAllNamed(resumeRoute);
       }
     } on AuthApiException catch (e) {
@@ -644,30 +689,8 @@ class AuthController extends GetxController {
     }
   }
 
-  String _readBackendString(Map<String, dynamic> response, String key) {
-    final value = response[key];
-    if (value is String) return value;
-
-    final tokens = response['tokens'];
-    if (tokens is Map<String, dynamic>) {
-      final tokenValue = tokens[key];
-      if (tokenValue is String) return tokenValue;
-    }
-
-    final data = response['data'];
-    if (data is Map<String, dynamic>) {
-      final nestedValue = data[key];
-      if (nestedValue is String) return nestedValue;
-
-      final nestedTokens = data['tokens'];
-      if (nestedTokens is Map<String, dynamic>) {
-        final tokenValue = nestedTokens[key];
-        if (tokenValue is String) return tokenValue;
-      }
-    }
-
-    return '';
-  }
+  // Kept for JWT claim decoding only; token field extraction uses
+  // [UserController.readBackendString] so Google/Apple/Phone stay consistent.
 
   Map<String, dynamic> _decodeJwtClaims(String token) {
     final parts = token.split('.');

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/api_my_food_mapper.dart';
 import '../models/custom_food_preset.dart';
@@ -73,7 +74,7 @@ class MyFoodsApiService {
     );
 
     debugPrint(
-      'MyFoodsApiService: POST ${ApiEndpoints.myFoodsUrl} $body',
+      'MyFoodsApiService: POST ${ApiEndpoints.myFoodsUrl} (payload redacted)',
     );
 
     final response = await _apiClient.post(
@@ -101,7 +102,7 @@ class MyFoodsApiService {
     );
 
     debugPrint(
-      'MyFoodsApiService: PATCH ${ApiEndpoints.url(endpoint)} $body',
+      'MyFoodsApiService: PATCH ${ApiEndpoints.url(endpoint)} (payload redacted)',
     );
 
     final response = await _apiClient.patch(
@@ -133,7 +134,7 @@ class MyFoodsApiService {
     );
 
     debugPrint(
-      'MyFoodsApiService: POST ${ApiEndpoints.url(endpoint)} $body',
+      'MyFoodsApiService: POST ${ApiEndpoints.url(endpoint)} (payload redacted)',
     );
 
     final response = await _apiClient.post(
@@ -171,7 +172,7 @@ class MyFoodsApiService {
 
   List<CustomFoodPreset> _parseListResponse(http.Response response) {
     final body = response.body.trim();
-    debugPrint('MyFoodsApiService: GET list ${response.statusCode}: $body');
+    debugPrint('MyFoodsApiService: GET list ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
     _throwIfFailed(
@@ -192,7 +193,7 @@ class MyFoodsApiService {
     CustomFoodPreset? source,
   }) {
     final body = response.body.trim();
-    debugPrint('MyFoodsApiService: GET one ${response.statusCode}: $body');
+    debugPrint('MyFoodsApiService: GET one ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
     _throwIfFailed(response, decoded, action: action, url: url);
@@ -224,7 +225,7 @@ class MyFoodsApiService {
     required CustomFoodPreset source,
   }) {
     final body = response.body.trim();
-    debugPrint('MyFoodsApiService: POST save ${response.statusCode}: $body');
+    debugPrint('MyFoodsApiService: POST save ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
     _throwIfFailed(
@@ -255,7 +256,7 @@ class MyFoodsApiService {
     required String url,
   }) {
     final body = response.body.trim();
-    debugPrint('MyFoodsApiService: PATCH update ${response.statusCode}: $body');
+    debugPrint('MyFoodsApiService: PATCH update ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
     _throwIfFailed(
@@ -290,9 +291,7 @@ class MyFoodsApiService {
     required String url,
   }) {
     final body = response.body.trim();
-    debugPrint(
-      'MyFoodsApiService: $action ${response.statusCode}: $body',
-    );
+    debugPrint('MyFoodsApiService: $action ${safeHttpResponseLog(response.statusCode, body)}');
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return;

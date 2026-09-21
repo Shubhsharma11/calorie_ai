@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/meal_streak_model.dart';
 import 'api_client.dart';
@@ -37,9 +38,7 @@ class MealStreakApiService {
 
   MealStreakModel _parseResponse(http.Response response) {
     final body = response.body.trim();
-    debugPrint(
-      'MealStreakApiService: response ${response.statusCode}: $body',
-    );
+    debugPrint('MealStreakApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 
@@ -49,7 +48,7 @@ class MealStreakApiService {
           : null;
       throw MealStreakApiException(
         message ??
-            'Meal streak request failed (${response.statusCode}). $body',
+            'Meal streak request failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }

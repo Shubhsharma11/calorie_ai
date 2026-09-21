@@ -39,6 +39,26 @@ class WaterIntakeBanner extends StatelessWidget {
       final viewingToday = food?.isViewingToday ?? true;
       final viewDate = food?.selectedLogDate.value;
       final logDate = viewDate ?? DateTime.now();
+      final _ = tracker.waterRevision.value;
+      final waterLoading = tracker.isLoadingWaterToday.value;
+      final waterCompleted = tracker.hasCompletedWaterTodayFetch.value;
+      final waterError = tracker.waterTodayApiErrorMessage.value;
+
+      if (viewingToday && waterError != null && !waterLoading) {
+        final errorCard = _WaterErrorCard(
+          message: waterError,
+          onRetry: () => tracker.retryWaterToday(),
+        );
+        if (coachKey == null) return errorCard;
+        return AppCoachMarks.target(key: coachKey!, child: errorCard);
+      }
+
+      if (viewingToday && !waterCompleted && waterLoading) {
+        final loadingCard = const _WaterLoadingCard();
+        if (coachKey == null) return loadingCard;
+        return AppCoachMarks.target(key: coachKey!, child: loadingCard);
+      }
+
       final waterMl = viewDate == null
           ? tracker.waterMl
           : tracker.waterForDate(viewDate);
@@ -61,7 +81,6 @@ class WaterIntakeBanner extends StatelessWidget {
       final overGlasses = glasses > goalGlasses ? glasses - goalGlasses : 0;
       final remainingGlasses =
           (goalGlasses - glasses).clamp(0, goalGlasses);
-      final _ = tracker.waterRevision.value;
       final color = isComplete ? AppColors.primary : _waterBlue;
       final dayWord = viewingToday ? 'today' : 'this day';
      final headerText = isComplete
@@ -256,6 +275,111 @@ class WaterIntakeBanner extends StatelessWidget {
       if (coachKey == null) return card;
       return AppCoachMarks.target(key: coachKey!, child: card);
     });
+  }
+}
+
+class _WaterLoadingCard extends StatelessWidget {
+  const _WaterLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: r.scale(14),
+        vertical: r.scale(22),
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: r.scale(18),
+            height: r.scale(18),
+            child: CircularProgressIndicator(
+              strokeWidth: 2.2,
+              color: WaterIntakeBanner._waterBlue,
+            ),
+          ),
+          SizedBox(width: r.scale(12)),
+          Text(
+            'Loading water…',
+            style: TextStyle(
+              fontSize: r.scale(13),
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WaterErrorCard extends StatelessWidget {
+  const _WaterErrorCard({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(r.scale(14)),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.error_outline_rounded,
+            color: AppColors.error,
+            size: r.scale(22),
+          ),
+          SizedBox(width: r.scale(10)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Couldn’t load water',
+                  style: TextStyle(
+                    fontSize: r.scale(14),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: r.scale(2)),
+                Text(
+                  message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: r.scale(12),
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: onRetry,
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

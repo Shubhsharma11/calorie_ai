@@ -87,6 +87,8 @@ void main() {
     );
 
     final today = MealEntry.normalizeDate(DateTime.now());
+    // Corrupt / racey data: same id, different portions → two MealLogGroups.
+    // List keys must still be unique so Flutter does not throw.
     food.entries.addAll([
       MealEntry(
         id: 'duplicate-id',
@@ -110,8 +112,15 @@ void main() {
         home: Scaffold(body: DailyLogView()),
       ),
     );
+    await tester.pump();
 
-    final error = tester.takeException();
-    expect(error, isNull);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Daily Log'), findsOneWidget);
+    expect(find.text('Breakfast'), findsOneWidget);
+    expect(find.text('Oats'), findsWidgets);
+    expect(find.byKey(const ValueKey('meal-item-duplicate-id|oats|150')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('meal-item-duplicate-id|oats|100')),
+        findsOneWidget);
   });
 }

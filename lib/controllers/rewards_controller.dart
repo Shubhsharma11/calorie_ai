@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -8,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api_timezone.dart';
 import '../models/claimable_result.dart';
 import '../models/meal_entry.dart';
+import '../services/api_client.dart';
 import '../services/coins_api_service.dart';
 import 'tracker_controller.dart';
 import 'user_controller.dart';
@@ -166,7 +166,8 @@ extension GiftDeliveryStageX on GiftDeliveryStage {
   int get stepIndex => index;
 }
 
-/// Local wallet, daily claimable coins from API, and gift unlock shop.
+/// API-backed wallet + claimable coins. Shop catalog is local UI only —
+/// purchases are not supported until a backend spend endpoint exists.
 class RewardsController extends GetxController {
   RewardsController({CoinsApiService? coinsApi})
       : _coinsApi = coinsApi ?? CoinsApiService();
@@ -236,10 +237,29 @@ class RewardsController extends GetxController {
   final balance = _defaultBalance.obs;
   final claimedDateKey = ''.obs;
   final isClaiming = false.obs;
-  /// Coins available to claim from GET /api/v1/claimable.
+  /// Coins available to claim from GET /api/v1/coins/claimable (today).
   final claimableCoins = 0.obs;
+  /// Claimable coins keyed by `YYYY-MM-DD` (today, yesterday, custom days).
+  final RxMap<String, int> claimableByDate = <String, int>{}.obs;
+  /// Earned / display coins keyed by `YYYY-MM-DD` (from claimable API when present).
+  final RxMap<String, int> earnedCoinsByDate = <String, int>{}.obs;
   final isLoadingClaimable = false.obs;
+  /// True after today's claimable GET finishes (success or error).
+  final hasCompletedClaimableFetch = false.obs;
+  final RxnString claimableApiErrorMessage = RxnString();
+  final isLoadingWallet = false.obs;
+  /// True after a wallet GET finishes (success or error).
+  final hasCompletedWalletFetch = false.obs;
+  final RxnString walletApiErrorMessage = RxnString();
+  final Map<String, Future<void>> _claimableFetchInFlight = {};
+  Future<void>? _walletFetchInFlight;
+  bool _walletRetryScheduled = false;
+  /// Bumped in [clearSessionData] so in-flight wallet/claimable/retry cannot
+  /// update a new session.
+  int _sessionGeneration = 0;
   final unlockingId = RxnString();
+  /// Last claim failure message (for snackbars). Cleared on each claim attempt.
+  final lastClaimError = RxnString();
   final unlockedIds = <String>{}.obs;
   /// itemId → ISO unlock timestamp (when it entered My gifts).
   final unlockedAtById = <String, String>{}.obs;
@@ -248,20 +268,20 @@ class RewardsController extends GetxController {
   /// Last saved address reused for the next unlock checkout.
   final savedShipping = Rxn<GiftShippingAddress>();
 
-  SharedPreferences? _prefs;
-
   String get _userScope {
     if (!Get.isRegistered<UserController>()) return 'guest';
     final id = Get.find<UserController>().userId.trim();
     return id.isEmpty ? 'guest' : id;
   }
 
-  String get _balanceKey => 'rewards_coin_balance_v1_$_userScope';
-  String get _claimedKey => 'rewards_steps_claimed_date_v1_$_userScope';
-  String get _unlockedKey => 'rewards_unlocked_items_v1_$_userScope';
-  String get _unlockedAtKey => 'rewards_unlocked_at_v1_$_userScope';
-  String get _orderShippingKey => 'rewards_order_shipping_v1_$_userScope';
-  String get _savedShippingKey => 'rewards_saved_shipping_v1_$_userScope';
+  /// Legacy prefs keys (no longer a source of truth — wiped on clear/load).
+  String get _legacyBalanceKey => 'rewards_coin_balance_v1_$_userScope';
+  String get _legacyClaimedKey => 'rewards_steps_claimed_date_v1_$_userScope';
+  String get _legacyEarnedByDateKey => 'rewards_earned_by_date_v1_$_userScope';
+  String get _legacyUnlockedKey => 'rewards_unlocked_items_v1_$_userScope';
+  String get _legacyUnlockedAtKey => 'rewards_unlocked_at_v1_$_userScope';
+  String get _legacyOrderShippingKey => 'rewards_order_shipping_v1_$_userScope';
+  String get _legacySavedShippingKey => 'rewards_saved_shipping_v1_$_userScope';
 
   String get _todayKey {
     final now = DateTime.now();
@@ -274,13 +294,58 @@ class RewardsController extends GetxController {
 
   bool get canClaimToday {
     if (isClaiming.value) return false;
-    if (claimableCoins.value > 0) return true;
-    return false;
+    return pendingCoins > 0;
   }
 
-  /// Coins ready to claim from GET /api/v1/claimable (or steps.coins).
-  int get pendingCoins =>
-      claimableCoins.value > 0 ? claimableCoins.value : 0;
+  /// Coins ready to claim from GET /api/v1/coins/claimable (or steps.coins).
+  int get pendingCoins => claimableForDate(DateTime.now());
+
+  int get yesterdayPendingCoins => claimableForDate(
+        MealEntry.normalizeDate(DateTime.now()).subtract(const Duration(days: 1)),
+      );
+
+  int claimableForDate(DateTime date) {
+    final key = MealEntry.dateToKey(MealEntry.normalizeDate(date));
+    final mapped = claimableByDate[key];
+    if (mapped != null) return mapped < 0 ? 0 : mapped;
+    if (key == _todayKey) {
+      return claimableCoins.value > 0 ? claimableCoins.value : 0;
+    }
+    return 0;
+  }
+
+  /// Coins to show in burn history for a day (claimable first, else earned).
+  /// Never invents a fake daily reward — claim UI uses [claimableForDate] only.
+  int coinsDisplayForDate(DateTime date) {
+    final day = MealEntry.normalizeDate(date);
+    final key = MealEntry.dateToKey(day);
+    final claimable = claimableForDate(day);
+    final earned = earnedCoinsByDate[key] ?? 0;
+    if (claimable > 0 && earned > 0) {
+      return claimable > earned ? claimable : earned;
+    }
+    if (claimable > 0) return claimable;
+    if (earned > 0) return earned;
+    return 0;
+  }
+
+  bool hasCoinsDataForDate(DateTime date) {
+    final key = MealEntry.dateToKey(MealEntry.normalizeDate(date));
+    return claimableByDate.containsKey(key) || earnedCoinsByDate.containsKey(key);
+  }
+
+  /// Remember the highest known day total from API responses this session
+  /// (memory only — never persisted).
+  void _rememberEarnedForDate(String key, int amount) {
+    if (amount <= 0) return;
+    final prev = earnedCoinsByDate[key] ?? 0;
+    if (amount <= prev) return;
+    earnedCoinsByDate[key] = amount;
+    earnedCoinsByDate.refresh();
+  }
+
+  /// True when that day still has coins waiting to be claimed.
+  bool canClaimForDate(DateTime date) => claimableForDate(date) > 0;
 
   int get todaySteps {
     if (!Get.isRegistered<TrackerController>()) return 0;
@@ -395,135 +460,332 @@ class RewardsController extends GetxController {
     unawaited(load());
   }
 
+  /// Wipes legacy reward prefs (no longer a source of truth). Network hydrate
+  /// is owned by [HomeHydrate].
   Future<void> load() async {
-    _prefs ??= await SharedPreferences.getInstance();
-    balance.value = _prefs!.getInt(_balanceKey) ?? _defaultBalance;
-    claimedDateKey.value = _prefs!.getString(_claimedKey) ?? '';
+    await _wipeLegacyRewardPrefs();
+  }
 
-    final raw = _prefs!.getString(_unlockedKey);
-    unlockedIds.clear();
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(raw);
-        if (decoded is List) {
-          unlockedIds.addAll(decoded.whereType<String>());
-        }
-      } catch (e, st) {
-        debugPrint('RewardsController: unlock list parse failed: $e\n$st');
-      }
+  Future<void> _wipeLegacyRewardPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_legacyBalanceKey);
+      await prefs.remove(_legacyClaimedKey);
+      await prefs.remove(_legacyEarnedByDateKey);
+      await prefs.remove(_legacyUnlockedKey);
+      await prefs.remove(_legacyUnlockedAtKey);
+      await prefs.remove(_legacyOrderShippingKey);
+      await prefs.remove(_legacySavedShippingKey);
+    } catch (e, st) {
+      debugPrint('RewardsController: legacy prefs wipe failed: $e\n$st');
     }
-
-    unlockedAtById.clear();
-    final atRaw = _prefs!.getString(_unlockedAtKey);
-    if (atRaw != null && atRaw.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(atRaw);
-        if (decoded is Map) {
-          decoded.forEach((key, value) {
-            if (key is String && value is String) {
-              unlockedAtById[key] = value;
-            }
-          });
-        }
-      } catch (e, st) {
-        debugPrint('RewardsController: unlock dates parse failed: $e\n$st');
-      }
-    }
-
-    shippingByItemId.clear();
-    final shipRaw = _prefs!.getString(_orderShippingKey);
-    if (shipRaw != null && shipRaw.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(shipRaw);
-        if (decoded is Map) {
-          decoded.forEach((key, value) {
-            if (key is String && value is Map) {
-              shippingByItemId[key] = GiftShippingAddress.fromJson(value);
-            }
-          });
-        }
-      } catch (e, st) {
-        debugPrint('RewardsController: order shipping parse failed: $e\n$st');
-      }
-    }
-
-    savedShipping.value = null;
-    final savedRaw = _prefs!.getString(_savedShippingKey);
-    if (savedRaw != null && savedRaw.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(savedRaw);
-        if (decoded is Map) {
-          savedShipping.value = GiftShippingAddress.fromJson(decoded);
-        }
-      } catch (e, st) {
-        debugPrint('RewardsController: saved shipping parse failed: $e\n$st');
-      }
-    }
-
-    unawaited(refreshCoinsFromApi());
   }
 
   /// Refresh claimable + wallet balance from the API.
-  Future<void> refreshCoinsFromApi() async {
-    await Future.wait([
-      refreshClaimableFromApi(),
-      refreshWalletFromApi(),
-    ]);
+  ///
+  /// Home path loads wallet first, then today claimable; yesterday is deferred.
+  Future<void> refreshCoinsFromApi({bool includeYesterday = true}) async {
+    await refreshWalletFromApi(retryOnRateLimit: true);
+    if (isClosed) return;
+    await refreshClaimableFromApi(includeYesterday: includeYesterday);
   }
 
-  /// GET /api/v1/coins — total wallet balance (home coin chip).
-  Future<void> refreshWalletFromApi() async {
+  /// GET /api/v1/coins/claimable for an extra day (yesterday / calendar pick).
+  Future<void> refreshClaimableForDate(DateTime date) async {
+    await _loadClaimableFor(MealEntry.normalizeDate(date));
+  }
+
+  /// Prefetch claimable/earned coins for burn-history days (skips loaded keys).
+  ///
+  /// Dates are loaded **sequentially** (max 1 concurrent new GET). In-flight
+  /// same-date requests are joined via [_loadClaimableFor].
+  Future<void> refreshClaimableForDates(Iterable<DateTime> dates) async {
     if (!Get.isRegistered<UserController>()) return;
     final token = await Get.find<UserController>().resolveAccessToken();
     if (token == null || token.isEmpty) return;
 
-    try {
-      final result = await _coinsApi.fetchWallet(accessToken: token);
-      _prefs ??= await SharedPreferences.getInstance();
-      await _prefs!.setInt(_balanceKey, result.balance);
-      balance.value = result.balance;
-      debugPrint('RewardsController: wallet balance=${result.balance}');
-    } on CoinsApiException catch (error) {
-      debugPrint('RewardsController: wallet fetch failed: $error');
-    } catch (error) {
-      debugPrint('RewardsController: wallet fetch failed: $error');
+    final unique = <DateTime>{};
+    for (final raw in dates) {
+      unique.add(MealEntry.normalizeDate(raw));
+    }
+
+    final pending = unique.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    if (pending.isEmpty) return;
+
+    for (final day in pending) {
+      if (ApiClient.isRateLimited) return;
+      final key = MealEntry.dateToKey(day);
+      // Already have a result for this session — skip.
+      if (claimableByDate.containsKey(key)) continue;
+      // Joins in-flight same-date Future when present.
+      await _loadClaimableFor(day, accessToken: token);
     }
   }
 
-  /// GET /api/v1/claimable?date=&timezone=
-  Future<void> refreshClaimableFromApi() async {
+  /// GET /api/v1/coins — total wallet balance (home coin chip).
+  ///
+  /// Concurrent callers join the same in-flight Future (no duplicate GET).
+  Future<void> refreshWalletFromApi({bool retryOnRateLimit = false}) {
+    if (!Get.isRegistered<UserController>()) return Future.value();
+
+    final inFlight = _walletFetchInFlight;
+    if (inFlight != null) {
+      debugPrint('RewardsController: wallet JOIN in-flight');
+      return inFlight;
+    }
+
+    // If we are globally rate-limited, wait and retry once instead of failing.
+    // Never schedule a retry for auth failures (handled below).
+    if (ApiClient.isRateLimited && retryOnRateLimit) {
+      _scheduleWalletRetry();
+      return Future.value();
+    }
+
+    late final Future<void> started;
+    started = _refreshWalletFromApi(
+      retryOnRateLimit: retryOnRateLimit,
+    ).whenComplete(() {
+      if (identical(_walletFetchInFlight, started)) {
+        _walletFetchInFlight = null;
+      }
+    });
+    _walletFetchInFlight = started;
+    return started;
+  }
+
+  Future<void> _refreshWalletFromApi({required bool retryOnRateLimit}) async {
+    final sessionGen = _sessionGeneration;
+
+    final token = await Get.find<UserController>().resolveAccessToken();
+    if (token == null || token.isEmpty) return;
+    if (sessionGen != _sessionGeneration) return;
+
+    isLoadingWallet.value = true;
+    walletApiErrorMessage.value = null;
+    try {
+      final result = await _coinsApi.fetchWallet(accessToken: token);
+      if (sessionGen != _sessionGeneration) {
+        debugPrint('RewardsController: wallet result discarded (session cleared)');
+        return;
+      }
+      balance.value = result.balance;
+      walletApiErrorMessage.value = null;
+      debugPrint('RewardsController: wallet balance=${result.balance}');
+    } on CoinsApiException catch (error) {
+      if (sessionGen != _sessionGeneration) return;
+      debugPrint('RewardsController: wallet fetch failed: $error');
+      // Never retry 401/403 — clear the dead session once.
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await _clearSessionOnAuthFailure(
+          endpoint: 'GET /coins',
+          statusCode: error.statusCode,
+        );
+        return;
+      }
+      walletApiErrorMessage.value = error.message;
+      if (error.statusCode == 429 || ApiClient.isRateLimited) {
+        ApiClient.noteRateLimited();
+        if (retryOnRateLimit) _scheduleWalletRetry();
+      }
+    } catch (error) {
+      if (sessionGen != _sessionGeneration) return;
+      debugPrint('RewardsController: wallet fetch failed: $error');
+      walletApiErrorMessage.value =
+          'Unable to load wallet. Please check your connection.';
+      if (ApiClient.isRateLimited && retryOnRateLimit) {
+        _scheduleWalletRetry();
+      }
+    } finally {
+      if (sessionGen == _sessionGeneration) {
+        isLoadingWallet.value = false;
+        hasCompletedWalletFetch.value = true;
+      }
+    }
+  }
+
+  void _scheduleWalletRetry() {
+    if (_walletRetryScheduled || isClosed) return;
+    final sessionGen = _sessionGeneration;
+    _walletRetryScheduled = true;
+    final until = ApiClient.rateLimitedUntil ??
+        DateTime.now().add(const Duration(seconds: 60));
+    final wait = until.difference(DateTime.now()) + const Duration(seconds: 1);
+    debugPrint(
+      'RewardsController: wallet retry scheduled in '
+      '${wait.inSeconds.clamp(1, 120)}s',
+    );
+    unawaited(() async {
+      await Future<void>.delayed(
+        wait.isNegative ? const Duration(seconds: 5) : wait,
+      );
+      // Ignore retries from a previous session after logout/login.
+      if (sessionGen != _sessionGeneration) {
+        debugPrint('RewardsController: wallet retry discarded (session cleared)');
+        return;
+      }
+      _walletRetryScheduled = false;
+      if (isClosed) return;
+      await refreshWalletFromApi(retryOnRateLimit: false);
+      if (sessionGen != _sessionGeneration || isClosed) return;
+      // Claimable may have failed in the same 429 window — refresh today.
+      if (claimableByDate.isEmpty ||
+          !claimableByDate.containsKey(_todayKey)) {
+        await refreshClaimableFromApi(includeYesterday: false);
+      }
+    }());
+  }
+
+  /// Home Retry for today's claimable only (never yesterday).
+  Future<void> retryClaimableToday() =>
+      refreshClaimableFromApi(includeYesterday: false);
+
+  /// GET /api/v1/coins/claimable?date=&timezone= for today (and optionally yesterday).
+  Future<void> refreshClaimableFromApi({bool includeYesterday = true}) async {
     if (!Get.isRegistered<UserController>()) return;
     final token = await Get.find<UserController>().resolveAccessToken();
     if (token == null || token.isEmpty) return;
 
     isLoadingClaimable.value = true;
+    claimableApiErrorMessage.value = null;
     try {
       final today = MealEntry.normalizeDate(DateTime.now());
-      final result = await _coinsApi.fetchClaimable(
-        accessToken: token,
-        date: today,
-        timezone: resolveApiTimezone(),
-      );
-      claimableCoins.value = result.claimableCoins;
-      if (result.balance != null && result.balance! >= 0) {
-        _prefs ??= await SharedPreferences.getInstance();
-        await _prefs!.setInt(_balanceKey, result.balance!);
-        balance.value = result.balance!;
-      }
-      if (result.claimableCoins <= 0 && result.canClaim) {
-        // Backend says claimable but omitted amount — keep flag via coins=1 floor? skip.
-      }
-      debugPrint(
-        'RewardsController: claimable=${result.claimableCoins} '
-        'canClaim=${result.canClaim} balance=${balance.value}',
-      );
-    } on CoinsApiException catch (error) {
-      debugPrint('RewardsController: claimable fetch failed: $error');
-    } catch (error) {
-      debugPrint('RewardsController: claimable fetch failed: $error');
+      await _loadClaimableFor(today, accessToken: token);
+      if (!includeYesterday) return;
+      final yesterday = today.subtract(const Duration(days: 1));
+      await _loadClaimableFor(yesterday, accessToken: token);
     } finally {
       isLoadingClaimable.value = false;
     }
+  }
+
+  Future<void> _loadClaimableFor(
+    DateTime day, {
+    String? accessToken,
+  }) {
+    if (!Get.isRegistered<UserController>()) return Future.value();
+    final key = MealEntry.dateToKey(MealEntry.normalizeDate(day));
+    final existing = _claimableFetchInFlight[key];
+    if (existing != null) {
+      debugPrint('RewardsController: claimable[$key] JOIN in-flight');
+      return existing;
+    }
+
+    late final Future<void> started;
+    started = _doLoadClaimableFor(
+      day,
+      accessToken: accessToken,
+    ).whenComplete(() {
+      if (identical(_claimableFetchInFlight[key], started)) {
+        _claimableFetchInFlight.remove(key);
+      }
+    });
+    _claimableFetchInFlight[key] = started;
+    return started;
+  }
+
+  Future<void> _doLoadClaimableFor(
+    DateTime day, {
+    String? accessToken,
+  }) async {
+    final sessionGen = _sessionGeneration;
+    final key = MealEntry.dateToKey(MealEntry.normalizeDate(day));
+    final isToday = key == _todayKey;
+
+    final token = accessToken ??
+        await Get.find<UserController>().resolveAccessToken();
+    if (token == null || token.isEmpty) return;
+    if (sessionGen != _sessionGeneration) return;
+
+    try {
+      final result = await _coinsApi.fetchClaimable(
+        accessToken: token,
+        date: day,
+        timezone: resolveApiTimezone(),
+      );
+      if (sessionGen != _sessionGeneration) {
+        debugPrint(
+          'RewardsController: claimable result discarded (session cleared)',
+        );
+        return;
+      }
+      claimableByDate[key] = result.claimableCoins;
+      claimableByDate.refresh();
+
+      final earned = result.earnedCoins ??
+          (result.claimableCoins > 0 ? result.claimableCoins : null);
+      final best = [
+        earned ?? 0,
+        result.claimableCoins,
+        earnedCoinsByDate[key] ?? 0,
+      ].fold<int>(0, (a, b) => a > b ? a : b);
+      _rememberEarnedForDate(key, best);
+
+      if (isToday) {
+        claimableCoins.value = result.claimableCoins;
+        claimableApiErrorMessage.value = null;
+        hasCompletedClaimableFetch.value = true;
+      }
+      if (result.balance != null && result.balance! >= 0) {
+        // Optional claimable payload balance — memory only when present.
+        balance.value = result.balance!;
+      }
+      debugPrint(
+        'RewardsController: claimable[$key]=${result.claimableCoins} '
+        'earned=${earnedCoinsByDate[key]} canClaim=${result.canClaim} '
+        'balance=${balance.value}',
+      );
+    } on CoinsApiException catch (error) {
+      if (sessionGen != _sessionGeneration) return;
+      // Never retry 401/403 — clear the dead session once.
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        debugPrint('RewardsController: claimable auth failure: $error');
+        await _clearSessionOnAuthFailure(
+          endpoint: 'GET /coins/claimable',
+          statusCode: error.statusCode,
+        );
+        return;
+      }
+      // Don't mark the day empty on rate-limits — keep any cached earned
+      // total and allow a later retry to fill claimable/earned.
+      final isTransient =
+          error.statusCode == 429 || ApiClient.isRateLimited;
+      if (isToday) {
+        claimableApiErrorMessage.value = error.message;
+        hasCompletedClaimableFetch.value = true;
+      } else if (!isTransient) {
+        claimableByDate.putIfAbsent(key, () => 0);
+        claimableByDate.refresh();
+      }
+      debugPrint('RewardsController: claimable fetch failed ($day): $error');
+    } catch (error) {
+      if (sessionGen != _sessionGeneration) return;
+      if (isToday) {
+        claimableApiErrorMessage.value =
+            'Unable to load rewards. Please check your connection.';
+        hasCompletedClaimableFetch.value = true;
+      }
+      debugPrint('RewardsController: claimable fetch failed ($day): $error');
+    }
+  }
+
+  Future<void> _clearSessionOnAuthFailure({
+    required String endpoint,
+    required int? statusCode,
+  }) async {
+    if (!Get.isRegistered<UserController>()) return;
+    final user = Get.find<UserController>();
+    if (user.isLoggingOut || user.isDeletingAccount || !user.isLoggedIn) {
+      return;
+    }
+    await user.clearInvalidSession(
+      // TEMPORARY — HOME_STUCK_DEBUG
+      debugController: 'RewardsController',
+      debugEndpoint: endpoint,
+      debugStatusCode: statusCode,
+      debugRequestType: 'GET',
+    );
   }
 
   /// Apply claimable info from another API (e.g. steps POST `coins` block).
@@ -533,71 +795,80 @@ class RewardsController extends GetxController {
     } else if (!result.canClaim) {
       claimableCoins.value = 0;
     }
+    claimableByDate[_todayKey] = claimableCoins.value;
+    claimableByDate.refresh();
+    final earned = result.earnedCoins ?? result.displayCoins;
+    _rememberEarnedForDate(_todayKey, earned);
     if (result.balance != null && result.balance! >= 0) {
       balance.value = result.balance!;
-      unawaited(_persistBalance(result.balance!));
     }
   }
 
-  Future<void> _persistBalance(int value) async {
-    _prefs ??= await SharedPreferences.getInstance();
-    await _prefs!.setInt(_balanceKey, value);
-  }
-
-  Future<void> grantCoins(int amount) async {
-    if (amount <= 0) return;
-    _prefs ??= await SharedPreferences.getInstance();
-    final next = balance.value + amount;
-    await _prefs!.setInt(_balanceKey, next);
-    balance.value = next;
-  }
-
   /// Claim via POST /api/v1/coins/claim, then refresh wallet balance.
-  Future<bool> claimDailyStepReward() async {
-    final amount = pendingCoins;
-    if (isClaiming.value || amount <= 0) return false;
-    if (!Get.isRegistered<UserController>()) return false;
+  Future<bool> claimDailyStepReward({DateTime? date}) async {
+    lastClaimError.value = null;
+    final day = MealEntry.normalizeDate(date ?? DateTime.now());
+    final amount = claimableForDate(day);
+    if (isClaiming.value || amount <= 0) {
+      if (amount <= 0) {
+        lastClaimError.value = 'Nothing left to claim for this day.';
+      }
+      return false;
+    }
+    if (!Get.isRegistered<UserController>()) {
+      lastClaimError.value = 'Sign in to claim coins.';
+      return false;
+    }
 
     final token = await Get.find<UserController>().resolveAccessToken();
-    if (token == null || token.isEmpty) return false;
+    if (token == null || token.isEmpty) {
+      lastClaimError.value = 'Sign in to claim coins.';
+      return false;
+    }
 
     isClaiming.value = true;
     try {
       final today = MealEntry.normalizeDate(DateTime.now());
       final result = await _coinsApi.claimCoins(
         accessToken: token,
-        date: today,
+        date: day,
         timezone: resolveApiTimezone(),
       );
 
-      _prefs ??= await SharedPreferences.getInstance();
-      await _prefs!.setString(_claimedKey, _todayKey);
-      claimedDateKey.value = _todayKey;
-      claimableCoins.value = 0;
+      final dateKey = MealEntry.dateToKey(day);
+      final credited =
+          result.claimedCoins > 0 ? result.claimedCoins : amount;
 
-      if (result.balance != null && result.balance! >= 0) {
-        await _prefs!.setInt(_balanceKey, result.balance!);
-        balance.value = result.balance!;
-      } else {
-        // Claim succeeded — pull authoritative wallet total.
-        await refreshWalletFromApi();
-        if (result.claimedCoins > 0 &&
-            balance.value == (_prefs!.getInt(_balanceKey) ?? 0)) {
-          // If GET wallet failed silently, at least add claimed locally.
-        }
+      // Clear claimable for this day; keep in-memory earned display.
+      claimableByDate[dateKey] = 0;
+      claimableByDate.refresh();
+      _rememberEarnedForDate(dateKey, credited);
+
+      if (day == today) {
+        claimedDateKey.value = _todayKey;
+        claimableCoins.value = 0;
       }
 
-      // Keep claimable + wallet in sync with server.
-      unawaited(refreshCoinsFromApi());
+      if (result.balance != null && result.balance! >= 0) {
+        balance.value = result.balance!;
+      } else {
+        // Authoritative wallet must come from GET /coins — never invent.
+        await refreshWalletFromApi();
+      }
+
+      // Claimable for this day is already cleared in memory; avoid a redundant
+      // wallet+claimable refresh storm after a successful claim.
       debugPrint(
-        'RewardsController: claimed=${result.claimedCoins} '
-        'wallet=${balance.value}',
+        'RewardsController: claimed=$credited '
+        'date=$dateKey wallet=${balance.value}',
       );
       return true;
     } on CoinsApiException catch (error) {
+      lastClaimError.value = error.message;
       debugPrint('RewardsController: claim API failed: $error');
       return false;
     } catch (e, st) {
+      lastClaimError.value = 'Couldn’t claim coins. Try again.';
       debugPrint('RewardsController: claim failed: $e\n$st');
       return false;
     } finally {
@@ -605,110 +876,66 @@ class RewardsController extends GetxController {
     }
   }
 
+  /// Claims today then yesterday when both have pending. Returns total coins claimed.
+  Future<int> claimPendingStepRewards() async {
+    var total = 0;
+    final today = MealEntry.normalizeDate(DateTime.now());
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    for (final day in [today, yesterday]) {
+      final amount = claimableForDate(day);
+      if (amount <= 0) continue;
+      final ok = await claimDailyStepReward(date: day);
+      if (!ok) break;
+      total += amount;
+    }
+    return total;
+  }
+
+  /// Shop spend is not wired to a backend endpoint yet.
   Future<String?> unlockItem(
     String id, {
     required GiftShippingAddress shipping,
   }) async {
-    RewardShopItem? item;
-    for (final entry in catalog) {
-      if (entry.id == id) {
-        item = entry;
-        break;
-      }
-    }
-    if (item == null) return 'Item not found.';
-    if (isUnlocked(id)) return 'Already unlocked.';
-    if (!shipping.isComplete) {
-      return shipping.validate() ??
-          'Add full name, phone, and delivery address to place the order.';
-    }
-    if (balance.value < item.cost) {
-      return 'Not enough coins. Keep walking to earn more.';
-    }
-    if (unlockingId.value != null) return 'Please wait…';
-
-    unlockingId.value = id;
-    try {
-      _prefs ??= await SharedPreferences.getInstance();
-      final nextBalance = balance.value - item.cost;
-      final nextUnlocked = {...unlockedIds, id};
-      final unlockedAt = DateTime.now().toIso8601String();
-      final nextDates = Map<String, String>.from(unlockedAtById)
-        ..[id] = unlockedAt;
-      final nextShipping = Map<String, GiftShippingAddress>.from(shippingByItemId)
-        ..[id] = shipping;
-      final shippingJson = <String, dynamic>{
-        for (final e in nextShipping.entries) e.key: e.value.toJson(),
-      };
-
-      await _prefs!.setInt(_balanceKey, nextBalance);
-      await _prefs!.setString(_unlockedKey, jsonEncode(nextUnlocked.toList()));
-      await _prefs!.setString(_unlockedAtKey, jsonEncode(nextDates));
-      await _prefs!.setString(_orderShippingKey, jsonEncode(shippingJson));
-      await _prefs!.setString(_savedShippingKey, jsonEncode(shipping.toJson()));
-
-      balance.value = nextBalance;
-      unlockedIds
-        ..clear()
-        ..addAll(nextUnlocked);
-      unlockedAtById
-        ..clear()
-        ..addAll(nextDates);
-      shippingByItemId
-        ..clear()
-        ..addAll(nextShipping);
-      savedShipping.value = shipping;
-      return null;
-    } catch (e, st) {
-      debugPrint('RewardsController: unlock failed: $e\n$st');
-      return 'Could not unlock. Please try again.';
-    } finally {
-      unlockingId.value = null;
-    }
+    return 'Shop purchases are not available yet.';
   }
 
-  /// For gifts unlocked before address was required.
+  /// Shipping is tied to server-owned purchases — unavailable without spend API.
   Future<String?> saveShippingForItem(
     String id,
     GiftShippingAddress shipping,
   ) async {
-    if (!isUnlocked(id)) return 'Gift not found.';
-    if (!canEditShipping(id) && hasShipping(id)) {
-      return 'Address can’t be changed after the gift is out for delivery.';
-    }
-    if (!shipping.isComplete) {
-      return shipping.validate() ??
-          'Add full name, phone, and delivery address.';
-    }
-    try {
-      _prefs ??= await SharedPreferences.getInstance();
-      final nextShipping = Map<String, GiftShippingAddress>.from(shippingByItemId)
-        ..[id] = shipping;
-      final shippingJson = <String, dynamic>{
-        for (final e in nextShipping.entries) e.key: e.value.toJson(),
-      };
-      await _prefs!.setString(_orderShippingKey, jsonEncode(shippingJson));
-      await _prefs!.setString(_savedShippingKey, jsonEncode(shipping.toJson()));
-      shippingByItemId
-        ..clear()
-        ..addAll(nextShipping);
-      savedShipping.value = shipping;
-      return null;
-    } catch (e, st) {
-      debugPrint('RewardsController: save shipping failed: $e\n$st');
-      return 'Could not save address. Please try again.';
-    }
+    return 'Shop purchases are not available yet.';
   }
 
   void clearSessionData() {
+    _sessionGeneration++;
+    _walletFetchInFlight = null;
+    _walletRetryScheduled = false;
+    _claimableFetchInFlight.clear();
     balance.value = _defaultBalance;
     claimedDateKey.value = '';
     claimableCoins.value = 0;
+    claimableByDate.clear();
+    earnedCoinsByDate.clear();
     isLoadingClaimable.value = false;
+    hasCompletedClaimableFetch.value = false;
+    claimableApiErrorMessage.value = null;
+    isLoadingWallet.value = false;
+    hasCompletedWalletFetch.value = false;
+    walletApiErrorMessage.value = null;
     unlockedIds.clear();
     unlockedAtById.clear();
     shippingByItemId.clear();
     savedShipping.value = null;
     unlockingId.value = null;
+    lastClaimError.value = null;
+    unawaited(_wipeLegacyRewardPrefs());
   }
+
+  @visibleForTesting
+  int get debugSessionGeneration => _sessionGeneration;
+
+  @visibleForTesting
+  bool get debugWalletRetryScheduled => _walletRetryScheduled;
 }

@@ -23,7 +23,7 @@ class NotificationRepository {
         'Network error while uploading FCM token: $error',
       );
     }
-  }
+  }                 
 
   Future<NotificationListResult> fetchNotifications({
     required String accessToken,
@@ -31,13 +31,13 @@ class NotificationRepository {
     int limit = 20,
     bool? unreadOnly,
   }) async {
-    try {
+    try {                                                                                                                     
       return await _apiService.fetchNotifications(
-        accessToken: accessToken,
+        accessToken: accessToken,                                   
         page: page,
         limit: limit,
-        unreadOnly: unreadOnly,
-      );
+        unreadOnly: unreadOnly,                       
+      );                                                                      
     } on NotificationApiException {
       rethrow;
     } catch (error) {

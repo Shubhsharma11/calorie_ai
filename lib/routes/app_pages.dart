@@ -8,6 +8,7 @@ import '../controllers/auth_controller.dart';
 import '../controllers/nutrition_plan_controller.dart';
 import '../controllers/onboarding_setup_loading_controller.dart';
 import '../controllers/onboarding_controller.dart';
+import '../controllers/rewards_controller.dart';
 import '../controllers/settings_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
@@ -67,6 +68,8 @@ abstract final class AppPages {
       name: AppRoutes.login,
       page: () => const LoginView(),
       binding: BindingsBuilder(() => Get.lazyPut(AuthController.new)),
+      // Prevent iOS swipe-back from revealing authenticated Main after logout.
+      popGesture: false,
     ),
     AppPageTransitions.getPage(
       name: AppRoutes.otpVerify,
@@ -213,6 +216,9 @@ abstract final class AppPages {
       binding: BindingsBuilder(() {
         if (!Get.isRegistered<TrackerController>()) {
           Get.lazyPut(TrackerController.new);
+        }
+        if (!Get.isRegistered<RewardsController>()) {
+          Get.put(RewardsController(), permanent: true);
         }
       }),
     ),

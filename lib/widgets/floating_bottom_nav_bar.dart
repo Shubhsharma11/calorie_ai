@@ -60,13 +60,22 @@ class FloatingBottomNavBar extends StatelessWidget {
                               : null;
 
                       Widget navItem = Obx(
-                        () => _NavItem(
-                          icon: item.icon,
-                          label: item.label,
-                          selected: main.tabIndex.value == index,
-                          isCenter: isCenter,
-                          onTap: () => onTap(index),
-                        ),
+                        () {
+                          final selected = main.tabIndex.value == index;
+                          final ready = main.shellReady.value;
+                          final blocked =
+                              !ready && index != MainController.homeTabIndex;
+                          return Opacity(
+                            opacity: blocked ? 0.45 : 1,
+                            child: _NavItem(
+                              icon: item.icon,
+                              label: item.label,
+                              selected: selected,
+                              isCenter: isCenter,
+                              onTap: () => onTap(index),
+                            ),
+                          );
+                        },
                       );
 
                       if (coachKey != null) {

@@ -10,21 +10,39 @@ import 'package:calorie_ai/views/main_view.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() async {
+    // Skip first-run coach overlay so Diary content is findable.
+    SharedPreferences.setMockInitialValues({
+      'coach_marks_seen_v1': true,
+    });
+    Get.testMode = true;
+    Get.reset();
+  });
+
   tearDown(Get.reset);
 
+  /// Current MainView only builds a tab after it is activated, and
+  /// [MainController.changeTab] no-ops (with snackbar) until [shellReady].
   Future<void> pumpDiaryTab(WidgetTester tester) async {
     Get.put(ThemeController(), permanent: true);
     Get.put(UserController(), permanent: true);
     HomeBinding().dependencies();
-    Get.find<MainController>().changeTab(1);
 
     await tester.pumpWidget(
       const GetMaterialApp(home: MainView()),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+
+    final main = Get.find<MainController>();
+    // Mark shell ready without waiting on settleShell's production frame delay.
+    main.shellReady.value = true;
+    main.changeTab(MainController.diaryTabIndex);
+    await tester.pump();
+    // Flush the 200ms timer already scheduled by settleShell.onReady.
+    await tester.pump(const Duration(milliseconds: 200));
   }
 
   testWidgets('MainView Diary tab builds without throwing',
@@ -61,12 +79,16 @@ void main() {
     );
     food.entriesRevision.value++;
 
-    Get.find<MainController>().changeTab(1);
     await tester.pumpWidget(
       const GetMaterialApp(home: MainView()),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+
+    final main = Get.find<MainController>();
+    main.shellReady.value = true;
+    main.changeTab(MainController.diaryTabIndex);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('Daily Log'), findsOneWidget);
     expect(find.text('Oats'), findsWidgets);

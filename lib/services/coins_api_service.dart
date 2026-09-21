@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/claimable_result.dart';
 import '../models/meal_entry.dart';
@@ -26,7 +27,7 @@ class CoinsApiService {
 
   final ApiClient _apiClient;
 
-  /// GET /api/v1/claimable?date=&timezone= (both required).
+  /// GET /api/v1/coins/claimable?date=&timezone= (both required).
   Future<ClaimableResult> fetchClaimable({
     required String accessToken,
     required DateTime date,
@@ -81,7 +82,7 @@ class CoinsApiService {
     };
 
     debugPrint(
-      'CoinsApiService: POST ${ApiEndpoints.coinsClaimUrl} $body '
+      'CoinsApiService: POST ${ApiEndpoints.coinsClaimUrl} (payload redacted) '
       'bearerTokenLength=${accessToken.length}',
     );
 
@@ -101,12 +102,13 @@ class CoinsApiService {
 
   CoinsWalletResult _parseWallet(http.Response response) {
     final data = _requireDataMap(response, action: 'loading wallet');
-    final balance = _readBalance(data) ??
+    final balance = _readWalletBalanceOnly(data) ??
         _readInt(
           data['coins'] ??
+              data['totalCoins'] ??
+              data['total_coins'] ??
               data['amount'] ??
-              data['value'] ??
-              data['earnableCoins'],
+              data['value'],
         ) ??
         0;
     return CoinsWalletResult(balance: balance < 0 ? 0 : balance);
@@ -120,7 +122,7 @@ class CoinsApiService {
               data['claimed_coins'] ??
               data['earnableCoins'] ??
               data['earnable_coins'] ??
-              data['coins'] ??
+              data['coins'] ??  
               data['amount'] ??
               data['claimable'],
         ) ??
@@ -140,12 +142,12 @@ class CoinsApiService {
     }
 
     final claimable = _readIntStatic(
-          data['earnableCoins'] ??
+          data['earnableCoins'] ??  
               data['earnable_coins'] ??
               data['claimable'] ??
               data['claimableCoins'] ??
               data['claimable_coins'] ??
-              data['amount'] ??
+              data['amount'] ??   
               data['pending'] ??
               data['pendingCoins'] ??
               data['pending_coins'],
@@ -157,9 +159,26 @@ class CoinsApiService {
         (data['status']?.toString().toLowerCase() == 'claimable');
 
     final amount = claimable < 0 ? 0 : claimable;
+    final earned = _readIntStatic(
+      data['earnedCoins'] ??
+          data['earned_coins'] ??
+          data['coinsEarned'] ??
+          data['coins_earned'] ??
+          data['totalEarned'] ??
+          data['total_earned'] ??
+          data['totalCoins'] ??
+          data['total_coins'] ??
+          data['rewardCoins'] ??
+          data['reward_coins'] ??
+          data['claimedCoins'] ??
+          data['claimed_coins'],
+    );
+
     return ClaimableResult(
       claimableCoins: (amount > 0 || canClaimFlag) ? amount : 0,
-      balance: _readBalanceStatic(data),
+      earnedCoins: earned != null && earned > 0 ? earned : null,
+      // Only real wallet fields — never day totals like totalCoins.
+      balance: _readWalletBalanceOnly(data),
       canClaim: canClaimFlag || amount > 0,
     );
   }
@@ -169,9 +188,7 @@ class CoinsApiService {
     required String action,
   }) {
     final body = response.body.trim();
-    debugPrint(
-      'CoinsApiService: response ${response.statusCode}: $body',
-    );
+    debugPrint('CoinsApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -179,7 +196,7 @@ class CoinsApiService {
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw CoinsApiException(
-        message ?? 'Error while $action (${response.statusCode}). $body',
+        message ?? 'Error while $action (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }
@@ -190,15 +207,19 @@ class CoinsApiService {
     return _unwrapData(decoded);
   }
 
-  int? _readBalance(Map<String, dynamic> data) => _readBalanceStatic(data);
+  int? _readBalance(Map<String, dynamic> data) => _readWalletBalanceOnly(data);
 
-  static int? _readBalanceStatic(Map<String, dynamic> data) {
+  /// Wallet total only. Do not use day fields (`totalCoins`, `claimedCoins`,
+  /// `steps`) — those appear on claimable payloads and are not wallet balance.
+  static int? _readWalletBalanceOnly(Map<String, dynamic> data) {
     final nestedWallet = data['wallet'];
     if (nestedWallet is Map) {
       final fromWallet = _readIntStatic(
         nestedWallet['balance'] ??
             nestedWallet['coins'] ??
-            nestedWallet['total'],
+            nestedWallet['total'] ??
+            nestedWallet['available'] ??
+            nestedWallet['availableBalance'],
       );
       if (fromWallet != null) return fromWallet;
     }
@@ -206,9 +227,10 @@ class CoinsApiService {
       data['balance'] ??
           data['walletBalance'] ??
           data['wallet_balance'] ??
-          data['totalCoins'] ??
-          data['total_coins'] ??
-          data['wallet'],
+          data['availableBalance'] ??
+          data['available_balance'] ??
+          data['currentBalance'] ??
+          data['current_balance'],
     );
   }
 

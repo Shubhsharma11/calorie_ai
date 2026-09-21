@@ -20,11 +20,14 @@ import 'controllers/theme_controller.dart';
 import 'controllers/user_controller.dart';
 import 'core/app_page_transitions.dart';
 import 'core/app_route_observer.dart';
+import 'core/home_hydrate.dart';
+import 'core/home_stuck_debug.dart'; // TEMPORARY — HOME_STUCK_DEBUG
 import 'core/startup_route.dart';
 import 'firebase_options.dart';
 import 'routes/app_pages.dart';
 import 'routes/app_routes.dart';
 import 'services/analytics_service.dart';
+import 'services/api_client.dart';
 import 'services/firebase_messaging_background.dart';
 import 'services/notification_service.dart';
 import 'services/platform_http_client.dart';
@@ -129,11 +132,22 @@ Future<String> _resolveInitialRoute() async {
     );
 
     if (user.isLoggedIn && user.accessToken.isNotEmpty) {
-      unawaited(
-        NotificationService.instance.syncTokenWithBackend(
-          accessToken: user.accessToken,
-        ),
-      );
+      // Defer FCM until after HomeHydrate primary sync (and skip if 429).
+      unawaited(() async {
+        await Future<void>.delayed(const Duration(seconds: 8));
+        if (ApiClient.isRateLimited || HomeHydrate.isBootstrapQuiet) {
+          await Future<void>.delayed(const Duration(seconds: 5));
+        }
+        if (ApiClient.isRateLimited || HomeHydrate.isBootstrapQuiet) {
+          return;
+        }
+        await _ignoreInitErrors(
+          NotificationService.instance.syncTokenWithBackend(
+            accessToken: user.accessToken,
+          ),
+          'fcm_token_sync',
+        );
+      }());
     }
     return route;
   } catch (error, stackTrace) {
@@ -220,6 +234,8 @@ class _FitBuddyAiAppState extends State<FitBuddyAiApp> {
       getPages: AppPages.pages,
       navigatorObservers: [
         appRouteObserver,
+        // TEMPORARY — HOME_STUCK_DEBUG
+        HomeStuckNavObserver(),
         ...AnalyticsService.navigatorObservers,
       ],
       defaultTransition: AppPageTransitions.transition,

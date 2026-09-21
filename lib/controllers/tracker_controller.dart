@@ -4,18 +4,23 @@
   import 'package:flutter/scheduler.dart';
   import 'package:get/get.dart';
 
+  import '../core/app_log.dart';
+  import '../core/home_hydrate.dart';
   import '../core/weight_chart_data.dart';
   import '../models/daily_water_intake.dart';
   import '../models/exercise_entry.dart';
   import '../models/exercise_type.dart';
   import '../models/meal_entry.dart';
   import '../models/step_log_entry.dart';
+  import '../models/steps_period.dart';
   import '../models/water_log_entry.dart';
   import '../models/water_period.dart';
   import '../models/weight_entry.dart';
   import '../repositories/steps_repository.dart';
   import '../repositories/water_repository.dart';
   import '../repositories/weight_repository.dart';
+  import '../services/analytics_service.dart';
+  import '../services/api_client.dart';
   import '../services/local_storage_service.dart';
   import '../services/step_tracking_service.dart';
   import '../services/steps_api_service.dart';
@@ -25,7 +30,6 @@
   import 'rewards_controller.dart';
   import 'settings_controller.dart';
   import 'user_controller.dart';
-  import '../services/analytics_service.dart';
 
   enum WeightLogStatus { unchanged, savedAndSynced, failed }
 
@@ -97,6 +101,7 @@
     /// Day shown on Calories Burned (today by default).
     final Rx<DateTime> selectedStepsDate =
         MealEntry.normalizeDate(DateTime.now()).obs;
+    final Rx<StepsPeriod> stepsPeriod = StepsPeriod.today.obs;
     final RxList<ExerciseEntry> exerciseEntries = <ExerciseEntry>[].obs;
     final RxInt activityRevision = 0.obs;
     final RxBool isStepTrackingActive = false.obs;
@@ -106,6 +111,9 @@
     final RxInt weightRevision = 0.obs;
     /// Bumped on every water ml change so Obx rebuilds even when map length is unchanged.
     final RxInt waterRevision = 0.obs;
+    final RxBool isLoadingWaterToday = false.obs;
+    final RxBool hasCompletedWaterTodayFetch = false.obs;
+    final RxnString waterTodayApiErrorMessage = RxnString();
     final RxBool needsHealthConnectInstall = false.obs;
     final RxBool usesHealthConnect = false.obs;
 
@@ -152,6 +160,17 @@
     DateTime? _lastWaterRefreshAt;
     static const Duration _waterRefreshCooldown = Duration(seconds: 8);
 
+    Future<void>? _refreshWaterDateFuture;
+    DateTime? _refreshWaterDateKey;
+
+    Future<void>? _refreshStepsFuture;
+    DateTime? _refreshStepsDateKey;
+    /// In-flight POST /steps — join identical/overlapping pushes.
+    Future<void>? _syncStepsInFlight;
+    int? _syncStepsInFlightValue;
+    /// Bumped in [clearSessionData] so stale GET/POST cannot apply after logout.
+    int _stepsSessionGeneration = 0;
+
     Future<void>? _refreshWeightFuture;
     String? _lastWeightRefreshKey;
     DateTime? _lastWeightRefreshAt;
@@ -161,10 +180,8 @@
     void onInit() {
       super.onInit();
       _migrateLegacyWaterCounts();
-      unawaited(_loadWeightHistory());
       unawaited(_loadActivityLog());
-      unawaited(refreshWaterFromApi(force: true));
-      unawaited(refreshStepsFromApi(force: true));
+      // Network hydrate is owned by [HomeHydrate] (quiet sequential sync).
       _bindWaterGoalListener();
     }
 
@@ -183,11 +200,22 @@
       stepsByDate.clear();
       _stepsBaselineByDate.clear();
       selectedStepsDate.value = MealEntry.normalizeDate(DateTime.now());
+      stepsPeriod.value = StepsPeriod.today;
       _lastWaterRefreshAt = null;
       _lastWeightRefreshAt = null;
       _lastWeightRefreshKey = null;
       _lastStepsSyncAt = null;
       _pendingStepsSyncValue = null;
+      _refreshWaterDateFuture = null;
+      _refreshWaterDateKey = null;
+      _refreshStepsFuture = null;
+      _refreshStepsDateKey = null;
+      _syncStepsInFlight = null;
+      _syncStepsInFlightValue = null;
+      _stepsSessionGeneration++;
+      isLoadingWaterToday.value = false;
+      hasCompletedWaterTodayFetch.value = false;
+      waterTodayApiErrorMessage.value = null;
       _stepsSyncDebounce?.cancel();
       _stepsSyncDebounce = null;
       _waterApi404Logged = false;
@@ -210,7 +238,8 @@
       await Future.wait([
         refreshWaterFromApi(force: true),
         refreshWeightFromApi(),
-        refreshStepsFromApi(force: true),
+        // Match HomeHydrate: GET today without auto-POST fan-out.
+        refreshStepsFromApi(force: true, allowSyncPush: false),
       ]);
     }
 
@@ -270,7 +299,15 @@
     bool get isSelectedStepsGoalComplete => selectedSteps >= stepsGoal;
 
     int get selectedStepsCalories =>
-        StepLogEntry.caloriesFromSteps(selectedSteps);
+        caloriesBurnedForDate(selectedStepsDate.value);
+
+    DateTime get yesterdayDate => _today.subtract(const Duration(days: 1));
+
+    static const stepsPeriodTabs = [
+      StepsPeriod.today,
+      StepsPeriod.week,
+      StepsPeriod.month,
+    ];
 
     /// Force-save today's steps + caloriesBurned to the API.
     Future<void> syncTodayStepsToApi({bool force = true}) async {
@@ -279,17 +316,129 @@
       await _syncStepsToApi(steps, force: force);
     }
 
-    void setSelectedStepsDate(DateTime date) {
+    void setSelectedStepsDate(DateTime date, {bool syncPeriod = true}) {
       final day = MealEntry.normalizeDate(date);
       final today = _today;
       if (day.isAfter(today)) return;
       selectedStepsDate.value = day;
+      if (syncPeriod) {
+        stepsPeriod.value =
+            day == today ? StepsPeriod.today : StepsPeriod.custom;
+      }
       _notifyActivityChanged();
       unawaited(refreshStepsFromApi(date: day, force: true));
+      if (Get.isRegistered<RewardsController>()) {
+        unawaited(Get.find<RewardsController>().refreshClaimableForDate(day));
+      }
+    }
+
+    void setStepsPeriod(StepsPeriod period) {
+      if (period == StepsPeriod.custom) return;
+      stepsPeriod.value = period;
+      switch (period) {
+        case StepsPeriod.today:
+          setSelectedStepsDate(_today, syncPeriod: false);
+        case StepsPeriod.week:
+          selectedStepsDate.value = _today;
+          _notifyActivityChanged();
+          unawaited(refreshStepsHistoryFromApi());
+          if (Get.isRegistered<RewardsController>()) {
+            unawaited(
+              Get.find<RewardsController>().refreshClaimableForDates(
+                stepsForLastDays(7).map((d) => d.date),
+              ),
+            );
+          }
+        case StepsPeriod.month:
+          selectedStepsDate.value = _today;
+          _notifyActivityChanged();
+          unawaited(refreshStepsHistoryFromApi());
+          if (Get.isRegistered<RewardsController>()) {
+            unawaited(
+              Get.find<RewardsController>().refreshClaimableForDates(
+                stepsForLastDays(30).map((d) => d.date),
+              ),
+            );
+          }
+        case StepsPeriod.custom:
+          break;
+      }
     }
 
     void backToStepsToday() {
       setSelectedStepsDate(_today);
+    }
+
+    String stepsPeriodLabelFor(StepsPeriod period) => switch (period) {
+      StepsPeriod.today => 'Today',
+      StepsPeriod.week => '7 Days',
+      StepsPeriod.month => '30 Days',
+      StepsPeriod.custom => 'Custom',
+    };
+
+    int get stepsPeriodDayCount => switch (stepsPeriod.value) {
+      StepsPeriod.today || StepsPeriod.custom => 1,
+      StepsPeriod.week => 7,
+      StepsPeriod.month => 30,
+    };
+
+    List<DailyStepsLog> stepsForLastDays(int dayCount) {
+      final today = _today;
+      return List.generate(dayCount, (index) {
+        final day = today.subtract(Duration(days: dayCount - 1 - index));
+        return DailyStepsLog(
+          date: day,
+          steps: stepsForDate(day),
+          calories: caloriesBurnedForDate(day),
+        );
+      });
+    }
+
+    List<DailyStepsLog> get activeStepsDays => switch (stepsPeriod.value) {
+      StepsPeriod.today => [
+        DailyStepsLog(
+          date: _today,
+          steps: stepsForDate(_today),
+          calories: caloriesBurnedForDate(_today),
+        ),
+      ],
+      StepsPeriod.week => stepsForLastDays(7),
+      StepsPeriod.month => stepsForLastDays(30),
+      StepsPeriod.custom => [
+        DailyStepsLog(
+          date: selectedStepsDate.value,
+          steps: selectedSteps,
+          calories: caloriesBurnedForDate(selectedStepsDate.value),
+        ),
+      ],
+    };
+
+    int get selectedPeriodSteps =>
+        activeStepsDays.fold(0, (sum, day) => sum + day.steps);
+
+    int get selectedPeriodCalories =>
+        activeStepsDays.fold(0, (sum, day) => sum + day.calories);
+
+    int get averagePeriodSteps {
+      final days = activeStepsDays;
+      if (days.isEmpty) return 0;
+      return (selectedPeriodSteps / days.length).round();
+    }
+
+    int get averagePeriodCalories {
+      final days = activeStepsDays;
+      if (days.isEmpty) return 0;
+      return (selectedPeriodCalories / days.length).round();
+    }
+
+    int daysHitStepsGoal({int? dayCount}) {
+      final count = dayCount ?? stepsPeriodDayCount;
+      if (count <= 1) {
+        return selectedSteps >= stepsGoal ? 1 : 0;
+      }
+      return stepsForLastDays(count)
+          .where((day) => day.steps >= stepsGoal)
+          .length;
     }
 
     int get todayExerciseMinutes => todayExercises.fold(
@@ -661,22 +810,82 @@
     }
 
     Future<void> refreshWaterForDate(DateTime date) async {
-      final accessToken = await _weightAccessToken();
-      if (accessToken == null) return;
-
-      try {
-        final result = await _waterRepository.fetchWaterByDate(
-          accessToken: accessToken,
-          date: date,
+      final day = MealEntry.normalizeDate(date);
+      if (_refreshWaterDateFuture != null &&
+          _refreshWaterDateKey == day) {
+        appLog(
+          'Tracker: water date JOIN in-flight '
+          '${day.toIso8601String().split('T').first}',
         );
-        _applyWaterFetchResult(result, replaceEntriesForDate: date);
-      } on WaterApiException catch (error) {
-        _logWaterApi404Once(error);
-        debugPrint('TrackerController: water date fetch failed: $error');
-      } catch (error) {
-        debugPrint('TrackerController: water date fetch failed: $error');
+        return _refreshWaterDateFuture!;
+      }
+
+      appLog(
+        'Tracker: water date START '
+        '${day.toIso8601String().split('T').first}',
+      );
+      _refreshWaterDateKey = day;
+      final isToday = day == _today;
+      final future = () async {
+        if (isToday) {
+          isLoadingWaterToday.value = true;
+          waterTodayApiErrorMessage.value = null;
+        }
+        try {
+          final accessToken = await _weightAccessToken();
+          if (accessToken == null) {
+            if (isToday) {
+              waterTodayApiErrorMessage.value =
+                  'Sign in to load today’s water.';
+              hasCompletedWaterTodayFetch.value = true;
+            }
+            return;
+          }
+
+          try {
+            final result = await _waterRepository.fetchWaterByDate(
+              accessToken: accessToken,
+              date: day,
+            );
+            _applyWaterFetchResult(result, replaceEntriesForDate: day);
+            if (isToday) {
+              waterTodayApiErrorMessage.value = null;
+              hasCompletedWaterTodayFetch.value = true;
+            }
+          } on WaterApiException catch (error) {
+            _logWaterApi404Once(error);
+            debugPrint('TrackerController: water date fetch failed: $error');
+            if (isToday) {
+              waterTodayApiErrorMessage.value = error.message;
+              hasCompletedWaterTodayFetch.value = true;
+            }
+          } catch (error) {
+            debugPrint('TrackerController: water date fetch failed: $error');
+            if (isToday) {
+              waterTodayApiErrorMessage.value =
+                  'Unable to load water. Please check your connection.';
+              hasCompletedWaterTodayFetch.value = true;
+            }
+          }
+        } finally {
+          if (isToday) {
+            isLoadingWaterToday.value = false;
+          }
+        }
+      }();
+      _refreshWaterDateFuture = future;
+      try {
+        await future;
+      } finally {
+        if (identical(_refreshWaterDateFuture, future)) {
+          _refreshWaterDateFuture = null;
+          _refreshWaterDateKey = null;
+        }
       }
     }
+
+    /// Home Retry for today's water only (never history).
+    Future<void> retryWaterToday() => refreshWaterForDate(_today);
 
     Future<void> refreshWaterHistory({int page = 1}) async {
       final accessToken = await _weightAccessToken();
@@ -961,9 +1170,6 @@
         'TrackerController: bearer token ready '
         'source=${resolution.source} length=${resolution.tokenLength}',
       );
-      if (kDebugMode) {
-        debugPrint('TrackerController: accessToken=${resolution.token}');
-      }
       return resolution.token;
     }
 
@@ -1055,7 +1261,9 @@
 
           weightApiErrorMessage.value = null;
           weightRevision.value++;
-      await AnalyticsService.logWeightUpdated(kg);
+          // Analytics must not fail a successful weight save (e.g. test bindings
+          // or Firebase unavailable).
+          unawaited(AnalyticsService.logWeightUpdated(kg));
           debugPrint(
             'TrackerController: weight log complete — '
             'current=${currentWeight.value}kg history=${weightEntries.length} '
@@ -1324,9 +1532,52 @@
       });
     }
 
-    Future<void> _syncStepsToApi(int steps, {bool force = false}) async {
+    Future<void> _syncStepsToApi(int steps, {bool force = false}) {
+      if (ApiClient.isRateLimited) {
+        debugPrint('TrackerController: steps sync skipped (rate-limited)');
+        return Future.value();
+      }
+
+      final inFlight = _syncStepsInFlight;
+      if (inFlight != null) {
+        final inflightSteps = _syncStepsInFlightValue;
+        // Same or lower total — join; higher total waits then re-pushes.
+        if (inflightSteps != null && steps <= inflightSteps) {
+          debugPrint(
+            'TrackerController: steps POST JOIN in-flight '
+            '(pending=$steps inflight=$inflightSteps)',
+          );
+          return inFlight;
+        }
+        return inFlight.then((_) => _syncStepsToApi(steps, force: force));
+      }
+
+      late final Future<void> started;
+      started = _runSyncStepsToApi(steps, force: force).whenComplete(() {
+        if (identical(_syncStepsInFlight, started)) {
+          _syncStepsInFlight = null;
+          _syncStepsInFlightValue = null;
+        }
+      });
+      _syncStepsInFlight = started;
+      _syncStepsInFlightValue = steps;
+      return started;
+    }
+
+    Future<void> _runSyncStepsToApi(int steps, {bool force = false}) async {
+      final sessionGen = _stepsSessionGeneration;
       final accessToken = await _weightAccessToken();
       if (accessToken == null) return;
+      if (sessionGen != _stepsSessionGeneration) {
+        debugPrint('TrackerController: steps POST aborted (session cleared)');
+        return;
+      }
+      if (!Get.isRegistered<UserController>()) return;
+      final user = Get.find<UserController>();
+      if (!user.isLoggedIn || user.accessToken.isEmpty) {
+        debugPrint('TrackerController: steps POST skipped (signed out)');
+        return;
+      }
 
       final now = DateTime.now();
       if (!force &&
@@ -1347,6 +1598,12 @@
           caloriesBurned: caloriesBurned,
           date: _today,
         );
+        if (sessionGen != _stepsSessionGeneration) {
+          debugPrint(
+            'TrackerController: steps POST result discarded (session cleared)',
+          );
+          return;
+        }
         _lastStepsSyncAt = DateTime.now();
         _pendingStepsSyncValue = null;
 
@@ -1360,6 +1617,9 @@
         }
         debugPrint('TrackerController: steps synced to API OK');
       } on StepsApiException catch (error) {
+        if (error.statusCode == 429) {
+          ApiClient.noteRateLimited();
+        }
         _logStepsApi404Once(error);
         debugPrint('TrackerController: steps sync failed: $error');
       } catch (error) {
@@ -1377,56 +1637,118 @@
     }
 
     /// Pull steps for [date] (defaults to selected / today) and merge with local.
+    ///
+    /// [allowSyncPush] is false during [HomeHydrate] bootstrap so a GET cannot
+    /// immediately fire a POST /steps and burn rate-limit quota.
     Future<void> refreshStepsFromApi({
       bool force = false,
       DateTime? date,
-    }) async {
-      final accessToken = await _weightAccessToken();
-      if (accessToken == null) return;
+      bool allowSyncPush = true,
+    }) {
+      if (ApiClient.isRateLimited) {
+        debugPrint('TrackerController: steps fetch skipped (rate-limited)');
+        return Future.value();
+      }
 
       final day = MealEntry.normalizeDate(date ?? selectedStepsDate.value);
-
-      try {
-        final result = await _stepsRepository.fetchStepsByDate(
-          accessToken: accessToken,
-          date: day,
+      final inFlight = _refreshStepsFuture;
+      if (inFlight != null) {
+        if (_refreshStepsDateKey == day) {
+          // Same day — always join (force must not open a parallel GET).
+          appLog(
+            'Tracker: steps JOIN in-flight '
+            '${day.toIso8601String().split('T').first} force=$force',
+          );
+          return inFlight;
+        }
+        // Different day — wait, then start (avoids clobbering the join key).
+        return inFlight.then(
+          (_) => refreshStepsFromApi(
+            force: force,
+            date: date,
+            allowSyncPush: allowSyncPush,
+          ),
         );
-        var changed = false;
-        for (final entry in result.stepsByDate.entries) {
-          if (_mergeRemoteSteps(entry.key, entry.value)) changed = true;
-        }
-        for (final entry in result.entries) {
-          if (_mergeRemoteSteps(entry.normalizedDate, entry.steps)) {
-            changed = true;
-          }
-        }
-        if (changed) {
-          await _persistActivityLog();
-        } else {
-          _notifyActivityChanged();
+      }
+
+      appLog(
+        'Tracker: steps START '
+        '${day.toIso8601String().split('T').first} '
+        'force=$force allowSyncPush=$allowSyncPush',
+      );
+      _refreshStepsDateKey = day;
+      final sessionGen = _stepsSessionGeneration;
+      late final Future<void> future;
+      future = () async {
+        final accessToken = await _weightAccessToken();
+        if (accessToken == null) return;
+        if (sessionGen != _stepsSessionGeneration) {
+          debugPrint('TrackerController: steps GET aborted (session cleared)');
+          return;
         }
 
-        // Push today when local is ahead OR server is missing caloriesBurned.
-        if (day == _today) {
-          final localToday = todaySteps;
-          if (localToday > 0) {
-            final remoteToday = result.stepsFor(_today);
-            final expectedCalories =
-                StepLogEntry.caloriesFromSteps(localToday);
-            final needsPush = localToday > remoteToday ||
-                !result.hasServerCalories(_today) ||
-                result.caloriesFor(_today) < expectedCalories;
-            if (needsPush) {
-              unawaited(_syncStepsToApi(localToday, force: true));
+        try {
+          final result = await _stepsRepository.fetchStepsByDate(
+            accessToken: accessToken,
+            date: day,
+          );
+          if (sessionGen != _stepsSessionGeneration) {
+            debugPrint(
+              'TrackerController: steps GET result discarded (session cleared)',
+            );
+            return;
+          }
+          var changed = false;
+          for (final entry in result.stepsByDate.entries) {
+            if (_mergeRemoteSteps(entry.key, entry.value)) changed = true;
+          }
+          for (final entry in result.entries) {
+            if (_mergeRemoteSteps(entry.normalizedDate, entry.steps)) {
+              changed = true;
             }
           }
+          if (changed) {
+            await _persistActivityLog();
+          } else {
+            _notifyActivityChanged();
+          }
+
+          // Push today when local is ahead OR server is missing caloriesBurned.
+          // Never force-push during/after rate limits — that was flooding POSTs.
+          if (allowSyncPush &&
+              day == _today &&
+              !ApiClient.isRateLimited &&
+              !HomeHydrate.isBootstrapQuiet) {
+            final localToday = todaySteps;
+            if (localToday > 0) {
+              final remoteToday = result.stepsFor(_today);
+              final expectedCalories =
+                  StepLogEntry.caloriesFromSteps(localToday);
+              final needsPush = localToday > remoteToday ||
+                  !result.hasServerCalories(_today) ||
+                  result.caloriesFor(_today) < expectedCalories;
+              if (needsPush) {
+                unawaited(_syncStepsToApi(localToday));
+              }
+            }
+          }
+        } on StepsApiException catch (error) {
+          if (error.statusCode == 429) {
+            ApiClient.noteRateLimited();
+          }
+          _logStepsApi404Once(error);
+          debugPrint('TrackerController: steps fetch failed: $error');
+        } catch (error) {
+          debugPrint('TrackerController: steps fetch failed: $error');
         }
-      } on StepsApiException catch (error) {
-        _logStepsApi404Once(error);
-        debugPrint('TrackerController: steps fetch failed: $error');
-      } catch (error) {
-        debugPrint('TrackerController: steps fetch failed: $error');
-      }
+      }().whenComplete(() {
+        if (identical(_refreshStepsFuture, future)) {
+          _refreshStepsFuture = null;
+          _refreshStepsDateKey = null;
+        }
+      });
+      _refreshStepsFuture = future;
+      return future;
     }
 
     /// Prefetch recent step history so calendar days have data offline.

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/nutrition_plan_model.dart';
 import 'api_client.dart';
@@ -34,10 +35,7 @@ class NutritionPlanApiService {
       'NutritionPlanApiService: POST ${ApiEndpoints.nutritionPlanUrl}',
     );
     if (kDebugMode && body != null) {
-      debugPrint(
-        'NutritionPlanApiService: request body:\n'
-        '${const JsonEncoder.withIndent('  ').convert(body)}',
-      );
+      debugPrint('request body redacted');
     }
 
     final response = await _apiClient.post(
@@ -64,9 +62,7 @@ class NutritionPlanApiService {
 
   NutritionPlanModel _parsePlanResponse(http.Response response) {
     final body = response.body.trim();
-    debugPrint(
-      'NutritionPlanApiService: response ${response.statusCode}: $body',
-    );
+    debugPrint('NutritionPlanApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 
@@ -76,7 +72,7 @@ class NutritionPlanApiService {
           : null;
       throw NutritionPlanApiException(
         message ??
-            'Nutrition plan request failed (${response.statusCode}). $body',
+            'Nutrition plan request failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }

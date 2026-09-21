@@ -223,7 +223,7 @@ class NotificationApiService {
       return decoded is Map<String, dynamic> ? decoded : null;
     } catch (_) {
       if (kDebugMode) {
-        debugPrint('NotificationApiService: invalid JSON response: $body');
+        debugPrint('NotificationApiService: invalid JSON response (${body.length} chars)');
       }
       return null;
     }

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/problem_report.dart';
 import 'api_client.dart';
@@ -72,7 +73,7 @@ class SupportApiService {
   void _parseResponse(http.Response response) {
     final body = response.body.trim();
     final statusCode = response.statusCode;
-    debugPrint('SupportApiService: response HTTP $statusCode: $body');
+    debugPrint('SupportApiService: response HTTP ${safeHttpResponseLog(statusCode, body)}');
 
     if (statusCode >= 200 && statusCode < 300) return;
 

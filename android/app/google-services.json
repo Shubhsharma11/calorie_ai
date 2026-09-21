@@ -1,7 +1,7 @@
 {
   "project_info": {
     "project_number": "950645223660",
-    "project_id": "calorie-ai-2cbb0",
+    "project_id": "calorie-ai-2cbb0", 
     "storage_bucket": "calorie-ai-2cbb0.firebasestorage.app"
   },
   "client": [
@@ -18,13 +18,13 @@
           "client_type": 1,
           "android_info": {
             "package_name": "com.srhsoftwares.mycaloriepal",
-            "certificate_hash": "121d6686d7b7e08d969b677f3163c6dc1352b90a"
+            "certificate_hash": "121d6686d7b7e08d969b677f3163c6dc1352b90a"  
           }
         },
         {
           "client_id": "950645223660-73fq24ua6hn9h7u92bc9nhtg22rjag1d.apps.googleusercontent.com",
           "client_type": 3
-        }
+        }   
       ],
       "api_key": [
         {

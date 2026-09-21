@@ -23,6 +23,21 @@ class StepLogEntry {
   static int caloriesFromSteps(int steps) => (steps * 0.04).round();
 }
 
+/// One day of steps + calories for history charts and period totals.
+class DailyStepsLog {
+  const DailyStepsLog({
+    required this.date,
+    required this.steps,
+    required this.calories,
+  });
+
+  final DateTime date;
+  final int steps;
+  final int calories;
+
+  bool get hasData => steps > 0 || calories > 0;
+}
+
 class StepLogResponse {
   const StepLogResponse({this.entry, this.coins});
 

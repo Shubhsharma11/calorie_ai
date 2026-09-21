@@ -72,7 +72,7 @@ void main() {
       preset: preset,
     );
 
-    expect(capturedUri.path, ApiEndpoints.mealsCustom);
+    expect(capturedUri.path, ApiEndpoints.myMeals);
     expect(capturedHeaders['Authorization'], 'Bearer token-123');
     expect(capturedHeaders['X-Timezone'], isNotEmpty);
     expect(capturedBody['name'], 'Oat Meal');
@@ -120,7 +120,7 @@ void main() {
 
     final presets = await service.fetchCustomMeals(accessToken: 'token-123');
 
-    expect(capturedUri.path, ApiEndpoints.mealsCustom);
+    expect(capturedUri.path, ApiEndpoints.myMeals);
     expect(capturedHeaders['Authorization'], 'Bearer token-123');
     expect(capturedHeaders['X-Timezone'], isNotEmpty);
     expect(presets.length, 1);

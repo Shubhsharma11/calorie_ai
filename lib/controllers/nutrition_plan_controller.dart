@@ -13,34 +13,81 @@ class NutritionPlanController extends GetxController {
     : _repository = repository ?? NutritionPlanRepository();
 
   final NutritionPlanRepository _repository;
-  bool _isFetching = false;
+  Future<void>? _loadPlanInFlight;
   int _fetchGeneration = 0;
 
   final isLoading = false.obs;
+  /// True after at least one GET attempt finishes (success, missing, or error).
+  final hasCompletedFetch = false.obs;
   final errorMessage = RxnString();
   final plan = Rxn<NutritionPlanModel>();
   final revision = 0.obs;
 
   bool get hasWeeklyPlan => plan.value?.weeklyPlan?.isNotEmpty == true;
 
+  /// Useful Home preview content (success presentation).
+  bool get hasHomePreview {
+    final preview = plan.value?.previewMeal;
+    if (preview == null) return false;
+    return preview.displayName.trim().isNotEmpty || preview.calories > 0;
+  }
+
+  /// Successful response with no usable plan content (not an API error).
+  bool get isMissingPlan =>
+      hasCompletedFetch.value &&
+      errorMessage.value == null &&
+      !hasHomePreview;
+
   @override
   void onInit() {
     super.onInit();
-    unawaited(loadPlan(force: true));
+    // Already hydrated from onboarding — avoid a forced refetch that flickers Home/Profile.
+    if (plan.value != null) {
+      hasCompletedFetch.value = true;
+      return;
+    }
+    // Network load is owned by [HomeHydrate].
   }
 
   void setLoadedPlan(NutritionPlanModel loadedPlan) {
+    // Cancel any in-flight GET so a late response cannot overwrite this plan.
+    _fetchGeneration++;
     plan.value = loadedPlan;
     isLoading.value = false;
     errorMessage.value = null;
-    _isFetching = false;
+    hasCompletedFetch.value = true;
     revision.value++;
   }
 
-  Future<void> loadPlan({bool force = false}) async {
-    if (_isFetching && !force) return;
-    if (!force && plan.value != null) return;
+  /// Home Retry — nutrition GET only (never HomeHydrate / other sections).
+  Future<void> retryPlan() => loadPlan(force: true);
 
+  /// Concurrent callers join the same in-flight Future (no duplicate GET).
+  Future<void> loadPlan({bool force = false}) {
+    if (!force &&
+        plan.value != null &&
+        errorMessage.value == null &&
+        hasCompletedFetch.value) {
+      return Future.value();
+    }
+
+    final inFlight = _loadPlanInFlight;
+    if (inFlight != null) {
+      debugPrint('NutritionPlanController: loadPlan JOIN in-flight');
+      return inFlight;
+    }
+
+    late final Future<void> started;
+    started = _loadPlan().whenComplete(() {
+      if (identical(_loadPlanInFlight, started)) {
+        _loadPlanInFlight = null;
+      }
+    });
+    _loadPlanInFlight = started;
+    return started;
+  }
+
+  Future<void> _loadPlan() async {
     final userController = Get.find<UserController>();
     await userController.localProfileReady;
     await userController.loadAuthSession();
@@ -51,13 +98,13 @@ class NutritionPlanController extends GetxController {
       );
       errorMessage.value = 'Please sign in to load your nutrition plan.';
       isLoading.value = false;
+      hasCompletedFetch.value = true;
       revision.value++;
       return;
     }
 
     final generation = ++_fetchGeneration;
     final token = userController.accessToken;
-    _isFetching = true;
     isLoading.value = true;
     errorMessage.value = null;
     revision.value++;
@@ -76,6 +123,7 @@ class NutritionPlanController extends GetxController {
         return;
       }
       plan.value = fetchedPlan;
+      errorMessage.value = null;
       debugPrint(
         'NutritionPlanController: loaded plan '
         'calories=${fetchedPlan.calories} '
@@ -91,6 +139,18 @@ class NutritionPlanController extends GetxController {
     } on NutritionPlanApiException catch (error) {
       if (generation != _fetchGeneration) return;
       debugPrint('NutritionPlanController: load failed: $error');
+      // Never retry 401/403 — clear the dead session once.
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await _clearSessionOnAuthFailure(statusCode: error.statusCode);
+        return;
+      }
+      // 404 = no plan yet (missing), not a hard API failure.
+      if (error.statusCode == 404) {
+        plan.value = null;
+        errorMessage.value = null;
+        debugPrint('NutritionPlanController: no plan (404) — missing state');
+        return;
+      }
       errorMessage.value = error.message;
     } catch (error) {
       if (generation != _fetchGeneration) return;
@@ -99,8 +159,8 @@ class NutritionPlanController extends GetxController {
           'Unable to load your nutrition plan. Please check your connection and try again.';
     } finally {
       if (generation == _fetchGeneration) {
-        _isFetching = false;
         isLoading.value = false;
+        hasCompletedFetch.value = true;
       }
       revision.value++;
     }
@@ -120,7 +180,6 @@ class NutritionPlanController extends GetxController {
 
     final generation = ++_fetchGeneration;
     final token = userController.accessToken;
-    _isFetching = true;
     isLoading.value = true;
     errorMessage.value = null;
     revision.value++;
@@ -161,6 +220,10 @@ class NutritionPlanController extends GetxController {
     } on NutritionPlanApiException catch (error) {
       if (generation != _fetchGeneration) return;
       debugPrint('NutritionPlanController: regenerate failed: $error');
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await _clearSessionOnAuthFailure(statusCode: error.statusCode);
+        return;
+      }
       errorMessage.value = error.message;
     } catch (error) {
       if (generation != _fetchGeneration) return;
@@ -169,11 +232,26 @@ class NutritionPlanController extends GetxController {
           'Unable to refresh your weekly meal plan. Please try again.';
     } finally {
       if (generation == _fetchGeneration) {
-        _isFetching = false;
         isLoading.value = false;
+        hasCompletedFetch.value = true;
       }
       revision.value++;
     }
+  }
+
+  Future<void> _clearSessionOnAuthFailure({required int? statusCode}) async {
+    if (!Get.isRegistered<UserController>()) return;
+    final user = Get.find<UserController>();
+    if (user.isLoggingOut || user.isDeletingAccount || !user.isLoggedIn) {
+      return;
+    }
+    await user.clearInvalidSession(
+      // TEMPORARY — HOME_STUCK_DEBUG
+      debugController: 'NutritionPlanController',
+      debugEndpoint: 'GET|POST /nutrition/plan',
+      debugStatusCode: statusCode,
+      debugRequestType: 'HTTP',
+    );
   }
 
   int get recommendedCalories {
@@ -188,10 +266,11 @@ class NutritionPlanController extends GetxController {
 
   void clearSessionData() {
     _fetchGeneration++;
+    _loadPlanInFlight = null;
     plan.value = null;
     errorMessage.value = null;
     isLoading.value = false;
-    _isFetching = false;
+    hasCompletedFetch.value = false;
     revision.value++;
     debugPrint('NutritionPlanController: session data cleared');
   }

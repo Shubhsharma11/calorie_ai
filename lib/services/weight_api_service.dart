@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/api_weight_mapper.dart';
 import '../models/meal_entry.dart';
@@ -71,7 +72,7 @@ class WeightApiService {
     };
 
     debugPrint(
-      'WeightApiService: POST ${ApiEndpoints.weightUrl} $body '
+      'WeightApiService: POST ${ApiEndpoints.weightUrl} (payload redacted) '
       'bearerTokenLength=${accessToken.length}',
     );
 
@@ -104,7 +105,7 @@ class WeightApiService {
 
   void _parseDeleteResponse(http.Response response, {required String weightId}) {
     final body = response.body.trim();
-    debugPrint('WeightApiService: DELETE response ${response.statusCode}: $body');
+    debugPrint('WeightApiService: DELETE response ${safeHttpResponseLog(response.statusCode, body)}');
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       debugPrint('WeightApiService: DELETE /api/v1/weight/$weightId OK');
@@ -128,7 +129,7 @@ class WeightApiService {
     DateTime? fallbackDate,
   }) {
     final body = response.body.trim();
-    debugPrint('WeightApiService: response ${response.statusCode}: $body');
+    debugPrint('WeightApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 
@@ -137,7 +138,7 @@ class WeightApiService {
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw WeightApiException(
-        message ?? 'Weight request failed (${response.statusCode}). $body',
+        message ?? 'Weight request failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }
@@ -166,7 +167,7 @@ class WeightApiService {
   WeightLogResponse _parseLogResponse(http.Response response) {
     final body = response.body.trim();
     final statusCode = response.statusCode;
-    debugPrint('WeightApiService: POST response HTTP $statusCode: $body');
+    debugPrint('WeightApiService: POST response HTTP ${safeHttpResponseLog(statusCode, body)}');
 
     if (statusCode >= 200 && statusCode < 300 && body.isEmpty) {
       if (statusCode == 200 || statusCode == 201) {
@@ -182,7 +183,7 @@ class WeightApiService {
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw WeightApiException(
-        message ?? 'Weight sync failed ($statusCode). $body',
+        message ?? 'Weight sync failed ($statusCode). ${safeHttpErrorDetail(statusCode, body)}',
         statusCode: statusCode,
       );
     }

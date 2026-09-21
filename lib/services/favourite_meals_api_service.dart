@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/api_favourite_meal_mapper.dart';
 import '../models/saved_meal_item.dart';
@@ -75,7 +76,7 @@ class FavouriteMealsApiService {
     );
 
     debugPrint(
-      'FavouriteMealsApiService: POST ${ApiEndpoints.favouriteMealsUrl} $body',
+      'FavouriteMealsApiService: POST ${ApiEndpoints.favouriteMealsUrl} (payload redacted)',
     );
 
     final response = await _apiClient.post(
@@ -103,7 +104,7 @@ class FavouriteMealsApiService {
     );
 
     debugPrint(
-      'FavouriteMealsApiService: POST ${ApiEndpoints.url(endpoint)} $body',
+      'FavouriteMealsApiService: POST ${ApiEndpoints.url(endpoint)} (payload redacted)',
     );
 
     final response = await _apiClient.post(
@@ -143,9 +144,7 @@ class FavouriteMealsApiService {
 
   List<SavedMealItem> _parseListResponse(http.Response response) {
     final body = response.body.trim();
-    debugPrint(
-      'FavouriteMealsApiService: GET list ${response.statusCode}: $body',
-    );
+    debugPrint('FavouriteMealsApiService: GET list ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
     _throwIfFailed(
@@ -166,9 +165,7 @@ class FavouriteMealsApiService {
     SavedMealItem? source,
   }) {
     final body = response.body.trim();
-    debugPrint(
-      'FavouriteMealsApiService: GET one ${response.statusCode}: $body',
-    );
+    debugPrint('FavouriteMealsApiService: GET one ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
     _throwIfFailed(response, decoded, action: action, url: url);
@@ -200,9 +197,7 @@ class FavouriteMealsApiService {
     required SavedMealItem source,
   }) {
     final body = response.body.trim();
-    debugPrint(
-      'FavouriteMealsApiService: POST save ${response.statusCode}: $body',
-    );
+    debugPrint('FavouriteMealsApiService: POST save ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
     _throwIfFailed(
@@ -233,9 +228,7 @@ class FavouriteMealsApiService {
     required String url,
   }) {
     final body = response.body.trim();
-    debugPrint(
-      'FavouriteMealsApiService: $action ${response.statusCode}: $body',
-    );
+    debugPrint('FavouriteMealsApiService: $action ${safeHttpResponseLog(response.statusCode, body)}');
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return;

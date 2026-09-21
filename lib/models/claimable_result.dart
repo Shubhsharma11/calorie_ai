@@ -1,13 +1,17 @@
-/// Parsed GET /api/v1/claimable payload.
+/// Parsed GET /api/v1/coins/claimable payload.
 class ClaimableResult {
   const ClaimableResult({
     this.claimableCoins = 0,
+    this.earnedCoins,
     this.balance,
     this.canClaim = false,
   });
 
   /// Coins available to claim right now.
   final int claimableCoins;
+
+  /// Coins earned for that day (when API sends it).
+  final int? earnedCoins;
 
   /// Optional wallet total from the API (when provided).
   final int? balance;
@@ -16,6 +20,12 @@ class ClaimableResult {
   final bool canClaim;
 
   bool get hasClaimable => claimableCoins > 0 || canClaim;
+
+  /// Best single number to show for history: earned, else claimable.
+  int get displayCoins {
+    if (earnedCoins != null && earnedCoins! > 0) return earnedCoins!;
+    return claimableCoins > 0 ? claimableCoins : 0;
+  }
 }
 
 /// Parsed GET /api/v1/coins wallet balance.

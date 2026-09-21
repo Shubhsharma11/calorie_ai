@@ -3,6 +3,7 @@ import 'package:calorie_ai/models/api_favourite_meal_mapper.dart';
 import 'package:calorie_ai/models/api_my_food_mapper.dart';
 import 'package:calorie_ai/models/food_item.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:calorie_ai/services/api_endpoints.dart';
 
 double _stepperStart(FoodItem food) =>
     food.usesHouseholdServing ? 1 : food.servingQuantity;
@@ -270,7 +271,7 @@ void main() {
     expect(food, isNotNull);
     expect(
       food!.imageUrl,
-      'https://fitbuddyai.srhsoftwares.com/uploads/aam-panna.png',
+      '${ApiEndpoints.baseUrl}/uploads/aam-panna.png',
     );
   });
 
@@ -300,7 +301,7 @@ void main() {
     expect(hydrated.hasDisplayServing, isTrue);
     expect(
       hydrated.imageUrl,
-      'https://fitbuddyai.srhsoftwares.com/uploads/aam-panna.png',
+      '${ApiEndpoints.baseUrl}/uploads/aam-panna.png',
     );
     expect(hydrated.servingLabelForGrams(250), '1 Glass (250 g)');
     expect(hydrated.caloriesForGrams(250), 110);

@@ -1,16 +1,57 @@
 import 'package:calorie_ai/controllers/food_controller.dart';
+import 'package:calorie_ai/controllers/user_controller.dart';
 import 'package:calorie_ai/models/custom_food_preset.dart';
 import 'package:calorie_ai/models/custom_meal_preset.dart';
 import 'package:calorie_ai/models/food_item.dart';
 import 'package:calorie_ai/models/meal_entry.dart';
 import 'package:calorie_ai/models/meal_type.dart';
 import 'package:calorie_ai/models/saved_meal_item.dart';
+import 'package:calorie_ai/repositories/auth_repository.dart';
+import 'package:calorie_ai/repositories/custom_meals_repository.dart';
+import 'package:calorie_ai/services/local_storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// Auth session for tests that exercise authenticated my-meal delete.
+class _FakeAuthRepository extends AuthRepository {
+  _FakeAuthRepository() : super(storage: LocalStorageService());
+
+  @override
+  Future<Map<String, dynamic>> loadSession() async => {
+        'userId': 'u1',
+        'provider': 'google',
+        'email': 'a@b.com',
+        'name': 'Test',
+        'accessToken': 'test-access-token-xxxxxx',
+        'refreshToken': 'test-refresh',
+        'backendResponse': <String, dynamic>{},
+        'setupComplete': true,
+      };
+}
+
+/// Avoids real network during delete/resolve while keeping auth required.
+class _FakeCustomMealsRepository extends CustomMealsRepository {
+  @override
+  Future<List<CustomMealPreset>> fetchCustomMeals({
+    required String accessToken,
+  }) async =>
+      const [];
+
+  @override
+  Future<void> deleteCustomMeal({
+    required String accessToken,
+    required String myMealId,
+  }) async {}
+}
 
 void main() {
-  setUp(Get.reset);
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    Get.testMode = true;
+    Get.reset();
+  });
   tearDown(Get.reset);
   const oats = FoodItem(
     name: 'Oats',
@@ -129,7 +170,13 @@ void main() {
   });
 
   test('recentQuickMeals hides a deleted my meal and its foods', () async {
-    final food = FoodController();
+    final user = UserController(authRepository: _FakeAuthRepository());
+    Get.put(user, permanent: true);
+    await user.localProfileReady;
+
+    final food = FoodController(
+      customMealsRepository: _FakeCustomMealsRepository(),
+    );
     final today = MealEntry.normalizeDate(DateTime.now());
     final preset = CustomMealPreset(
       id: '1000000000002',

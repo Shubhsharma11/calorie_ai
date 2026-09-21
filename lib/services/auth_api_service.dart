@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/avatar_upload_result.dart';
 import 'api_client.dart';
@@ -47,7 +48,7 @@ class AuthApiService {
           : null;
       throw AuthApiException(
         message ??
-            'Google backend login failed (${response.statusCode}). $body',
+            'Google backend login failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
       );
     }
 
@@ -130,7 +131,7 @@ class AuthApiService {
           : null;
       throw AuthApiException(
         message ?? 
-            'Phone backend login failed (${response.statusCode}). $body',
+            'Phone backend login failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
       );
     }
 
@@ -229,7 +230,7 @@ class AuthApiService {
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw AuthApiException(
-        message ?? '$fallback (${response.statusCode}). $body',
+        message ?? '$fallback (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
       );
     }
 
@@ -261,7 +262,7 @@ class AuthApiService {
           : null;
       throw AuthApiException(
         message ??
-            'Account deletion failed (${response.statusCode}). $body',
+            'Account deletion failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
       );
     }
   }

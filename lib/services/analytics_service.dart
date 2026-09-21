@@ -139,12 +139,16 @@ class AnalyticsService {
   }
 
   static Future<void> logWeightUpdated(double weight) async {
-    await analytics.logEvent(
-      name: 'weight_updated',
-      parameters: {
-        'weight': weight,
-      },
-    );
+    try {
+      await analytics.logEvent(
+        name: 'weight_updated',
+        parameters: {
+          'weight': weight,
+        },
+      );
+    } catch (_) {
+      // Non-fatal: analytics must never fail a successful weight save.
+    }
   }
 
   static Future<void> logWaterReminderCompleted({String? source}) async {

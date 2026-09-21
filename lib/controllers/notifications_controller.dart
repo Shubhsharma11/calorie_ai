@@ -5,6 +5,8 @@ import 'package:get/get.dart';
 
 import '../models/notification_model.dart';
 import '../repositories/notification_repository.dart';
+import '../core/home_hydrate.dart';
+import '../services/api_client.dart';
 import '../services/local_storage_service.dart';
 import '../services/notification_api_service.dart';
 import 'user_controller.dart';
@@ -40,7 +42,10 @@ class NotificationsController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    unawaited(_loadDismissedIds().then((_) => refreshUnreadCount()));
+    // Unread badge is loaded from [HomeHydrate._secondary] after the quiet
+    // sequential sync — a fixed +3s timer here raced Home open and burned
+    // rate-limit quota (especially when InitialBinding creates this early).
+    unawaited(_loadDismissedIds());
   }
 
   @override
@@ -98,6 +103,22 @@ class NotificationsController extends GetxController {
   Future<void> refreshUnreadCount() async {
     if (!isLoggedIn) {
       unreadCount.value = 0;
+      return;
+    }
+    if (ApiClient.isRateLimited) {
+      if (kDebugMode) {
+        debugPrint(
+          'NotificationsController.refreshUnreadCount: skipped (rate-limited)',
+        );
+      }
+      return;
+    }
+    if (HomeHydrate.isBootstrapQuiet) {
+      if (kDebugMode) {
+        debugPrint(
+          'NotificationsController.refreshUnreadCount: skipped (hydrate quiet)',
+        );
+      }
       return;
     }
 

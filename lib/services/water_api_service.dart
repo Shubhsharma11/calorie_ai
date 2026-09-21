@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/api_water_mapper.dart';
 import '../models/water_log_entry.dart';
@@ -77,7 +78,7 @@ class WaterApiService {
     final body = ApiWaterMapper.requestBodyFromMl(amountMl, date: date);
 
     debugPrint(
-      'WaterApiService: POST ${ApiEndpoints.waterUrl} $body '
+      'WaterApiService: POST ${ApiEndpoints.waterUrl} (payload redacted) '
       'bearerTokenLength=${accessToken.length} '
       'timezone=${resolveApiTimezone()}',
     );
@@ -111,7 +112,7 @@ class WaterApiService {
 
   void _parseDeleteResponse(http.Response response, {required String waterId}) {
     final body = response.body.trim();
-    debugPrint('WaterApiService: DELETE response ${response.statusCode}: $body');
+    debugPrint('WaterApiService: DELETE response ${safeHttpResponseLog(response.statusCode, body)}');
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       debugPrint('WaterApiService: DELETE /api/v1/water/$waterId OK');
@@ -135,7 +136,7 @@ class WaterApiService {
     DateTime? fallbackDate,
   }) {
     final body = response.body.trim();
-    debugPrint('WaterApiService: response ${response.statusCode}: $body');
+    debugPrint('WaterApiService: response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
 
@@ -144,7 +145,7 @@ class WaterApiService {
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw WaterApiException(
-        message ?? 'Water request failed (${response.statusCode}). $body',
+        message ?? 'Water request failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }
@@ -173,7 +174,7 @@ class WaterApiService {
   WaterLogResponse _parseLogResponse(http.Response response) {
     final body = response.body.trim();
     final statusCode = response.statusCode;
-    debugPrint('WaterApiService: POST response HTTP $statusCode: $body');
+    debugPrint('WaterApiService: POST response HTTP ${safeHttpResponseLog(statusCode, body)}');
 
     if (statusCode >= 200 && statusCode < 300 && body.isEmpty) {
       return const WaterLogResponse();
@@ -186,7 +187,7 @@ class WaterApiService {
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw WaterApiException(
-        message ?? 'Water sync failed ($statusCode). $body',
+        message ?? 'Water sync failed ($statusCode). ${safeHttpErrorDetail(statusCode, body)}',
         statusCode: statusCode,
       );
     }

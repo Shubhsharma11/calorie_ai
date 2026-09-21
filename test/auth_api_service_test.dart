@@ -83,7 +83,7 @@ void main() {
     );
     expect(
       MediaUrl.resolve(
-        'https://fitbuddyai.srhsoftwares.com/avatars/'
+        '${ApiEndpoints.baseUrl}/avatars/'
         '6a7ea990c8f15080402cdea9-cd7d2d761ce63a5e.png',
       ),
       'https://fitbuddyai.s3.ap-south-1.amazonaws.com/avatars/'

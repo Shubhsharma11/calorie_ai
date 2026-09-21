@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -8,6 +9,7 @@ import 'package:get/get.dart';
 
 import '../controllers/auth_controller.dart';
 import '../core/responsive.dart';
+import '../core/signed_out_navigation.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../widgets/privacy_policy_dialog.dart';
@@ -22,8 +24,16 @@ class LoginView extends GetView<AuthController> {
 
   @override
   Widget build(BuildContext context) {
-    return _LoginPhoneHintBootstrap(
-      child: _LoginScaffold(controller: controller),
+    // After logout, never allow system Back / swipe to reveal Main/Home.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        unawaited(SignedOutNavigation.onSignedOutRootBack());
+      },
+      child: _LoginPhoneHintBootstrap(
+        child: _LoginScaffold(controller: controller),
+      ),
     );
   }
 }

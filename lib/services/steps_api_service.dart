@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/api_steps_mapper.dart';
 import '../models/step_log_entry.dart';
@@ -83,7 +84,7 @@ class StepsApiService {
     );
 
     debugPrint(
-      'StepsApiService: POST ${ApiEndpoints.stepsUrl} $body '
+      'StepsApiService: POST ${ApiEndpoints.stepsUrl} (payload redacted) '
       'bearerTokenLength=${accessToken.length} '
       'timezone=${resolveApiTimezone()}',
     );
@@ -102,7 +103,7 @@ class StepsApiService {
     DateTime? fallbackDate,
   }) {
     final body = response.body.trim();
-    debugPrint('StepsApiService: GET response ${response.statusCode}: $body');
+    debugPrint('StepsApiService: GET response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -110,7 +111,7 @@ class StepsApiService {
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw StepsApiException(
-        message ?? 'Steps request failed (${response.statusCode}). $body',
+        message ?? 'Steps request failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }
@@ -127,7 +128,7 @@ class StepsApiService {
 
   StepLogResponse _parseLogResponse(http.Response response) {
     final body = response.body.trim();
-    debugPrint('StepsApiService: POST response ${response.statusCode}: $body');
+    debugPrint('StepsApiService: POST response ${safeHttpResponseLog(response.statusCode, body)}');
 
     final decoded = _tryDecodeJson(body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -135,7 +136,7 @@ class StepsApiService {
           ? decoded['message'] as String? ?? decoded['error'] as String?
           : null;
       throw StepsApiException(
-        message ?? 'Save steps failed (${response.statusCode}). $body',
+        message ?? 'Save steps failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }

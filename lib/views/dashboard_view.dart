@@ -6,11 +6,11 @@ import 'package:get/get.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
-import '../controllers/rewards_controller.dart';
 import '../controllers/tracker_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_coach_marks.dart';
 import '../core/dashboard_actions.dart';
+import '../core/home_hydrate.dart';
 import '../core/macro_emojis.dart';
 import '../core/responsive.dart';
 import '../models/daily_nutrition.dart';
@@ -20,13 +20,13 @@ import '../theme/app_colors.dart';
 import '../widgets/ai_meal_plan_card.dart';
 import '../widgets/calorie_overview_card.dart';
 import '../widgets/dashboard_header.dart';
+import '../widgets/home_meals_preview.dart';
 import '../widgets/macro_nutrition_card.dart';
 import '../widgets/past_date_banner.dart';
 import '../widgets/responsive_page.dart';
 import '../widgets/steps_claim_banner.dart';
 import '../widgets/water_intake_banner.dart';
 import '../widgets/weight_tracker_banner.dart';
-import '../widgets/meal_type_icon.dart';
 import '../widgets/weekly_progress_chart.dart';
 
 class DashboardView extends GetView<DashboardController> {
@@ -35,7 +35,6 @@ class DashboardView extends GetView<DashboardController> {
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
-    final food = Get.find<FoodController>();
     final r = context.responsive;
     final pagePad = r.pagePadding;
 
@@ -74,12 +73,7 @@ class DashboardView extends GetView<DashboardController> {
         }),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: () async {
-              await food.refreshMealsFromApi();
-              if (Get.isRegistered<RewardsController>()) {
-                await Get.find<RewardsController>().refreshCoinsFromApi();
-              }
-            },
+            onRefresh: HomeHydrate.refresh,
             color: AppColors.primary,
             child: ResponsivePage(
               scrollable: true,
@@ -94,7 +88,7 @@ class DashboardView extends GetView<DashboardController> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Obx(() {
-                    food.selectedLogDate.value;
+                    Get.find<FoodController>().selectedLogDate.value;
                     if (controller.isViewingToday) {
                       return SizedBox(height: r.scale(16));
                     }
@@ -266,7 +260,6 @@ class _SecondaryContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final meals = food.selectedDateMeals;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -336,184 +329,16 @@ class _SecondaryContent extends StatelessWidget {
           ),
         ),
         SizedBox(height: r.scale(28)),
-        Text(
-          viewingToday ? 'Today' : dateLabel,
-          style: TextStyle(
-            fontSize: r.scale(18, tablet: 19, desktop: 20),
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
+        HomeMealsPreview(
+          food: food,
+          viewingToday: viewingToday,
+          dateLabel: dateLabel,
+          onAddFood: () => Get.toNamed(AppRoutes.addFood),
+          onRetry: () {
+            food.refreshMealsFromApi();
+          },
         ),
-        SizedBox(height: r.scale(12)),
-        if (meals.isEmpty)
-          _TodayEmptyState(
-            viewingToday: viewingToday,
-            onAddFood: () => Get.toNamed(AppRoutes.addFood),
-          )
-        else
-          Column(
-            children: meals
-                .take(3)
-                .map(
-                  (e) => _MealPreview(
-                    meal: e.meal,
-                    hint: '${e.food.name} · ${e.calories} kcal',
-                  ),
-                )
-                .toList(),
-          ),
       ],
-    );
-  }
-}
-
-class _MealPreview extends StatelessWidget {
-  const _MealPreview({required this.meal, required this.hint});
-
-  final String meal;
-  final String hint;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Container(
-      margin: EdgeInsets.only(bottom: r.scale(10)),
-      padding: EdgeInsets.all(r.scale(16)),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: AppColors.border.withValues(alpha: 0.35),
-        ),
-      ),
-      child: Row(
-        children: [
-          MealTypeIcon(meal: meal, size: r.scale(36)),
-          SizedBox(width: r.scale(12)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  meal,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                Text(
-                  hint,
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TodayEmptyState extends StatelessWidget {
-  const _TodayEmptyState({
-    required this.viewingToday,
-    required this.onAddFood,
-  });
-
-  final bool viewingToday;
-  final VoidCallback onAddFood;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Container(
-      padding: EdgeInsets.all(r.scale(18)),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.border.withValues(alpha: 0.35),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: r.scale(42),
-                height: r.scale(42),
-                decoration: BoxDecoration(
-                  color: AppColors.selectionFill,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.restaurant_menu_rounded,
-                  color: AppColors.primary,
-                  size: r.scale(22),
-                ),
-              ),
-              SizedBox(width: r.scale(12)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Meals',
-                      style: TextStyle(
-                        fontSize: r.scale(18),
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    SizedBox(height: r.scale(2)),
-                    Text(
-                      viewingToday
-                          ? 'Tap Add Food to log your first meal today.'
-                          : 'Nothing was logged on this day.',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: r.scale(13),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (viewingToday) ...[
-            SizedBox(height: r.scale(16)),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onAddFood,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.onPrimary,
-                  elevation: 0,
-                  padding: EdgeInsets.symmetric(
-                    vertical: r.scale(12),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                icon: Icon(Icons.add_rounded, size: r.scale(18)),
-                label: Text(
-                  'Add Food',
-                  style: TextStyle(
-                    fontSize: r.scale(15),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }

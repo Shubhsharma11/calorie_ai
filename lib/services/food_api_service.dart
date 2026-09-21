@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/safe_api_log.dart';
 import '../core/api_timezone.dart';
 import '../models/food_item.dart';
 import 'api_client.dart';
@@ -79,7 +80,7 @@ class FoodApiService {
           ? (decoded['message'] as String?) ?? (decoded['error'] as String?)
           : null;
       throw FoodApiException(
-        message ?? 'Food search failed (${response.statusCode}). $body',
+        message ?? 'Food search failed (${response.statusCode}). ${safeHttpErrorDetail(response.statusCode, body)}',
         statusCode: response.statusCode,
       );
     }
