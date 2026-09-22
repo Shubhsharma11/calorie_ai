@@ -10,6 +10,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../routes/app_routes.dart';
 import '../core/app_snackbar.dart';
 import '../core/auth_token_debug.dart';
+import '../core/referral_apply.dart';
 import '../services/analytics_service.dart';
 import '../services/auth_api_service.dart';
 import '../services/phone_hint_service.dart';
@@ -185,11 +186,13 @@ class AuthController extends GetxController {
         }
         MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);
+        unawaited(ReferralApply.submitPendingIfNeeded());
       } else {
         await user.restoreOnboardingProgress();
         final resumeRoute = await user.resolveSetupResumeRoute();
         if (resumeRoute == AppRoutes.main) {
           MainController.resetHomeTabIfRegistered();
+          unawaited(ReferralApply.submitPendingIfNeeded());
         }
         Get.offAllNamed(resumeRoute);
       }
@@ -325,11 +328,13 @@ class AuthController extends GetxController {
         }
         MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);
+        unawaited(ReferralApply.submitPendingIfNeeded());
       } else {
         await user.restoreOnboardingProgress();
         final route = await user.resolveSetupResumeRoute();
         if (route == AppRoutes.main) {
           MainController.resetHomeTabIfRegistered();
+          unawaited(ReferralApply.submitPendingIfNeeded());
         }
         Get.offAllNamed(route);
       }
@@ -587,11 +592,13 @@ class AuthController extends GetxController {
         await user.markOnboardingComplete();
         MainController.resetHomeTabIfRegistered();
         Get.offAllNamed(AppRoutes.main);
+        unawaited(ReferralApply.submitPendingIfNeeded());
       } else {
         await user.restoreOnboardingProgress();
         final resumeRoute = await user.resolveSetupResumeRoute();
         if (resumeRoute == AppRoutes.main) {
           MainController.resetHomeTabIfRegistered();
+          unawaited(ReferralApply.submitPendingIfNeeded());
         }
         Get.offAllNamed(resumeRoute);
       }

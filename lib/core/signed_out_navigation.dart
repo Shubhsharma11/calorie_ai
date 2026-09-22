@@ -7,6 +7,7 @@ import '../controllers/dashboard_controller.dart';
 import '../controllers/food_controller.dart';
 import '../controllers/main_controller.dart';
 import '../controllers/nutrition_plan_controller.dart';
+import '../controllers/referral_controller.dart';
 import '../controllers/rewards_controller.dart';
 import '../controllers/scan_controller.dart';
 import '../controllers/tracker_controller.dart';
@@ -79,6 +80,7 @@ abstract final class SignedOutNavigation {
     drop<DashboardController>();
     drop<TrackerController>();
     drop<RewardsController>();
+    drop<ReferralController>();
     drop<NutritionPlanController>();
     drop<ScanController>();
     drop<AnalyticsController>();

@@ -50,6 +50,8 @@ import '../views/weight_tracker_view.dart';
 import '../views/weekly_meal_plan_view.dart';
 import '../views/buddy_gifts_view.dart';
 import '../views/rewards_shop_view.dart';
+import '../views/invite_friends_view.dart';
+import '../controllers/referral_controller.dart';
 import '../core/app_page_transitions.dart';
 import 'app_routes.dart';
 
@@ -248,6 +250,15 @@ abstract final class AppPages {
     AppPageTransitions.getPage(
       name: AppRoutes.buddyGifts,
       page: () => const BuddyGiftsView(),
+    ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.inviteFriends,
+      page: () => const InviteFriendsView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<ReferralController>()) {
+          Get.put(ReferralController());
+        }
+      }),
     ),
     AppPageTransitions.getPage(
       name: AppRoutes.rewardsShop,

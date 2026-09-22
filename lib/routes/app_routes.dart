@@ -35,6 +35,7 @@ abstract final class AppRoutes {
   static const notifications = '/notifications';
   static const buddyGifts = '/buddy-gifts';
   static const rewardsShop = '/rewards-shop';
+  static const inviteFriends = '/invite-friends';
   static const helpSupport = '/help-support';
   static const otpVerify = '/otp-verify';
 }

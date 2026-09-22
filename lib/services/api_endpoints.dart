@@ -44,6 +44,14 @@ abstract final class ApiEndpoints {
   static const String supportReports = '$apiVersion/support/reports';
   static const String uploadsImage = '$apiVersion/uploads/image';
 
+  /// Referral — backend contract TBD (Flutter-only stubs until APIs ship).
+  /// Expected: GET returns the signed-in user's code + stats.
+  static const String referralsMe = '$apiVersion/referrals/me';
+  /// Expected: POST body `{ "code": "AB12CD" }` applies an incoming invite.
+  static const String referralsClaim = '$apiVersion/referrals/claim';
+  /// Optional stats endpoint; prefer [referralsMe] when it already embeds counts.
+  static const String referralsStats = '$apiVersion/referrals/stats';
+
 
 
 
@@ -208,8 +216,7 @@ abstract final class ApiEndpoints {
         .map((entry) => '${entry.key}=${entry.value}')
         .join('&');
     return '$weight?$query';
-  }
-
+  }            
   static String get googleAuthUrl => url(googleAuth);
   static String get appleAuthUrl => url(appleAuth);
   static String get phoneAuthUrl => url(phoneAuth);
@@ -247,7 +254,7 @@ abstract final class ApiEndpoints {
       '${notificationById(notificationId)}/read';
 
   static String notificationReadUrl(String notificationId) =>
-      url(notificationRead(notificationId));
+      url(notificationRead(notificationId));         
 
   static String notificationByIdUrl(String notificationId) =>
       url(notificationById(notificationId));

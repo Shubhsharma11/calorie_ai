@@ -31,6 +31,7 @@ import '../core/media_url.dart';
 import '../core/photo_permission.dart';
 import '../core/pick_cropped_image.dart';
 import '../core/route_args.dart';
+import '../core/referral_apply.dart';
 import '../core/signed_out_navigation.dart';
 import '../core/wait_for_resume.dart';
 import '../core/weight_goal_calculator.dart';
@@ -46,6 +47,7 @@ import 'food_controller.dart';
 import 'main_controller.dart';
 import 'notifications_controller.dart';
 import 'nutrition_plan_controller.dart';
+import 'referral_controller.dart';
 import 'rewards_controller.dart';
 import 'scan_controller.dart';
 // import 'streak_controller.dart';
@@ -306,6 +308,10 @@ class UserController extends GetxController with WidgetsBindingObserver {
     _applyAvatarFromResponse(backendLoginResponse);
     _applyStoredAvatar(saved);
     AuthTokenDebug.log('Auth: loadAuthSession applied', accessToken, source: 'disk');
+    // TEMP — remove after debugging
+  
+      debugPrint('ACCESS_TOKEN=$accessToken');
+    
     update();
   }
 
@@ -1207,10 +1213,14 @@ class UserController extends GetxController with WidgetsBindingObserver {
     }
   }
 
-  /// Drops a restored session that the API rejected (401/403) without navigating.
+  /// Drops a session the API rejected (401/403) and returns the user to Login.
   ///
   /// Concurrent 401/403 callers share a single in-flight clear so we do not
-  /// stampede local cleanup / controller resets.
+  /// stampede local cleanup, controller resets, or navigation.
+  ///
+  /// Navigation uses the same stack wipe as logout. Skipped when there is no
+  /// navigator yet (cold-start [resolveStartupRoute]) or when already on a
+  /// signed-out route.
   ///
   /// Optional [debug*] args are TEMPORARY — HOME_STUCK_DEBUG only (no behavior).
   Future<void> clearInvalidSession({
@@ -1237,6 +1247,11 @@ class UserController extends GetxController with WidgetsBindingObserver {
     late final Future<void> future;
     future = () async {
       try {
+        if (isLoggingOut || isDeletingAccount) {
+          appLog('Auth: clearInvalidSession skip (logout/delete in progress)');
+          return;
+        }
+
         // TEMPORARY — HOME_STUCK_DEBUG
         final shellBefore = Get.isRegistered<MainController>()
             ? Get.find<MainController>().shellReady.value
@@ -1256,11 +1271,14 @@ class UserController extends GetxController with WidgetsBindingObserver {
             ),
           },
         );
+
         _clearApiOwnedControllers();
         _clearInMemoryAuthState();
         user.resetToDefaults();
         await _authRepository.clearLocalAuthData();
+        MainController.resetHomeTabIfRegistered(hydrate: false);
         update();
+
         // TEMPORARY — HOME_STUCK_DEBUG
         final shellAfter = Get.isRegistered<MainController>()
             ? Get.find<MainController>().shellReady.value
@@ -1275,6 +1293,16 @@ class UserController extends GetxController with WidgetsBindingObserver {
           ),
         );
         HomeStuckDebug.logNavigation('after clearInvalidSession');
+
+        if (_shouldNavigateAfterInvalidSession) {
+          appLog('Auth: clearInvalidSession → signed-out navigation');
+          SignedOutNavigation.goToLoginAndClearAuthenticatedStack();
+        } else {
+          appLog(
+            'Auth: clearInvalidSession cleared without nav '
+            '(route=${Get.currentRoute} hasNav=${Get.key.currentState != null})',
+          );
+        }
       } finally {
         if (identical(_clearInvalidSessionInFlight, future)) {
           _clearInvalidSessionInFlight = null;
@@ -1283,6 +1311,22 @@ class UserController extends GetxController with WidgetsBindingObserver {
     }();
     _clearInvalidSessionInFlight = future;
     return future;
+  }
+
+  /// True when an authenticated shell may still be on screen and a navigator
+  /// exists to wipe it. Cold-start (pre-[GetMaterialApp]) must not navigate.
+  bool get _shouldNavigateAfterInvalidSession {
+    if (Get.key.currentState == null) return false;
+    switch (Get.currentRoute) {
+      case AppRoutes.login:
+      case AppRoutes.onboarding:
+      case AppRoutes.splash:
+      case AppRoutes.register:
+      case AppRoutes.otpVerify:
+        return false;
+      default:
+        return true;
+    }
   }
 
   Future<PickTargetDateResult> pickTargetDate(
@@ -2369,6 +2413,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
     );
     MainController.resetHomeTabIfRegistered();
     Get.offAllNamed(AppRoutes.main);
+    // Apply invite code captured before signup (backend awards coins).
+    unawaited(ReferralApply.submitPendingIfNeeded());
   }
 
   void _applyOnboardingResponse(
@@ -2943,6 +2989,9 @@ class UserController extends GetxController with WidgetsBindingObserver {
     if (Get.isRegistered<RewardsController>()) {
       Get.find<RewardsController>().clearSessionData();
     }
+    if (Get.isRegistered<ReferralController>()) {
+      Get.find<ReferralController>().clearSessionData();
+    }
     if (Get.isRegistered<MainController>()) {
       Get.find<MainController>().clearShellReady();
     }
@@ -3058,11 +3107,11 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
     try {
       AuthTokenDebug.log('Auth: LOGOUT clearing memory', access);
-      // Clear memory BEFORE the revoke API so concurrent loadAuthSession cannot
-      // re-apply a revoked token during the logout→login window.
+      // Clear tokens / hydrate BEFORE the revoke API so concurrent work cannot
+      // re-apply a revoked session. Keep [user] display fields until after the
+      // API so Profile stays stable under the Signing-out barrier (not Login).
       _clearApiOwnedControllers();
       _clearInMemoryAuthState();
-      user.resetToDefaults();
       appLog(
         'Auth: LOGOUT memory cleared '
         'access=${AuthTokenDebug.fingerprint(accessToken)}',
@@ -3083,10 +3132,14 @@ class UserController extends GetxController with WidgetsBindingObserver {
         } catch (_) {}
       }());
 
+      user.resetToDefaults();
       MainController.resetHomeTabIfRegistered(hydrate: false);
+
+      // Drop the barrier before Login mounts so Login is not under "Signing out…".
+      isSessionBusy.value = false;
+
       SignedOutNavigation.goToLoginAndClearAuthenticatedStack(
         afterFrame: () {
-          // Snackbars keep an Overlay ticker; skip in widget tests.
           if (Get.testMode) return;
           if (result.backendRevoked) {
             AppSnackbar.success(

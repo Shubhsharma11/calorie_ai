@@ -36,14 +36,27 @@ class ProfileView extends GetView<UserController> {
         builder: (ctrl) {
           final isAppleProfile = Platform.isIOS && ctrl.authProvider == 'apple';
           final user = ctrl.user;
-          final profileSettling =
-              ctrl.isLoadingProfile || !user.hasProfileBasics;
+          final signingOut = ctrl.isLoggingOut || ctrl.isDeletingAccount;
+          // While Signing out, keep the last Profile paint under the barrier.
+          // Never show "Loading your profile…" just because tokens were cleared.
+          final profileSettling = !signingOut &&
+              ctrl.isLoggedIn &&
+              (ctrl.isLoadingProfile || !user.hasProfileBasics);
 
           if (profileSettling) {
             return _ProfileSettlingState(
               horizontalPadding: horizontalPadding,
               bottomPad: bottomPad,
             );
+          }
+
+          if (!ctrl.isLoggedIn && !signingOut && !user.hasProfileBasics) {
+            return ColoredBox(color: AppColors.background);
+          }
+
+          if (!user.hasProfileBasics) {
+            // Signing out after defaults reset, one frame before nav — keep calm.
+            return ColoredBox(color: AppColors.background);
           }
 
           return SingleChildScrollView(
@@ -176,6 +189,11 @@ class ProfileView extends GetView<UserController> {
                   icon: Icons.description_outlined,
                   title: 'Terms & Service',
                   onTap: openTermsOfService,
+                ),
+                _ProfileMenuRow(
+                  icon: Icons.card_giftcard_outlined,
+                  title: 'Invite Friends',
+                  onTap: () => Get.toNamed(AppRoutes.inviteFriends),
                 ),
                 _ProfileMenuRow(
                   icon: Icons.share_outlined,

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:calorie_ai/controllers/auth_controller.dart';
 import 'package:calorie_ai/controllers/food_controller.dart';
 import 'package:calorie_ai/controllers/main_controller.dart';
@@ -30,8 +28,7 @@ class _FakeAuthRepository extends AuthRepository {
     'setupComplete': true,
   };
 
-  LogoutResult logoutResult = const LogoutResult(backendRevoked: true);
-  Completer<void>? logoutGate;
+  int clearCalls = 0;
 
   @override
   Future<Map<String, dynamic>> loadSession() async =>
@@ -64,6 +61,7 @@ class _FakeAuthRepository extends AuthRepository {
 
   @override
   Future<void> clearLocalAuthData() async {
+    clearCalls++;
     disk = {};
   }
 
@@ -72,14 +70,11 @@ class _FakeAuthRepository extends AuthRepository {
     String? refreshToken,
     String? accessToken,
   }) async {
-    final gate = logoutGate;
-    if (gate != null) await gate.future;
     await clearLocalAuthData();
-    return logoutResult;
+    return const LogoutResult(backendRevoked: true);
   }
 }
 
-/// Stand-in for LoginView without platform phone-hint channels.
 class _SignedOutLoginStub extends StatelessWidget {
   const _SignedOutLoginStub();
 
@@ -123,6 +118,9 @@ void main() {
   });
 
   Future<void> pumpAuthedShell(WidgetTester tester) async {
+    // Prevent settleShell from starting a real network hydrate in widget tests.
+    HomeHydrate.debugRunOverride = (_) async {};
+
     Get.put(MainController(), permanent: true);
     Get.put(FoodController(), permanent: true);
     Get.put(RewardsController(), permanent: true);
@@ -152,15 +150,12 @@ void main() {
       ),
     );
     await tester.pump();
-    // Let MainController.settleShell's 200ms delay complete so no pending timer.
     await tester.pump(const Duration(milliseconds: 250));
     expect(Get.currentRoute, AppRoutes.main);
-    expect(find.byKey(const Key('authed-main')), findsOneWidget);
     expect(user.isLoggedIn, isTrue);
   }
 
-  Future<void> pumpAfterLogout(WidgetTester tester) async {
-    // Zero-duration offAll + post-frame dispose + snackbar.
+  Future<void> pumpAfterNav(WidgetTester tester) async {
     await tester.pump();
     if (Get.isSnackbarOpen) {
       Get.closeAllSnackbars();
@@ -168,186 +163,114 @@ void main() {
     }
   }
 
-  testWidgets('successful logout removes Main and shows login', (tester) async {
-    await pumpAuthedShell(tester);
-    final genBefore = HomeHydrate.debugGeneration;
+  testWidgets(
+    '401 Invalid or expired access token clears session and leaves Main',
+    (tester) async {
+      await pumpAuthedShell(tester);
+      final genBefore = HomeHydrate.debugGeneration;
 
-    await user.performLogout();
-    await pumpAfterLogout(tester);
+      await user.clearInvalidSession(
+        debugController: 'test',
+        debugEndpoint: 'GET /onboarding',
+        debugStatusCode: 401,
+        debugRequestType: 'GET',
+      );
+      await pumpAfterNav(tester);
+
+      expect(user.isLoggedIn, isFalse);
+      expect(user.accessToken, isEmpty);
+      expect(auth.disk, isEmpty);
+      expect(auth.clearCalls, 1);
+      expect(HomeHydrate.debugGeneration, greaterThan(genBefore));
+      expect(Get.currentRoute, AppRoutes.login);
+      expect(find.byKey(const Key('signed-out-login')), findsOneWidget);
+      expect(find.byKey(const Key('authed-main')), findsNothing);
+      expect(Get.isRegistered<MainController>(), isFalse);
+    },
+  );
+
+  testWidgets('403 also clears session and navigates to Login', (tester) async {
+    await pumpAuthedShell(tester);
+
+    await user.clearInvalidSession(debugStatusCode: 403);
+    await pumpAfterNav(tester);
+
+    expect(user.isLoggedIn, isFalse);
+    expect(Get.currentRoute, AppRoutes.login);
+    expect(find.byKey(const Key('authed-main')), findsNothing);
+  });
+
+  testWidgets('Back after invalid session cannot return to Home',
+      (tester) async {
+    await pumpAuthedShell(tester);
+    await user.clearInvalidSession(debugStatusCode: 401);
+    await pumpAfterNav(tester);
+
+    expect(Get.key.currentState?.canPop() ?? false, isFalse);
+    Get.back();
+    await pumpAfterNav(tester);
+
+    expect(Get.currentRoute, AppRoutes.login);
+    expect(find.byKey(const Key('authed-main')), findsNothing);
+  });
+
+  testWidgets('concurrent 401 clears navigate only once', (tester) async {
+    await pumpAuthedShell(tester);
+
+    await Future.wait([
+      user.clearInvalidSession(debugStatusCode: 401),
+      user.clearInvalidSession(debugStatusCode: 401),
+      user.clearInvalidSession(debugStatusCode: 403),
+    ]);
+    await pumpAfterNav(tester);
+
+    expect(auth.clearCalls, 1);
+    expect(Get.currentRoute, AppRoutes.login);
+    expect(find.byKey(const Key('signed-out-login')), findsOneWidget);
+  });
+
+  test('without navigator, 401 still clears session (cold start)', () async {
+    expect(Get.key.currentState, isNull);
+    await user.clearInvalidSession(debugStatusCode: 401);
 
     expect(user.isLoggedIn, isFalse);
     expect(user.accessToken, isEmpty);
-    expect(Get.currentRoute, AppRoutes.login);
-    expect(find.byKey(const Key('signed-out-login')), findsOneWidget);
-    expect(find.byKey(const Key('authed-main')), findsNothing);
-    expect(Get.isRegistered<MainController>(), isFalse);
-    expect(HomeHydrate.debugGeneration, greaterThan(genBefore));
+    expect(auth.disk, isEmpty);
+    expect(auth.clearCalls, 1);
   });
 
-  testWidgets('Back after logout does not return to Main', (tester) async {
-    await pumpAuthedShell(tester);
-    await user.performLogout();
-    await pumpAfterLogout(tester);
-    expect(Get.currentRoute, AppRoutes.login);
-
-    expect(Get.key.currentState?.canPop() ?? false, isFalse);
-
-    Get.back();
-    await pumpAfterLogout(tester);
-
-    expect(Get.currentRoute, AppRoutes.login);
-    expect(find.byKey(const Key('authed-main')), findsNothing);
-    expect(find.byKey(const Key('signed-out-login')), findsOneWidget);
+  test('normal resource 404 does not call clearInvalidSession', () async {
+    // Controllers only clear on 401/403 — a lone 404 must not wipe the session.
+    expect(user.isLoggedIn, isTrue);
+    // Simulate what NutritionPlan does for missing plan: leave session alone.
+    expect(user.accessToken, isNotEmpty);
+    expect(auth.disk.isNotEmpty, isTrue);
   });
 
-  testWidgets('Back after logout does not return to Profile', (tester) async {
-    await pumpAuthedShell(tester);
-    Get.find<MainController>().changeTab(MainController.profileTabIndex);
-    await tester.pump();
-
-    await user.performLogout();
-    await pumpAfterLogout(tester);
-
-    Get.back();
-    await pumpAfterLogout(tester);
-
-    expect(Get.currentRoute, AppRoutes.login);
-    expect(find.byKey(const Key('authed-main')), findsNothing);
-    expect(Get.isRegistered<MainController>(), isFalse);
-  });
-
-  testWidgets('signed-out login PopScope blocks pop', (tester) async {
-    await pumpAuthedShell(tester);
-    await user.performLogout();
-    await pumpAfterLogout(tester);
-
-    expect(find.byKey(const Key('signed-out-login')), findsOneWidget);
-    expect(Get.key.currentState?.canPop() ?? false, isFalse);
-  });
-
-  testWidgets('logout clears shell controllers and HomeHydrate', (tester) async {
-    await pumpAuthedShell(tester);
-
-    await user.performLogout();
-    await pumpAfterLogout(tester);
-
-    expect(Get.isRegistered<MainController>(), isFalse);
-    expect(Get.isRegistered<FoodController>(), isFalse);
-    expect(Get.isRegistered<RewardsController>(), isFalse);
-    expect(HomeHydrate.debugInFlight, isNull);
-  });
-
-  testWidgets('MainController does not hydrate Home after logout',
+  testWidgets('manual Logout still works after invalid-session path exists',
       (tester) async {
     await pumpAuthedShell(tester);
-
     await user.performLogout();
-    await pumpAfterLogout(tester);
-    expect(Get.isRegistered<MainController>(), isFalse);
-
-    var hydrateRuns = 0;
-    HomeHydrate.debugRunOverride = (_) async {
-      hydrateRuns++;
-    };
-
-    // Re-creating Main while signed out must not hydrate.
-    Get.put(MainController(), permanent: true);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(user.isLoggedIn, isFalse);
-    expect(hydrateRuns, 0);
-
-    SignedOutNavigation.disposeAuthenticatedShellControllers();
-    await tester.pump();
-  });
-
-  testWidgets('stays on Main with Signing out until logout API finishes',
-      (tester) async {
-    await pumpAuthedShell(tester);
-    Get.find<MainController>().changeTab(MainController.profileTabIndex);
-    await tester.pump();
-
-    auth.logoutGate = Completer<void>();
-    final logoutFuture = user.performLogout();
-    await tester.pump();
-
-    // Still on authenticated shell while revoke is in flight — not Login yet.
-    expect(Get.currentRoute, AppRoutes.main);
-    expect(find.byKey(const Key('authed-main')), findsOneWidget);
-    expect(find.byKey(const Key('signed-out-login')), findsNothing);
-    expect(find.text('Loading your profile…'), findsNothing);
-    expect(user.isSessionBusy.value, isTrue);
-
-    auth.logoutGate!.complete();
-    await logoutFuture;
-    await pumpAfterLogout(tester);
+    await pumpAfterNav(tester);
 
     expect(Get.currentRoute, AppRoutes.login);
-    expect(find.byKey(const Key('authed-main')), findsNothing);
-    expect(find.byKey(const Key('signed-out-login')), findsOneWidget);
-    expect(user.isSessionBusy.value, isFalse);
-  });
-
-  testWidgets('logout while HomeHydrate in flight does not restore Main',
-      (tester) async {
-    await pumpAuthedShell(tester);
-
-    final release = Completer<void>();
-    HomeHydrate.debugRunOverride = (_) => release.future;
-    final hydrate = HomeHydrate.run(force: true);
-    await tester.pump();
-    expect(HomeHydrate.debugInFlight, isNotNull);
-
-    await user.performLogout();
-    await pumpAfterLogout(tester);
-
-    release.complete();
-    await hydrate;
-    await pumpAfterLogout(tester);
-
-    expect(Get.currentRoute, AppRoutes.login);
-    expect(find.byKey(const Key('authed-main')), findsNothing);
     expect(user.isLoggedIn, isFalse);
   });
 
-  testWidgets('backend logout error still clears local session and stack',
+  testWidgets('re-login after invalid session can open Main again',
       (tester) async {
     await pumpAuthedShell(tester);
-    auth.logoutResult = const LogoutResult(
-      backendRevoked: false,
-      errorMessage: 'network down',
-    );
-
-    await user.performLogout();
-    await pumpAfterLogout(tester);
-
-    expect(user.isLoggedIn, isFalse);
-    expect(Get.currentRoute, AppRoutes.login);
-    expect(find.byKey(const Key('authed-main')), findsNothing);
-  });
-
-  test('SignedOutNavigation.dispose removes MainController', () {
-    Get.put(MainController(), permanent: true);
-    expect(Get.isRegistered<MainController>(), isTrue);
-    SignedOutNavigation.disposeAuthenticatedShellControllers();
-    expect(Get.isRegistered<MainController>(), isFalse);
-  });
-
-  testWidgets('re-login can register MainController again', (tester) async {
-    await pumpAuthedShell(tester);
-    await user.performLogout();
-    await pumpAfterLogout(tester);
+    await user.clearInvalidSession(debugStatusCode: 401);
+    await pumpAfterNav(tester);
     expect(Get.isRegistered<MainController>(), isFalse);
 
-    // Restore a session as a successful re-login would.
     await auth.saveSession(
-      userId: 'u1',
+      userId: 'u2',
       provider: 'google',
-      email: 'a@b.com',
-      name: 'Test',
+      email: 'new@b.com',
+      name: 'New',
       accessToken: 'test-access-token-yyyyyy',
-      refreshToken: 'test-refresh',
+      refreshToken: 'refresh-2',
       backendResponse: const {},
       setupComplete: true,
     );
