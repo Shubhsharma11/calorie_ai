@@ -157,12 +157,12 @@ class NutritionPlanModel {
 
     final calories =
         _readInt(plan, const [
-              'dailyCalories',
-              'dailyCalorieGoal',
-              'calories',
-              'calorieGoal',
-              'recommendedCalories',
-            ]) ??
+          'dailyCalories',
+          'dailyCalorieGoal',
+          'calories',
+          'calorieGoal',
+          'recommendedCalories',
+        ]) ??
         _readInt(macros, const ['calories', 'dailyCalories']) ??
         _readInt(data, const ['dailyCalorieTarget', 'daily_calorie_target']) ??
         weeklyPlan?.dailyCalorieTarget ??
@@ -190,7 +190,8 @@ class NutritionPlanModel {
         'avoidFoods',
       ]),
       tips: _collectTips(data, nutritionPlan, plan),
-      summary: _readString(plan, const ['summary', 'description']) ??
+      summary:
+          _readString(plan, const ['summary', 'description']) ??
           _readString(nutritionPlan, const ['summary', 'description']) ??
           _readString(data, const ['summary', 'description']),
       targetWeightKg: _readDouble(plan, const [
@@ -204,7 +205,8 @@ class NutritionPlanModel {
           ? null
           : NutritionPlanMeal.fromJson(homePreviewMap),
       weeklyPlan: weeklyPlan,
-      goalLabel: _readString(plan, const ['goalLabel', 'goal_label']) ??
+      goalLabel:
+          _readString(plan, const ['goalLabel', 'goal_label']) ??
           _readString(nutritionPlan, const ['goalLabel', 'goal_label']) ??
           weeklyPlan?.goalLabel,
     );
@@ -230,7 +232,8 @@ List<String> _collectTips(
     if (tips.isNotEmpty) return tips;
   }
 
-  final summary = _readString(plan, const ['summary', 'description']) ??
+  final summary =
+      _readString(plan, const ['summary', 'description']) ??
       _readString(nutritionPlan, const ['summary', 'description']) ??
       _readString(data, const ['summary', 'description']);
   if (summary != null && summary.isNotEmpty) {
@@ -247,10 +250,7 @@ Map<String, dynamic> _unwrapData(Map<String, dynamic> json) {
   return json;
 }
 
-Map<String, dynamic>? _firstMap(
-  Map<String, dynamic> map,
-  List<String> keys,
-) {
+Map<String, dynamic>? _firstMap(Map<String, dynamic> map, List<String> keys) {
   for (final key in keys) {
     final value = map[key];
     if (value is Map<String, dynamic>) return value;
@@ -273,9 +273,8 @@ List<NutritionPlanMeal> _readMeals(Map<String, dynamic> data) {
       final meals = value
           .whereType<Map>()
           .map(
-            (item) => NutritionPlanMeal.fromJson(
-              Map<String, dynamic>.from(item),
-            ),
+            (item) =>
+                NutritionPlanMeal.fromJson(Map<String, dynamic>.from(item)),
           )
           .toList();
       if (meals.isNotEmpty) return meals;
@@ -326,7 +325,8 @@ WeeklyMealPlanData? _readWeeklyPlan(
     if (daysRaw is List && daysRaw.isNotEmpty) {
       final parsed = WeeklyMealPlanData.fromJson({
         'days': daysRaw,
-        'dailyCalorieTarget': root['dailyCalorieTarget'] ??
+        'dailyCalorieTarget':
+            root['dailyCalorieTarget'] ??
             root['daily_calorie_target'] ??
             root['calories'],
         'goalLabel': root['goalLabel'] ?? root['goal_label'] ?? root['goal'],
@@ -430,10 +430,7 @@ double? _readDouble(Map<String, dynamic> map, List<String> keys) {
   return null;
 }
 
-List<String> _readStringList(
-  Map<String, dynamic> map,
-  List<String> keys,
-) {
+List<String> _readStringList(Map<String, dynamic> map, List<String> keys) {
   for (final key in keys) {
     final value = map[key];
     if (value is List) {
@@ -441,20 +438,17 @@ List<String> _readStringList(
           .map((item) {
             if (item is String) return item.trim();
             if (item is Map) {
-              return _readString(
-                    Map<String, dynamic>.from(item),
-                    const [
-                      'text',
-                      'tip',
-                      'message',
-                      'content',
-                      'description',
-                      'name',
-                      'title',
-                      'label',
-                      'food',
-                    ],
-                  ) ??
+              return _readString(Map<String, dynamic>.from(item), const [
+                    'text',
+                    'tip',
+                    'message',
+                    'content',
+                    'description',
+                    'name',
+                    'title',
+                    'label',
+                    'food',
+                  ]) ??
                   '';
             }
             return item?.toString() ?? '';

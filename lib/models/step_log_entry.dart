@@ -17,8 +17,7 @@ class StepLogEntry {
 
   DateTime get normalizedDate => MealEntry.normalizeDate(date);
 
-  int get resolvedCaloriesBurned =>
-      caloriesBurned ?? caloriesFromSteps(steps);
+  int get resolvedCaloriesBurned => caloriesBurned ?? caloriesFromSteps(steps);
 
   static int caloriesFromSteps(int steps) => (steps * 0.04).round();
 }

@@ -1,11 +1,13 @@
 import 'dart:typed_data';
 
+import '../core/body_measurement_units.dart';
+import '../core/weight_goal_calculator.dart';
 import 'activity_level.dart';
+import 'diet_plan_interest.dart';
 import 'diet_type.dart';
 import 'goal_type.dart';
 import 'health_concern.dart';
-import '../core/body_measurement_units.dart';
-import '../core/weight_goal_calculator.dart';
+import 'lifestyle_habits.dart';
 
 /// In-memory profile. Body metrics are nullable until the API / onboarding
 /// supplies them — never invent John / 70kg / age-25 placeholders.
@@ -42,6 +44,20 @@ class UserModel {
   double? goalStartWeightKg;
   List<HealthConcern> healthConcerns = [];
 
+  DietPlanInterest? dietPlanInterest;
+  List<String> foodPreferences = [];
+  List<String> meatPreferences = [];
+  String? cookingSkills;
+  List<String> medications = [];
+
+  /// Food variety habit (same every day → experiment).
+  String? eatingHabits;
+
+  /// Living region in India (north_india, south_india, …).
+  String? livingArea;
+
+  /// State / UT within [livingArea] (punjab, kerala, …).
+  String? livingState;
   DietType? dietType;
   List<String> foodAllergies = [];
   String foodsToAvoid = '';
@@ -257,6 +273,15 @@ class UserModel {
   int get fatGoalG =>
       nutritionPlanFatG ?? (dailyCalorieGoal * 0.30 / 9).round();
 
+  /// Body-mass index from height/weight, or null when metrics are incomplete.
+  double? get bmi {
+    final h = heightCm;
+    final w = weightKg;
+    if (h == null || w == null || h <= 0 || w <= 0) return null;
+    final meters = h / 100.0;
+    return w / (meters * meters);
+  }
+
   /// Clears to an empty session — not fake defaults.
   void clear() {
     name = '';
@@ -274,6 +299,14 @@ class UserModel {
     pinnedGoalType = null;
     goalStartWeightKg = null;
     healthConcerns = [];
+    dietPlanInterest = null;
+    foodPreferences = [];
+    meatPreferences = [];
+    cookingSkills = null;
+    medications = [];
+    eatingHabits = null;
+    livingArea = null;
+    livingState = null;
     dietType = null;
     foodAllergies = [];
     foodsToAvoid = '';
@@ -290,6 +323,58 @@ class UserModel {
       DateTime.now().month,
       DateTime.now().day,
     ).add(const Duration(days: 90));
+  }
+
+  /// Drop answers that conflict with [dietType] (e.g. meat prefs after going veg).
+  void applyDietTypeConstraints() {
+    final diet = dietType;
+    if (diet == null) return;
+
+    foodPreferences = foodPreferences
+        .where(diet.allowsFoodPreference)
+        .toList();
+
+    if (!diet.asksMeatPreferences) {
+      meatPreferences = List<String>.from(diet.impliedMeatPreferences);
+    } else {
+      meatPreferences = meatPreferences
+          .where((v) => v != 'vegetarian')
+          .where((v) => diet.includesFish || v != 'fish')
+          .toList();
+    }
+
+    final allergyOptions = LifestyleHabitOptions.foodAllergiesFor(diet);
+    final allergyValues = allergyOptions.map((o) => o.value).toSet();
+    final allergyLabels = {
+      for (final o in allergyOptions) o.label.toLowerCase(),
+    };
+    foodAllergies = foodAllergies.where((raw) {
+      final value = raw.trim();
+      if (value.isEmpty) return false;
+      final lower = value.toLowerCase();
+      if (allergyValues.contains(value) || allergyLabels.contains(lower)) {
+        return true;
+      }
+      // Keep legacy free-text "None" / prefer-not.
+      return lower == 'none' || lower.contains('prefer not');
+    }).toList();
+
+    final avoidText = foodsToAvoid.trim();
+    if (avoidText.isEmpty) return;
+    final lowerAvoid = avoidText.toLowerCase();
+    if (lowerAvoid.contains('nothing') || lowerAvoid == 'none') {
+      foodsToAvoid = '';
+      return;
+    }
+    final kept = <String>[];
+    for (final option in LifestyleHabitOptions.foodsToAvoidFor(diet)) {
+      if (option.value == 'none') continue;
+      if (lowerAvoid.contains(option.label.toLowerCase()) ||
+          lowerAvoid.contains(option.value.replaceAll('_', ' '))) {
+        kept.add(option.label);
+      }
+    }
+    foodsToAvoid = kept.join(', ');
   }
 
   /// Alias kept for existing call sites.

@@ -38,10 +38,10 @@ class AppDeviceInfo {
   }
 
   Map<String, String> toApiFields() => {
-        'appVersion': appVersion,
-        'buildNumber': buildNumber,
-        'platform': platform,
-        'osVersion': osVersion,
-        'deviceModel': deviceModel,
-      };
+    'appVersion': appVersion,
+    'buildNumber': buildNumber,
+    'platform': platform,
+    'osVersion': osVersion,
+    'deviceModel': deviceModel,
+  };
 }

@@ -42,8 +42,9 @@ abstract final class HealthProblemApiMapper {
   static String? severity(String? uiValue) =>
       uiValue == null ? null : severityToApi[uiValue] ?? uiValue.toLowerCase();
 
-  static String? medication(String? uiValue) =>
-      uiValue == null ? null : medicationToApi[uiValue] ?? _toCamelCase(uiValue);
+  static String? medication(String? uiValue) => uiValue == null
+      ? null
+      : medicationToApi[uiValue] ?? _toCamelCase(uiValue);
 
   static String categoryFromApi(String apiValue) =>
       _fromApi(apiValue, categoryToApi);

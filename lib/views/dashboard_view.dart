@@ -54,7 +54,7 @@ class DashboardView extends GetView<DashboardController> {
                 scrollController: controller.homeScrollController,
                 showNotificationBadge: hasBadge,
                 coinBalance: CoinBalanceChip(
-                  onTap: StepsClaimBanner.openRewardsShop,
+                  onTap: StepsClaimBanner.openCoinHistory,
                 ),
                 onSearch: DashboardActions.openFoodSearch,
                 onNotifications: () =>

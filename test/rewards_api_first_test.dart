@@ -49,6 +49,7 @@ class _CoinsApi extends CoinsApiService {
   );
   CoinClaimResult claimResult = const CoinClaimResult(claimedCoins: 20);
   final List<DateTime> claimableDates = [];
+  List<String>? lastClaimableIds;
 
   @override
   Future<CoinsWalletResult> fetchWallet({required String accessToken}) async {
@@ -93,8 +94,10 @@ class _CoinsApi extends CoinsApiService {
     required String accessToken,
     DateTime? date,
     String? timezone,
+    List<String>? claimableIds,
   }) async {
     claimPosts++;
+    lastClaimableIds = claimableIds;
     final err = claimError;
     if (err != null) throw err;
     return claimResult;
@@ -147,7 +150,7 @@ void main() {
     expect(prefs.getString('rewards_earned_by_date_v1_u1'), isNull);
   });
 
-  test('B: successful GET /coins sets balance from API', () async {
+  test('B: successful GET /wallet sets balance from API', () async {
     coins.walletResult = const CoinsWalletResult(balance: 321);
     await rewards.refreshWalletFromApi();
     expect(rewards.balance.value, 321);
@@ -171,7 +174,7 @@ void main() {
     expect(prefs.getInt('rewards_coin_balance_v1_u1'), isNull);
   });
 
-  test('D: claim without balance refreshes wallet from API only', () async {
+  test('D: claim always refreshes wallet + claimable from API', () async {
     coins.claimableResult = const ClaimableResult(
       claimableCoins: 15,
       canClaim: true,
@@ -181,20 +184,24 @@ void main() {
 
     coins.claimResult = const CoinClaimResult(claimedCoins: 15);
     coins.walletResult = const CoinsWalletResult(balance: 215);
+    coins.claimableResult = const ClaimableResult(
+      claimableCoins: 0,
+      earnedCoins: 15,
+      canClaim: false,
+    );
     coins.walletFetches = 0;
     coins.claimableFetches = 0;
 
     final ok = await rewards.claimDailyStepReward();
     expect(ok, isTrue);
     expect(coins.claimPosts, 1);
-    // Wallet refresh only — no post-claim claimable storm.
     expect(coins.walletFetches, 1);
-    expect(coins.claimableFetches, 0);
+    expect(coins.claimableFetches, greaterThanOrEqualTo(1));
     expect(rewards.balance.value, 215);
     expect(rewards.pendingCoins, 0);
   });
 
-  test('D2: claim with balance skips wallet and claimable refresh', () async {
+  test('D2: claim with balance still refreshes wallet from API', () async {
     coins.claimableResult = const ClaimableResult(
       claimableCoins: 10,
       canClaim: true,
@@ -205,14 +212,20 @@ void main() {
       claimedCoins: 10,
       balance: 410,
     );
+    coins.walletResult = const CoinsWalletResult(balance: 410);
+    coins.claimableResult = const ClaimableResult(
+      claimableCoins: 0,
+      earnedCoins: 10,
+      canClaim: false,
+    );
     coins.walletFetches = 0;
     coins.claimableFetches = 0;
 
     final ok = await rewards.claimDailyStepReward();
     expect(ok, isTrue);
     expect(rewards.balance.value, 410);
-    expect(coins.walletFetches, 0);
-    expect(coins.claimableFetches, 0);
+    expect(coins.walletFetches, 1);
+    expect(coins.claimableFetches, greaterThanOrEqualTo(1));
   });
 
   test('E: claimable response balance is not persisted locally', () async {

@@ -1,27 +1,17 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../core/onboarding_nav.dart';
 import '../core/responsive.dart';
+import '../models/onboarding_journey.dart';
 import '../theme/app_colors.dart';
+import 'onboarding_cupertino_shell.dart';
+import 'onboarding_question_transition.dart';
 
-/// Unified progress: gender → age → goal → height → weight → activity → health → diet steps.
-abstract final class OnboardingFlowProgress {
-  static const totalSteps = 11;
-  static const gender = 0;
-  static const age = 1;
-  static const goalSetup = 2;
-  static const height = 3;
-  static const goalWeight = 4;
-  static const activity = 5;
-  static const health = 6;
-  static const dietType = 7;
-  static const foodAllergies = 8;
-  static const foodsToAvoid = 9;
-  static const mealsPerDay = 10;
-
-  /// First diet-preferences sub-step (kept for older call sites).
-  static const dietPreferences = dietType;
-}
+export '../models/onboarding_journey.dart'
+    show OnboardingFlowProgress, OnboardingJourney, OnboardingSectionId;
+export 'onboarding_cupertino_shell.dart' show OnboardingCupertinoShell;
 
 /// Shared chrome for onboarding steps (personal details, goal, activity, …).
 class OnboardingStepScaffold extends StatelessWidget {
@@ -40,6 +30,7 @@ class OnboardingStepScaffold extends StatelessWidget {
     this.showProgress = true,
     this.scrollable = false,
     this.footer,
+    this.sectionLabel,
   });
 
   final int stepIndex;
@@ -56,63 +47,19 @@ class OnboardingStepScaffold extends StatelessWidget {
   final bool scrollable;
   final Widget? footer;
 
+  /// Override section label; defaults from [OnboardingJourney].
+  final String? sectionLabel;
+
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
     final r = context.responsive;
-    final pageBg = AppColors.backgroundOf(context);
+    final section =
+        sectionLabel ??
+        (showProgress ? OnboardingJourney.labelForStep(stepIndex) : null);
 
-    final body = Column(
-      children: [
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: r.scale(28, tablet: 32),
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimaryOf(context),
-            height: 1.15,
-            letterSpacing: -0.4,
-          ),
-        ),
-        SizedBox(height: r.scale(10)),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: r.scale(14, tablet: 15),
-            color: AppColors.textSecondaryOf(context),
-            height: 1.4,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        if (errorText != null) ...[
-          SizedBox(height: r.scale(12)),
-          Text(
-            errorText!,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.error,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-        SizedBox(height: r.scale(8)),
-        Expanded(
-          child: scrollable
-              ? SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  child: child,
-                )
-              : child,
-        ),
-      ],
-    );
-
-    return Scaffold(
-      backgroundColor: pageBg,
-      body: SafeArea(
+    return OnboardingCupertinoShell(
+      child: SafeArea(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: r.scale(20, tablet: 28)),
           child: Column(
@@ -121,24 +68,100 @@ class OnboardingStepScaffold extends StatelessWidget {
               OnboardingStepTopBar(
                 stepIndex: stepIndex,
                 totalSteps: totalSteps,
-                onBack: onBack,
+                onBack: () {
+                  OnboardingNav.markBackward();
+                  onBack();
+                },
                 showProgress: showProgress,
+                sectionLabel: section,
               ),
               SizedBox(height: r.scale(28)),
-              Expanded(child: body),
+              Expanded(
+                child: OnboardingQuestionTransition(
+                  stepKey: stepIndex,
+                  question: OnboardingQuestionHeader(
+                    title: title,
+                    errorText: errorText,
+                  ),
+                  description: subtitle.trim().isEmpty
+                      ? null
+                      : OnboardingQuestionDescription(subtitle),
+                  answer: scrollable
+                      ? SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(
+                            parent: AlwaysScrollableScrollPhysics(),
+                          ),
+                          child: child,
+                        )
+                      : child,
+                ),
+              ),
               OnboardingContinueButton(
                 label: continueLabel,
-                onPressed: continueEnabled ? onContinue : null,
+                onPressed: continueEnabled
+                    ? () {
+                        OnboardingNav.markForward();
+                        onContinue?.call();
+                      }
+                    : null,
               ),
-              if (footer != null) ...[
-                SizedBox(height: r.scale(10)),
-                footer!,
-              ],
+              if (footer != null) ...[SizedBox(height: r.scale(10)), footer!],
               SizedBox(height: r.scale(12)),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Question title (section label lives in the top bar).
+/// Supporting copy is passed separately to [OnboardingQuestionTransition]
+/// so it can reveal after the title.
+class OnboardingQuestionHeader extends StatelessWidget {
+  const OnboardingQuestionHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.errorText,
+  });
+
+  final String title;
+
+  /// Kept for call-site compatibility; prefer [OnboardingQuestionDescription]
+  /// via [OnboardingQuestionTransition.description] for staggered reveal.
+  final String? subtitle;
+  final String? errorText;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    final theme = CupertinoTheme.of(context);
+    return Column(
+      children: [
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.navLargeTitleTextStyle.copyWith(
+            fontSize: r.scale(28, tablet: 32),
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.6,
+            height: 1.15,
+          ),
+        ),
+        if (errorText != null) ...[
+          SizedBox(height: r.scale(12)),
+          Text(
+            errorText!,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.textStyle.copyWith(
+              fontSize: 13,
+              color: AppColors.error,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -150,6 +173,7 @@ class OnboardingStepTopBar extends StatelessWidget {
     required this.totalSteps,
     required this.onBack,
     this.showProgress = true,
+    this.sectionLabel,
   });
 
   final int stepIndex;
@@ -157,58 +181,329 @@ class OnboardingStepTopBar extends StatelessWidget {
   final VoidCallback onBack;
   final bool showProgress;
 
+  /// When null and [showProgress], derived from [OnboardingJourney].
+  final String? sectionLabel;
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 44,
-      child: Row(
-        children: [
-          OnboardingBackButton(onTap: onBack),
-          const SizedBox(width: 16),
-          Expanded(
-            child: showProgress && totalSteps > 1
-                ? OnboardingDotsProgress(
-                    currentStep: stepIndex,
-                    totalSteps: totalSteps,
-                  )
-                : const SizedBox.shrink(),
+    final r = context.responsive;
+    final rawLabel =
+        sectionLabel ??
+        (showProgress ? OnboardingJourney.labelForStep(stepIndex) : null);
+    final label = rawLabel == null ? null : _titleCaseSection(rawLabel);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 44,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: OnboardingBackButton(onTap: onBack),
           ),
-          // Balance the back button so the bar stays visually centered.
-          const SizedBox(width: 40 + 16),
+        ),
+        if (label != null) ...[
+          SizedBox(height: r.scale(4)),
+          AnimatedSwitcher(
+            duration: OnboardingMotion.duration,
+            switchInCurve: OnboardingMotion.inCurve,
+            switchOutCurve: OnboardingMotion.outCurve,
+            child: Text(
+              label,
+              key: ValueKey(label),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: r.scale(20, tablet: 22),
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.3,
+                color: AppColors.primary,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ),
         ],
+        if (showProgress && totalSteps > 1) ...[
+          SizedBox(height: r.scale(10)),
+          Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: r.scale(280, tablet: 340)),
+              child: OnboardingSectionProgress(
+                stepIndex: stepIndex,
+                totalSteps: totalSteps,
+              ),
+            ),
+          ),
+          SizedBox(height: r.scale(4)),
+        ],
+      ],
+    );
+  }
+
+  static String _titleCaseSection(String label) {
+    final trimmed = label.trim();
+    if (trimmed.isEmpty) return trimmed;
+    final lower = trimmed.toLowerCase();
+    return '${lower[0].toUpperCase()}${lower.substring(1)}';
+  }
+}
+
+/// Reference-style progress: **5 fixed milestones** + growing fill between them.
+///
+/// Personal → Goals → Lifestyle → Preferences → Create Plan.
+/// Dots never move. Only the fill width animates across the 4 segments.
+class OnboardingSectionProgress extends StatelessWidget {
+  const OnboardingSectionProgress({
+    super.key,
+    required this.stepIndex,
+    this.totalSteps = OnboardingFlowProgress.totalSteps,
+  });
+
+  final int stepIndex;
+  final int totalSteps;
+
+  static const _animDuration = Duration(milliseconds: 360);
+  static const _milestoneCount = OnboardingMilestones.count;
+
+  /// Legacy overall fraction (call sites). Prefer [_fillProgress] for the UI.
+  static double progressForStep(int stepIndex, {int? totalSteps}) {
+    final total = totalSteps ?? OnboardingFlowProgress.totalSteps;
+    if (total <= 1) return 0.0;
+    return (stepIndex / (total - 1)).clamp(0.0, 1.0);
+  }
+
+  /// Fill position 0..1 along the track (see [OnboardingJourney.fillProgressForStep]).
+  static double _fillProgress(int stepIndex) {
+    return OnboardingJourney.fillProgressForStep(stepIndex);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    final isDark = AppColors.isDark(context);
+    final fillProgress = _fillProgress(stepIndex);
+
+    final trackColor = isDark
+        ? CupertinoColors.systemGrey4.resolveFrom(context)
+        : CupertinoColors.systemGrey5.resolveFrom(context);
+    final activeColor = AppColors.primary;
+    final holeColor = AppColors.backgroundOf(context);
+
+    // Larger Cupertino-style track + milestones, centered by parent.
+    final trackHeight = r.scale(5, tablet: 6);
+    final dotSize = r.scale(18, tablet: 20);
+
+    return SizedBox(
+      width: double.infinity,
+      height: dotSize,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final travel = (constraints.maxWidth - dotSize).clamp(
+            0.0,
+            double.infinity,
+          );
+          final fillWidth = (dotSize / 2) + (travel * fillProgress);
+
+          return Stack(
+            alignment: Alignment.centerLeft,
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                top: (dotSize - trackHeight) / 2,
+                child: Container(
+                  height: trackHeight,
+                  decoration: BoxDecoration(
+                    color: trackColor,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                top: (dotSize - trackHeight) / 2,
+                child: AnimatedContainer(
+                  duration: _animDuration,
+                  curve: Curves.easeOutCubic,
+                  height: trackHeight,
+                  width: fillWidth.clamp(0.0, constraints.maxWidth),
+                  decoration: BoxDecoration(
+                    color: activeColor,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              for (var i = 0; i < _milestoneCount; i++)
+                Positioned(
+                  left: (i / (_milestoneCount - 1)) * travel,
+                  top: 0,
+                  child: _FixedSectionDot(
+                    size: dotSize,
+                    completed: OnboardingJourney.isMilestoneCompleted(
+                      i,
+                      stepIndex,
+                    ),
+                    activeColor: activeColor,
+                    trackColor: trackColor,
+                    holeColor: holeColor,
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class OnboardingBackButton extends StatelessWidget {
+class _FixedSectionDot extends StatelessWidget {
+  const _FixedSectionDot({
+    required this.size,
+    required this.completed,
+    required this.activeColor,
+    required this.trackColor,
+    required this.holeColor,
+  });
+
+  final double size;
+  final bool completed;
+  final Color activeColor;
+  final Color trackColor;
+  final Color holeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: completed ? activeColor : holeColor,
+        border: Border.all(
+          color: completed ? activeColor : trackColor,
+          width: completed ? 0 : 1.5,
+        ),
+      ),
+    );
+  }
+}
+
+class OnboardingBackButton extends StatefulWidget {
   const OnboardingBackButton({super.key, required this.onTap});
 
   final VoidCallback onTap;
 
   @override
+  State<OnboardingBackButton> createState() => _OnboardingBackButtonState();
+}
+
+class _OnboardingBackButtonState extends State<OnboardingBackButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _press = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 140),
+    reverseDuration: const Duration(milliseconds: 220),
+  );
+
+  late final Animation<double> _scale = Tween<double>(
+    begin: 1,
+    end: 0.94,
+  ).animate(CurvedAnimation(parent: _press, curve: Curves.easeOutCubic));
+
+  late final Animation<double> _fade = Tween<double>(
+    begin: 1,
+    end: 0.78,
+  ).animate(CurvedAnimation(parent: _press, curve: Curves.easeOut));
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    HapticFeedback.selectionClick();
+    widget.onTap();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isDark = AppColors.isDark(context);
-    return Material(
-      color: isDark
-          ? Colors.white.withValues(alpha: 0.08)
-          : const Color(0xFFF2F2F7),
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        splashFactory: NoSplash.splashFactory,
-        overlayColor: WidgetStatePropertyAll(
-          AppColors.primary.withValues(alpha: 0.08),
-        ),
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 16,
-            color: AppColors.textPrimaryOf(context),
+    final isDark = CupertinoTheme.of(context).brightness == Brightness.dark;
+    final fontFamily = CupertinoTheme.of(
+      context,
+    ).textTheme.textStyle.fontFamily;
+    final labelColor = AppColors.textPrimaryOf(context);
+    final chevronColor = labelColor.withValues(alpha: 0.72);
+    final fill = isDark
+        ? CupertinoColors.systemGrey5.resolveFrom(context)
+        : const Color(0xFFF4F4F6);
+    final rim = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : const Color(0xFFE5E5EA);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _press.forward(),
+      onTapCancel: () => _press.reverse(),
+      onTapUp: (_) async {
+        await _press.reverse();
+        if (!mounted) return;
+        _handleTap();
+      },
+      child: AnimatedBuilder(
+        animation: _press,
+        builder: (context, child) {
+          return Opacity(
+            opacity: _fade.value,
+            child: Transform.scale(
+              scale: _scale.value,
+              alignment: Alignment.centerLeft,
+              child: child,
+            ),
+          );
+        },
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 36),
+          padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: rim, width: 0.8),
+            boxShadow: isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.035),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Transform.translate(
+                offset: const Offset(-1, 0.5),
+                child: Icon(
+                  CupertinoIcons.chevron_back,
+                  size: 14,
+                  color: chevronColor,
+                ),
+              ),
+              const SizedBox(width: 3),
+              Text(
+                'Prev',
+                style: TextStyle(
+                  fontFamily: fontFamily,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  height: 1.05,
+                  letterSpacing: -0.15,
+                  color: labelColor,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -227,7 +522,7 @@ class OnboardingCircleBackButton extends StatelessWidget {
   }
 }
 
-/// Clean capsule progress — same pattern as modern onboarding apps.
+/// Legacy flat bar — kept for any call sites still using step/total directly.
 class OnboardingDotsProgress extends StatelessWidget {
   const OnboardingDotsProgress({
     super.key,
@@ -240,32 +535,9 @@ class OnboardingDotsProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = AppColors.isDark(context);
-    final trackColor = isDark
-        ? Colors.white.withValues(alpha: 0.12)
-        : const Color(0xFFE5E5EA);
-    final progress = totalSteps <= 0
-        ? 0.0
-        : ((currentStep + 1) / totalSteps).clamp(0.0, 1.0);
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(99),
-      child: SizedBox(
-        height: 4,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(color: trackColor),
-            AnimatedFractionallySizedBox(
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.centerLeft,
-              widthFactor: progress,
-              child: const ColoredBox(color: AppColors.primary),
-            ),
-          ],
-        ),
-      ),
+    return OnboardingSectionProgress(
+      stepIndex: currentStep,
+      totalSteps: totalSteps,
     );
   }
 }
@@ -282,21 +554,35 @@ class OnboardingContinueButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 54,
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        borderRadius: BorderRadius.circular(28),
-        color: AppColors.primary,
-        disabledColor: AppColors.primary.withValues(alpha: 0.55),
-        onPressed: onPressed,
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+    final enabled = onPressed != null;
+    final r = context.responsive;
+    final height = r.scale(54, tablet: 56);
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 160),
+      opacity: enabled ? 1 : 0.45,
+      child: SizedBox(
+        width: double.infinity,
+        height: height,
+        child: CupertinoButton(
+          padding: EdgeInsets.zero,
+          borderRadius: BorderRadius.circular(height / 2),
+          color: AppColors.primary,
+          disabledColor: AppColors.primary.withValues(alpha: 0.4),
+          onPressed: enabled
+              ? () {
+                  HapticFeedback.lightImpact();
+                  onPressed!();
+                }
+              : null,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: r.scale(17, tablet: 18),
+              fontWeight: FontWeight.w600,
+              color: CupertinoColors.white,
+              letterSpacing: -0.2,
+            ),
           ),
         ),
       ),
@@ -323,73 +609,159 @@ class OnboardingUnitToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final isDark = AppColors.isDark(context);
     return Padding(
       padding: EdgeInsets.only(top: r.scale(12), bottom: r.scale(8)),
-      child: Container(
-        padding: const EdgeInsets.all(5),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkCard : Colors.white,
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(
-            color: isDark
-                ? AppColors.darkBorder
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+      child: SizedBox(
+        width: r.scale(160, tablet: 180),
+        child: CupertinoSlidingSegmentedControl<bool>(
+          groupValue: leftSelected,
+          backgroundColor: AppColors.isDark(context)
+              ? CupertinoColors.tertiarySystemFill.resolveFrom(context)
+              : const Color(0xFFF2F2F7),
+          thumbColor: AppColors.isDark(context)
+              ? CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+                  context,
+                )
+              : CupertinoColors.white,
+          children: {
+            true: Padding(
+              padding: EdgeInsets.symmetric(vertical: r.scale(8)),
+              child: Text(
+                left,
+                style: TextStyle(
+                  fontSize: r.scale(14),
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimaryOf(context),
+                ),
+              ),
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _chip(context, left, leftSelected, onLeft),
-            _chip(context, right, !leftSelected, onRight),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _chip(
-    BuildContext context,
-    String label,
-    bool selected,
-    VoidCallback onTap,
-  ) {
-    final r = context.responsive;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: EdgeInsets.symmetric(
-          horizontal: r.scale(28, tablet: 34),
-          vertical: r.scale(12, tablet: 14),
-        ),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: r.scale(16, tablet: 17),
-            fontWeight: FontWeight.w800,
-            color: selected
-                ? Colors.white
-                : AppColors.textPrimaryOf(context),
-          ),
+            false: Padding(
+              padding: EdgeInsets.symmetric(vertical: r.scale(8)),
+              child: Text(
+                right,
+                style: TextStyle(
+                  fontSize: r.scale(14),
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimaryOf(context),
+                ),
+              ),
+            ),
+          },
+          onValueChanged: (value) {
+            if (value == null) return;
+            if (value) {
+              onLeft();
+            } else {
+              onRight();
+            }
+          },
         ),
       ),
     );
   }
 }
 
-/// Cupertino wheel used on personal-details-style onboarding steps.
+/// White option card with mint selected state (gender / activity / goal).
+class OnboardingOptionCard extends StatelessWidget {
+  const OnboardingOptionCard({
+    super.key,
+    required this.title,
+    required this.selected,
+    required this.onTap,
+    this.subtitle,
+    this.leading,
+    this.trailing,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+  final Widget? trailing;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = context.responsive;
+    final theme = CupertinoTheme.of(context);
+    final isDark = AppColors.isDark(context);
+    final selectedFill = AppColors.primary.withValues(alpha: 0.12);
+    final unselectedFill = isDark
+        ? CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context)
+        : AppColors.cardOf(context);
+    final unselectedBorder = isDark
+        ? CupertinoColors.separator.resolveFrom(context)
+        : const Color(0xFFE5E5EA);
+
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      onPressed: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(
+          horizontal: r.scale(18),
+          vertical: r.scale(subtitle == null ? 16 : 14),
+        ),
+        decoration: BoxDecoration(
+          color: selected ? selectedFill : unselectedFill,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? AppColors.primary : unselectedBorder,
+            width: selected ? 1.5 : 0.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            if (leading != null) ...[leading!, SizedBox(width: r.scale(14))],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.textStyle.copyWith(
+                      fontSize: r.scale(17, tablet: 18),
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle!,
+                      style: theme.textTheme.tabLabelTextStyle.copyWith(
+                        fontSize: r.scale(13, tablet: 14),
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (trailing != null)
+              trailing!
+            else
+              AnimatedOpacity(
+                opacity: selected ? 1 : 0,
+                duration: const Duration(milliseconds: 140),
+                child: Icon(
+                  CupertinoIcons.check_mark_circled_solid,
+                  size: r.scale(22),
+                  color: AppColors.primary,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class OnboardingCupertinoValuePicker extends StatelessWidget {
   const OnboardingCupertinoValuePicker({
     super.key,
@@ -413,17 +785,16 @@ class OnboardingCupertinoValuePicker extends StatelessWidget {
     final r = context.responsive;
     final primaryText = AppColors.textPrimaryOf(context);
     final secondaryText = AppColors.textSecondaryOf(context);
-    final maxLen =
-        labels.fold<int>(0, (m, s) => s.length > m ? s.length : m);
+    final maxLen = labels.fold<int>(0, (m, s) => s.length > m ? s.length : m);
 
     // Tight highlight around the value (age "25" vs longer labels).
     final overlayWidth = maxLen <= 3
         ? r.scale(88, tablet: 96)
         : maxLen <= 6
-            ? r.scale(128, tablet: 142)
-            : maxLen <= 12
-                ? r.scale(168, tablet: 190)
-                : r.scale(210, tablet: 240);
+        ? r.scale(128, tablet: 142)
+        : maxLen <= 12
+        ? r.scale(168, tablet: 190)
+        : r.scale(210, tablet: 240);
     final pickerWidth = overlayWidth + r.scale(36, tablet: 44);
 
     final trailing = unit != null
@@ -524,11 +895,7 @@ class OnboardingCupertinoValuePicker extends StatelessWidget {
 }
 
 class OnboardingBoldChevron extends StatelessWidget {
-  const OnboardingBoldChevron({
-    super.key,
-    required this.up,
-    this.onTap,
-  });
+  const OnboardingBoldChevron({super.key, required this.up, this.onTap});
 
   final bool up;
   final VoidCallback? onTap;
@@ -597,97 +964,5 @@ class _OnboardingChevronPainter extends CustomPainter {
     return oldDelegate.color != color ||
         oldDelegate.up != up ||
         oldDelegate.strokeWidth != strokeWidth;
-  }
-}
-
-/// White option card with mint selected state (gender / activity / goal).
-class OnboardingOptionCard extends StatelessWidget {
-  const OnboardingOptionCard({
-    super.key,
-    required this.title,
-    required this.selected,
-    required this.onTap,
-    this.subtitle,
-    this.leading,
-  });
-
-  final String title;
-  final String? subtitle;
-  final Widget? leading;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    final mintFill = AppColors.primary.withValues(alpha: 0.12);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: double.infinity,
-          padding: EdgeInsets.symmetric(
-            horizontal: r.scale(18),
-            vertical: r.scale(subtitle == null ? 18 : 16),
-          ),
-          decoration: BoxDecoration(
-            color: selected ? mintFill : AppColors.cardOf(context),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: selected ? AppColors.primary : Colors.transparent,
-              width: 1.6,
-            ),
-            boxShadow: selected
-                ? null
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-          ),
-          child: Row(
-            children: [
-              if (leading != null) ...[
-                leading!,
-                SizedBox(width: r.scale(14)),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: r.scale(16, tablet: 17),
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimaryOf(context),
-                      ),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle!,
-                        style: TextStyle(
-                          fontSize: r.scale(13, tablet: 14),
-                          color: AppColors.textSecondaryOf(context),
-                          height: 1.3,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

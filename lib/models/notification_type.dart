@@ -23,7 +23,10 @@ enum NotificationType {
 
   static NotificationType fromValue(String? raw) {
     if (raw == null || raw.isEmpty) return NotificationType.unknown;
-    final normalized = raw.trim().toLowerCase().replaceAll(RegExp(r'[\s-]+'), '_');
+    final normalized = raw.trim().toLowerCase().replaceAll(
+      RegExp(r'[\s-]+'),
+      '_',
+    );
     for (final type in NotificationType.values) {
       if (type.value == normalized) return type;
     }
@@ -76,14 +79,11 @@ enum NotificationType {
       return parsed;
     }
 
-    final canInferMeal = parsed == NotificationType.unknown ||
+    final canInferMeal =
+        parsed == NotificationType.unknown ||
         parsed == NotificationType.mealReminder;
     if (canInferMeal) {
-      final inferred = inferMealReminder(
-        title: title,
-        body: body,
-        data: data,
-      );
+      final inferred = inferMealReminder(title: title, body: body, data: data);
       if (inferred != null) return inferred;
     }
 
@@ -156,12 +156,7 @@ enum NotificationType {
 
   static String? mealFromData(Map<String, dynamic> data) {
     return mealFromMealTime(
-      _stringFrom(data, const [
-        'mealTime',
-        'meal_time',
-        'mealtime',
-        'meal',
-      ]),
+      _stringFrom(data, const ['mealTime', 'meal_time', 'mealtime', 'meal']),
     );
   }
 

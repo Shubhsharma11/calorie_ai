@@ -1,22 +1,23 @@
 abstract final class ApiEndpoints {
 
   
-    static const String baseUrl = 'https://mycaloriepal.com';
+    // static const String baseUrl = 'https://mycaloriepal.com';
 
   /// Public S3 host for uploaded avatars (`avatars/<file>`).
   static const String s3PublicBaseUrl =
       'https://fitbuddyai.s3.ap-south-1.amazonaws.com';
 
 
-  // static const String baseUrl = 'https://plc-modes-britannica-beaches.trycloudflare.com';
+  static const String baseUrl = 'https://growing-cms-aquatic-ability.trycloudflare.com';
+ 
 
-
+  
 
   static const String apiVersion = '/api/v1';
   static const String googleAuth = '$apiVersion/auth/google';
   static const String appleAuth = '$apiVersion/auth/apple';
   static const String phoneAuth = '$apiVersion/auth/phone';
-  static const String logout = '$apiVersion/auth/logout';
+  static const String logout = '$apiVersion/auth/logout';                                                                                 
   static const String authMe = '$apiVersion/auth/me';
   static const String authMeAvatar = '$apiVersion/auth/me/avatar';
   static const String deleteAccount = '$apiVersion/auth/account';
@@ -36,8 +37,9 @@ abstract final class ApiEndpoints {
   static const String water = '$apiVersion/water';
   static const String steps = '$apiVersion/steps';
   static const String claimable = '$apiVersion/coins/claimable';
-  static const String coins = '$apiVersion/coins';
-  static const String coinsClaim = '$apiVersion/coins/claim';
+  /// Wallet balance document (replaces legacy `GET /api/v1/coins`).
+  static const String wallet = '$apiVersion/wallet';
+  static const String coinsClaim = '$apiVersion/coins/claim'; 
   static const String myFoods = '$apiVersion/my-foods';
   static const String favouriteMeals = '$apiVersion/favourite-meals';
   static const String searchFoods = '$apiVersion/search/foods';       
@@ -46,14 +48,11 @@ abstract final class ApiEndpoints {
 
   /// Referral — backend contract TBD (Flutter-only stubs until APIs ship).
   /// Expected: GET returns the signed-in user's code + stats.
-  static const String referralsMe = '$apiVersion/referrals/me';
+  static const String referralsMe = '$apiVersion/referrals/me';    
   /// Expected: POST body `{ "code": "AB12CD" }` applies an incoming invite.
   static const String referralsClaim = '$apiVersion/referrals/claim';
   /// Optional stats endpoint; prefer [referralsMe] when it already embeds counts.
   static const String referralsStats = '$apiVersion/referrals/stats';
-
-
-
 
   static String url(String path) => '$baseUrl$path';
 
@@ -99,7 +98,7 @@ abstract final class ApiEndpoints {
     if (params.isEmpty) return meals;
 
     final query = params.entries
-        .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
+        .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')               
         .join('&');
     return '$meals?$query';
   }
@@ -122,7 +121,7 @@ abstract final class ApiEndpoints {
 
   static String myMealById(String myMealId) =>
       '$myMeals/${Uri.encodeComponent(myMealId)}';
-
+ 
   static String weightById(String weightId) => '$weight/$weightId';
 
   static String waterById(String waterId) => '$water/$waterId';
@@ -144,7 +143,7 @@ abstract final class ApiEndpoints {
 
     final query = params.entries
         .map((entry) => '${entry.key}=${entry.value}')
-        .join('&');
+        .join('&'); 
     return '$water?$query';
   }
 
@@ -225,7 +224,7 @@ abstract final class ApiEndpoints {
   static String get authMeAvatarUrl => url(authMeAvatar);
   static String get deleteAccountUrl => url(deleteAccount);
   static String get fcmTokenUrl => url(fcmToken);
-  static String get notificationsUrl => url(notifications);
+  static String get notificationsUrl => url(notifications);       
   static String get notificationsUnreadCountUrl =>
       url(notificationsUnreadCount);
   static String get notificationsReadAllUrl => url(notificationsReadAll);
@@ -243,12 +242,12 @@ abstract final class ApiEndpoints {
 
     final query = params.entries
         .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
-        .join('&');
+        .join('&');   
     return '$notifications?$query';
-  }
+  }        
 
   static String notificationById(String notificationId) =>
-      '$notifications/${Uri.encodeComponent(notificationId)}';
+      '$notifications/${Uri.encodeComponent(notificationId)}';      
 
   static String notificationRead(String notificationId) =>
       '${notificationById(notificationId)}/read';
@@ -272,7 +271,7 @@ abstract final class ApiEndpoints {
   static String waterByIdUrl(String waterId) => url(waterById(waterId));
   static String get stepsUrl => url(steps);
   static String get claimableUrl => url(claimable);
-  static String get coinsUrl => url(coins);
+  static String get walletUrl => url(wallet);
   static String get coinsClaimUrl => url(coinsClaim);
   static String get myFoodsUrl => url(myFoods);
   static String myFoodByIdUrl(String myFoodId) => url(myFoodById(myFoodId));

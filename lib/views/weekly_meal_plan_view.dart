@@ -4,16 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
+import '../controllers/food_controller.dart';
 import '../controllers/nutrition_plan_controller.dart';
 import '../controllers/user_controller.dart';
+import '../core/app_snackbar.dart';
 import '../core/responsive.dart';
+import '../models/diet_type.dart';
 import '../models/goal_type.dart';
 import '../models/planned_meal.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_app_bar.dart';
-import '../widgets/log_meal_plan_dialog.dart';
-import '../widgets/meal_type_icon.dart';
 import '../widgets/responsive_page.dart';
+import '../widgets/weekly_meal_plan/dont_suggest_sheets.dart';
+import '../widgets/weekly_meal_plan/meal_detail_sheet.dart';
+import '../widgets/weekly_meal_plan/swap_meal_sheet.dart';
+import '../widgets/weekly_meal_plan/weekly_meal_card.dart';
+import 'weekly_meal_more_options_view.dart';
 
 class WeeklyMealPlanView extends StatefulWidget {
   const WeeklyMealPlanView({super.key});
@@ -27,10 +33,21 @@ class _WeeklyMealPlanViewState extends State<WeeklyMealPlanView> {
 
   late int _selectedWeekday;
 
+  /// Slot id → replacement meal (keeps slot id / time / status).
+  final Map<String, PlannedMeal> _swaps = {};
+
+  /// Slot ids marked logged.
+  final Set<String> _loggedIds = {};
+
+  /// Meal names the user never wants again (lowercase).
+  final Set<String> _suppressedNames = {};
+
+  /// Slot ids removed after don't-suggest (until auto-replaced).
+  final Set<String> _removedSlotIds = {};
+
   @override
   void initState() {
     super.initState();
-    // DateTime.weekday: Mon=1 … Sun=7
     _selectedWeekday = DateTime.now().weekday;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final planController = Get.isRegistered<NutritionPlanController>()
@@ -39,6 +56,13 @@ class _WeeklyMealPlanViewState extends State<WeeklyMealPlanView> {
       unawaited(planController.ensureWeeklyPlan());
     });
   }
+
+  NutritionPlanController? get _planController =>
+      Get.isRegistered<NutritionPlanController>()
+          ? Get.find<NutritionPlanController>()
+          : null;
+
+  WeeklyMealPlanData? get _weekly => _planController?.plan.value?.weeklyPlan;
 
   String _goalLabel(GoalType? goal) {
     return switch (goal) {
@@ -49,17 +73,261 @@ class _WeeklyMealPlanViewState extends State<WeeklyMealPlanView> {
     };
   }
 
-  String _formatKcal(int value) {
-    return NumberFormat('#,###').format(value);
+  String _formatKcal(int value) => NumberFormat('#,###').format(value);
+
+  List<PlannedMeal> _swapPoolFor(PlannedMeal meal) {
+    final weekly = _weekly;
+    final fromMeal = meal.alternatives;
+    if (fromMeal.isNotEmpty) {
+      return fromMeal
+          .where(
+            (m) =>
+                m.name.toLowerCase() != meal.name.toLowerCase() &&
+                !_suppressedNames.contains(m.name.toLowerCase()),
+          )
+          .toList();
+    }
+    if (weekly == null || weekly.isEmpty) return const [];
+    return weekly.swapAlternativesFor(
+      meal,
+      suppressedNames: _suppressedNames,
+    );
+  }
+
+  List<PlannedMeal> _moreOptionsPoolFor(PlannedMeal meal) {
+    final weekly = _weekly;
+    if (weekly == null || weekly.isEmpty) {
+      return _swapPoolFor(meal);
+    }
+    return weekly.moreOptionsFor(
+      meal,
+      suppressedNames: _suppressedNames,
+    );
+  }
+
+  /// Slot ids currently posting to the diary API.
+  final Set<String> _loggingIds = {};
+
+  DateTime _dateForSelectedWeekday() {
+    final weekStart = _weekly?.weekStart;
+    final monday = weekStart != null
+        ? DateTime(weekStart.year, weekStart.month, weekStart.day)
+        : _mondayOf(DateTime.now());
+    return monday.add(Duration(days: _selectedWeekday - DateTime.monday));
+  }
+
+  static DateTime _mondayOf(DateTime day) {
+    final d = DateTime(day.year, day.month, day.day);
+    return d.subtract(Duration(days: d.weekday - DateTime.monday));
+  }
+
+  PlannedMeal _resolve(PlannedMeal meal) {
+    var resolved = _swaps[meal.id] ?? meal;
+    if (_loggedIds.contains(meal.id)) {
+      resolved = resolved.copyWith(status: PlannedMealStatus.completed);
+    }
+    return resolved;
+  }
+
+  List<PlannedMeal> _visibleMeals(List<PlannedMeal> meals) {
+    final mealsPerDay = Get.isRegistered<UserController>()
+        ? (Get.find<UserController>().user.mealsPerDay ?? 3)
+        : 3;
+    final visible = meals
+        .where((m) => !_removedSlotIds.contains(m.id))
+        .map(_resolve)
+        .where((m) => !_suppressedNames.contains(m.name.toLowerCase()))
+        .toList();
+    return MealsPerDayOptions.sortBySlotOrder(
+      visible,
+      mealsPerDay,
+      (m) => m.mealType,
+    );
+  }
+
+  Future<void> _openSwap(PlannedMeal meal) async {
+    final result = await showSwapMealSheet(
+      context,
+      current: meal,
+      alternatives: _swapPoolFor(meal),
+      suppressedNames: _suppressedNames,
+    );
+    if (!mounted || result == null) return;
+
+    if (result.id == kMoreOptionsSentinelId) {
+      await _openMoreOptions(meal);
+      return;
+    }
+    _applySwap(meal, result);
+  }
+
+  Future<void> _openMoreOptions(PlannedMeal meal) async {
+    final picked = await Navigator.of(context).push<PlannedMeal>(
+      MaterialPageRoute(
+        builder: (_) => WeeklyMealMoreOptionsView(
+          current: meal,
+          options: _moreOptionsPoolFor(meal),
+          suppressedNames: _suppressedNames,
+        ),
+      ),
+    );
+    if (!mounted || picked == null) return;
+    _applySwap(meal, picked);
+  }
+
+  void _applySwap(PlannedMeal slot, PlannedMeal replacement) {
+    setState(() {
+      _swaps[slot.id] = replacement.copyWith(
+        id: slot.id,
+        mealType: slot.mealType,
+        timeLabel: slot.timeLabel,
+        status: _loggedIds.contains(slot.id)
+            ? PlannedMealStatus.completed
+            : slot.status,
+      );
+      _removedSlotIds.remove(slot.id);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Swapped to ${replacement.name}'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _logMeal(PlannedMeal meal) async {
+    if (_loggedIds.contains(meal.id) || _loggingIds.contains(meal.id)) {
+      AppSnackbar.info('This meal is already logged.');
+      return;
+    }
+    if (!Get.isRegistered<FoodController>()) {
+      AppSnackbar.error('Food diary is not ready yet. Try again.');
+      return;
+    }
+
+    setState(() => _loggingIds.add(meal.id));
+    final food = Get.find<FoodController>();
+    final ok = await food.logPlannedMeal(
+      meal,
+      date: _dateForSelectedWeekday(),
+    );
+    if (!mounted) return;
+    setState(() => _loggingIds.remove(meal.id));
+
+    if (!ok) return;
+
+    setState(() => _loggedIds.add(meal.id));
+    AppSnackbar.success('${meal.name} saved to your diary.');
+  }
+
+  Future<void> _dontSuggest(PlannedMeal meal) async {
+    final reason = await showDontSuggestReasonSheet(context);
+    if (!mounted || reason == null) return;
+
+    final confirmed = await showDontSuggestConfirmDialog(context);
+    if (!mounted || !confirmed) return;
+
+    final alts = _swapPoolFor(meal);
+
+    setState(() {
+      _suppressedNames.add(meal.name.toLowerCase());
+      if (alts.isNotEmpty) {
+        _swaps[meal.id] = alts.first.copyWith(
+          id: meal.id,
+          mealType: meal.mealType,
+          timeLabel: meal.timeLabel,
+          status: meal.status,
+        );
+      } else {
+        _removedSlotIds.add(meal.id);
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Got it — we won't suggest that meal again"),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _openDetail(PlannedMeal meal) {
+    return showMealDetailSheet(
+      context,
+      meal: meal,
+      onSwap: () => unawaited(_openSwap(meal)),
+      onLog: () => unawaited(_logMeal(meal)),
+      onDontSuggest: () => unawaited(_dontSuggest(meal)),
+    );
+  }
+
+  Future<void> _showCardMenu(PlannedMeal meal) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(context.responsive.scale(20)),
+        ),
+      ),
+      builder: (ctx) {
+        final r = ctx.responsive;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.info_outline_rounded, color: AppColors.primary),
+                title: Text('View details', style: TextStyle(fontSize: r.scale(15))),
+                onTap: () => Navigator.pop(ctx, 'detail'),
+              ),
+              if (meal.status != PlannedMealStatus.completed) ...[
+                ListTile(
+                  leading: Icon(Icons.swap_horiz_rounded, color: AppColors.primary),
+                  title: Text('Swap meal', style: TextStyle(fontSize: r.scale(15))),
+                  onTap: () => Navigator.pop(ctx, 'swap'),
+                ),
+                ListTile(
+                  leading: Icon(Icons.restaurant_rounded, color: AppColors.primary),
+                  title: Text('Log this meal', style: TextStyle(fontSize: r.scale(15))),
+                  onTap: () => Navigator.pop(ctx, 'log'),
+                ),
+              ],
+              ListTile(
+                leading: Icon(
+                  Icons.do_not_disturb_on_outlined,
+                  color: AppColors.textSecondary,
+                ),
+                title: Text(
+                  "Don't suggest again",
+                  style: TextStyle(fontSize: r.scale(15)),
+                ),
+                onTap: () => Navigator.pop(ctx, 'dont'),
+              ),
+              SizedBox(height: r.scale(8)),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'detail':
+        await _openDetail(meal);
+      case 'swap':
+        await _openSwap(meal);
+      case 'log':
+        await _logMeal(meal);
+      case 'dont':
+        await _dontSuggest(meal);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
     final r = context.responsive;
-    final planController = Get.isRegistered<NutritionPlanController>()
-        ? Get.find<NutritionPlanController>()
-        : null;
+    final planController = _planController;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -67,10 +335,7 @@ class _WeeklyMealPlanViewState extends State<WeeklyMealPlanView> {
       body: RefreshIndicator(
         color: AppColors.primary,
         onRefresh: () async {
-          final c = Get.isRegistered<NutritionPlanController>()
-              ? Get.find<NutritionPlanController>()
-              : null;
-          await c?.ensureWeeklyPlan();
+          await _planController?.ensureWeeklyPlan();
         },
         child: ResponsivePage(
           scrollable: true,
@@ -88,29 +353,48 @@ class _WeeklyMealPlanViewState extends State<WeeklyMealPlanView> {
                 final plan = planController?.plan.value;
                 final weekly = plan?.weeklyPlan;
                 final hasWeeklyApi = weekly != null && weekly.isNotEmpty;
-                final calories = weekly?.dailyCalorieTarget ??
-                    plan?.calories ??
-                    user.dailyCalorieGoal;
                 final goal = user.pinnedGoalType ?? user.goal;
                 final goalLabel = (plan?.goalLabel?.trim().isNotEmpty == true)
                     ? plan!.goalLabel!.trim()
                     : _goalLabel(goal);
-                // Strictly API weeklyMealPlan — no sample / local meal lists.
-                final meals = hasWeeklyApi
-                    ? weekly.mealsForWeekday(_selectedWeekday)
-                    : const <PlannedMeal>[];
+                final calories =
+                    weekly?.dailyCalorieTarget ??
+                    plan?.calories ??
+                    user.dailyCalorieGoal;
+                final isLoading = planController?.isLoading.value == true;
+                final error = planController?.errorMessage.value;
+                final completed = planController?.hasCompletedFetch.value == true;
+
+                if (isLoading && !hasWeeklyApi) {
+                  return Padding(
+                    padding: EdgeInsets.symmetric(vertical: r.scale(80)),
+                    child: const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    ),
+                  );
+                }
+
+                if (!hasWeeklyApi) {
+                  return _ApiEmptyState(
+                    message: error ??
+                        (completed
+                            ? 'No weekly meals in your plan yet.'
+                            : 'Unable to load your meal plan.'),
+                    onRetry: () => unawaited(
+                      planController?.ensureWeeklyPlan() ?? Future.value(),
+                    ),
+                  );
+                }
+
+                final meals = _visibleMeals(
+                  weekly.mealsForWeekday(_selectedWeekday),
+                );
                 final nextMeals = meals
                     .where((m) => m.status == PlannedMealStatus.next)
                     .toList();
-                final upcoming = meals
-                    .where((m) => m.status == PlannedMealStatus.upcoming)
+                final otherMeals = meals
+                    .where((m) => m.status != PlannedMealStatus.next)
                     .toList();
-                final completed = meals
-                    .where((m) => m.status == PlannedMealStatus.completed)
-                    .toList();
-                final isLoading =
-                    planController?.isLoading.value == true && !hasWeeklyApi;
-                final error = planController?.errorMessage.value;
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -118,114 +402,70 @@ class _WeeklyMealPlanViewState extends State<WeeklyMealPlanView> {
                     SizedBox(height: r.scale(4)),
                     _TargetBanner(
                       caloriesLabel:
-                          '${_formatKcal(calories)} kcal / day target',
-                      goalLabel: goalLabel,
+                          '${_formatKcal(weekly.dailyCalorieTarget ?? calories)} kcal / day target',
+                      goalLabel: weekly.goalLabel?.trim().isNotEmpty == true
+                          ? weekly.goalLabel!.trim()
+                          : goalLabel,
                     ),
                     SizedBox(height: r.scale(14)),
-                    _WhitePanel(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: r.scale(12),
-                        vertical: r.scale(12),
-                      ),
-                      child: _DaySelector(
-                        selectedWeekday: _selectedWeekday,
-                        labels: _dayLabels,
-                        onSelected: (weekday) {
-                          setState(() => _selectedWeekday = weekday);
-                        },
-                      ),
+                    _DaySelector(
+                      selectedWeekday: _selectedWeekday,
+                      labels: _dayLabels,
+                      onSelected: (weekday) {
+                        setState(() => _selectedWeekday = weekday);
+                      },
                     ),
-                    SizedBox(height: r.scale(12)),
-                    _WhitePanel(
-                      padding: EdgeInsets.fromLTRB(
-                        r.scale(14),
-                        r.scale(18),
-                        r.scale(14),
-                        r.scale(12),
-                      ),
-                      child: isLoading
-                          ? Padding(
-                              padding:
-                                  EdgeInsets.symmetric(vertical: r.scale(28)),
-                              child: const Center(
-                                child: CircularProgressIndicator(
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            )
-                          : meals.isEmpty
-                              ? Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    vertical: r.scale(24),
-                                  ),
-                                  child: Text(
-                                    hasWeeklyApi
-                                        ? 'No meals planned for this day yet.'
-                                        : (error?.trim().isNotEmpty == true
-                                            ? error!
-                                            : 'Your weekly meal plan is not ready yet.\nPull to refresh or complete onboarding again.'),
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: r.scale(14),
-                                      color: AppColors.textSecondary,
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                )
-                              : Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    if (nextMeals.isNotEmpty) ...[
-                                      const _SectionTitle(title: 'Next meal'),
-                                      SizedBox(height: r.scale(10)),
-                                      for (final meal in nextMeals) ...[
-                                        _NextMealCard(
-                                          meal: meal,
-                                          onTap: () => showLogMealPlanDialog(
-                                            context,
-                                            meal: meal,
-                                          ),
-                                        ),
-                                        SizedBox(height: r.scale(14)),
-                                      ],
-                                    ],
-                                    if (upcoming.isNotEmpty) ...[
-                                      const _SectionTitle(
-                                        title: 'Upcoming meal',
-                                      ),
-                                      SizedBox(height: r.scale(10)),
-                                      for (final meal in upcoming) ...[
-                                        _UpcomingMealCard(
-                                          meal: meal,
-                                          onTap: () => showLogMealPlanDialog(
-                                            context,
-                                            meal: meal,
-                                          ),
-                                        ),
-                                        SizedBox(height: r.scale(10)),
-                                      ],
-                                      SizedBox(height: r.scale(6)),
-                                    ],
-                                    if (completed.isNotEmpty) ...[
-                                      const _SectionTitle(title: 'Completed'),
-                                      SizedBox(height: r.scale(10)),
-                                      for (final meal in completed) ...[
-                                        _CompletedMealCard(
-                                          meal: meal,
-                                          onTap: () => showLogMealPlanDialog(
-                                            context,
-                                            meal: meal,
-                                          ),
-                                        ),
-                                        SizedBox(height: r.scale(10)),
-                                      ],
-                                    ],
-                                  ],
-                                ),
-                    ),
+                    SizedBox(height: r.scale(16)),
+                    if (meals.isEmpty)
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: r.scale(36)),
+                        child: Text(
+                          'No meals planned for this day yet.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: r.scale(14),
+                            color: AppColors.textSecondary,
+                            height: 1.35,
+                          ),
+                        ),
+                      )
+                    else ...[
+                      if (nextMeals.isNotEmpty) ...[
+                        Text(
+                          'Next meal',
+                          style: TextStyle(
+                            fontSize: r.scale(16),
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        SizedBox(height: r.scale(10)),
+                        for (final meal in nextMeals) ...[
+                          WeeklyMealPlanCard(
+                            meal: meal,
+                            onSwap: () => unawaited(_openSwap(meal)),
+                            onLog: () => unawaited(_logMeal(meal)),
+                            onOpenDetail: () => unawaited(_openDetail(meal)),
+                            onMenu: () => unawaited(_showCardMenu(meal)),
+                          ),
+                          SizedBox(height: r.scale(14)),
+                        ],
+                      ],
+                      for (final meal in otherMeals) ...[
+                        WeeklyMealPlanCard(
+                          meal: meal,
+                          compact: meal.status == PlannedMealStatus.completed,
+                          onSwap: () => unawaited(_openSwap(meal)),
+                          onLog: () => unawaited(_logMeal(meal)),
+                          onOpenDetail: () => unawaited(_openDetail(meal)),
+                          onMenu: () => unawaited(_showCardMenu(meal)),
+                        ),
+                        SizedBox(height: r.scale(14)),
+                      ],
+                    ],
                     SizedBox(
-                      height: MediaQuery.viewPaddingOf(context).bottom +
+                      height:
+                          MediaQuery.viewPaddingOf(context).bottom +
                           r.scale(24),
                     ),
                   ],
@@ -238,46 +478,68 @@ class _WeeklyMealPlanViewState extends State<WeeklyMealPlanView> {
     );
   }
 }
-class _WhitePanel extends StatelessWidget {
-  const _WhitePanel({
-    required this.child,
-    required this.padding,
-  });
 
-  final Widget child;
-  final EdgeInsetsGeometry padding;
+class _ApiEmptyState extends StatelessWidget {
+  const _ApiEmptyState({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-
-    return Container(
-      width: double.infinity,
-      padding: padding,
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(r.scale(24)),
-        border: Border.all(
-          color: AppColors.border.withValues(alpha: 0.55),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: r.scale(24),
+        vertical: r.scale(48),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.restaurant_menu_rounded,
+            size: r.scale(40),
+            color: AppColors.textSecondary,
+          ),
+          SizedBox(height: r.scale(14)),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: r.scale(15),
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+              height: 1.35,
+            ),
+          ),
+          SizedBox(height: r.scale(8)),
+          Text(
+            'Pull to refresh or tap retry after your plan is ready.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: r.scale(13),
+              color: AppColors.textSecondary,
+              height: 1.35,
+            ),
+          ),
+          SizedBox(height: r.scale(16)),
+          TextButton(
+            onPressed: onRetry,
+            child: Text(
+              'Retry',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryDark,
+              ),
+            ),
           ),
         ],
       ),
-      child: child,
     );
   }
 }
 
 class _TargetBanner extends StatelessWidget {
-  const _TargetBanner({
-    required this.caloriesLabel,
-    required this.goalLabel,
-  });
+  const _TargetBanner({required this.caloriesLabel, required this.goalLabel});
 
   final String caloriesLabel;
   final String goalLabel;
@@ -360,8 +622,8 @@ class _DaySelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
-    final chipWidth = r.scale(56);
-    final chipHeight = r.scale(40);
+    final chipWidth = r.scale(58);
+    final chipHeight = r.scale(42);
 
     return SizedBox(
       height: chipHeight,
@@ -370,374 +632,38 @@ class _DaySelector extends StatelessWidget {
         itemCount: labels.length,
         separatorBuilder: (context, index) => SizedBox(width: r.scale(8)),
         itemBuilder: (context, i) {
+          final selected = selectedWeekday == i + 1;
           return SizedBox(
             width: chipWidth,
             height: chipHeight,
-            child: _DayChip(
-              label: labels[i],
-              selected: selectedWeekday == i + 1,
-              onTap: () => onSelected(i + 1),
+            child: Material(
+              color: selected ? AppColors.primary : AppColors.card,
+              borderRadius: BorderRadius.circular(r.scale(12)),
+              child: InkWell(
+                onTap: () => onSelected(i + 1),
+                borderRadius: BorderRadius.circular(r.scale(12)),
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(r.scale(12)),
+                    border: Border.all(
+                      color: selected ? AppColors.primary : AppColors.border,
+                      width: selected ? 0 : 1,
+                    ),
+                  ),
+                  child: Text(
+                    labels[i],
+                    style: TextStyle(
+                      fontSize: r.scale(13),
+                      fontWeight: FontWeight.w700,
+                      color: selected ? Colors.white : AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _DayChip extends StatelessWidget {
-  const _DayChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    final radius = BorderRadius.circular(r.scale(12));
-
-    return Material(
-      color: selected
-          ? AppColors.primary.withValues(alpha: 0.12)
-          : AppColors.card,
-      borderRadius: radius,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: radius,
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: radius,
-            border: Border.all(
-              color: selected ? AppColors.primary : AppColors.border,
-              width: selected ? 1.4 : 1,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: r.scale(13),
-              fontWeight: FontWeight.w600,
-              color: selected ? AppColors.primaryDark : AppColors.textPrimary,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: r.scale(16),
-        fontWeight: FontWeight.w700,
-        color: AppColors.textPrimary,
-      ),
-    );
-  }
-}
-
-class _NextMealCard extends StatelessWidget {
-  const _NextMealCard({required this.meal, required this.onTap});
-
-  final PlannedMeal meal;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    final radius = BorderRadius.circular(r.scale(16));
-
-    return Material(
-      color: AppColors.card,
-      borderRadius: radius,
-      elevation: 0,
-      shadowColor: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: radius,
-        child: Container(
-          padding: EdgeInsets.all(r.scale(14)),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: radius,
-            border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.shadowColor,
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _MealHeaderRow(meal: meal),
-              SizedBox(height: r.scale(10)),
-              Text(
-                meal.name,
-                style: TextStyle(
-                  fontSize: r.scale(17),
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: r.scale(12)),
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatBlock(
-                      value: '${meal.calories}',
-                      unit: 'kcal',
-                      label: 'Calories',
-                    ),
-                  ),
-                  SizedBox(width: r.scale(8)),
-                  Expanded(
-                    child: _StatBlock(
-                      value: '${meal.proteinG}',
-                      unit: 'g',
-                      label: 'Protein',
-                    ),
-                  ),
-                  SizedBox(width: r.scale(8)),
-                  Expanded(
-                    child: _StatBlock(
-                      value: '${meal.carbsG}',
-                      unit: 'g',
-                      label: 'Carbs',
-                    ),
-                  ),
-                  SizedBox(width: r.scale(8)),
-                  Expanded(
-                    child: _StatBlock(
-                      value: '${meal.fatG}',
-                      unit: 'g',
-                      label: 'Fat',
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _UpcomingMealCard extends StatelessWidget {
-  const _UpcomingMealCard({required this.meal, required this.onTap});
-
-  final PlannedMeal meal;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    final radius = BorderRadius.circular(r.scale(16));
-
-    return Material(
-      color: AppColors.card,
-      borderRadius: radius,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: radius,
-        child: Container(
-          padding: EdgeInsets.all(r.scale(12)),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: radius,
-            border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.shadowColor,
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _MealHeaderRow(meal: meal),
-              SizedBox(height: r.scale(8)),
-              Text(
-                meal.name,
-                style: TextStyle(
-                  fontSize: r.scale(16),
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CompletedMealCard extends StatelessWidget {
-  const _CompletedMealCard({required this.meal, required this.onTap});
-
-  final PlannedMeal meal;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-    final radius = BorderRadius.circular(r.scale(16));
-
-    return Material(
-      color: AppColors.primary.withValues(alpha: 0.1),
-      borderRadius: radius,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: radius,
-        child: Container(
-          padding: EdgeInsets.all(r.scale(12)),
-          decoration: BoxDecoration(
-            borderRadius: radius,
-            border: Border.all(
-              color: AppColors.primary.withValues(alpha: 0.5),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _MealHeaderRow(meal: meal),
-              SizedBox(height: r.scale(8)),
-              Text(
-                meal.name,
-                style: TextStyle(
-                  fontSize: r.scale(16),
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MealHeaderRow extends StatelessWidget {
-  const _MealHeaderRow({required this.meal});
-
-  final PlannedMeal meal;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Row(
-      children: [
-        MealTypeIcon(meal: meal.mealType, size: r.scale(28)),
-        SizedBox(width: r.scale(8)),
-        Expanded(
-          child: Text(
-            meal.mealType,
-            style: TextStyle(
-              fontSize: r.scale(14),
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-            ),
-          ),
-        ),
-        Text(
-          meal.timeLabel,
-          style: TextStyle(
-            fontSize: r.scale(13),
-            fontWeight: FontWeight.w500,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        Icon(
-          Icons.chevron_right_rounded,
-          size: r.scale(18),
-          color: AppColors.textSecondary,
-        ),
-      ],
-    );
-  }
-}
-
-class _StatBlock extends StatelessWidget {
-  const _StatBlock({
-    required this.value,
-    required this.unit,
-    required this.label,
-  });
-
-  final String value;
-  final String unit;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = context.responsive;
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: r.scale(6),
-        vertical: r.scale(10),
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: value,
-                  style: TextStyle(
-                    fontSize: r.scale(13),
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                TextSpan(
-                  text: unit,
-                  style: TextStyle(
-                    fontSize: r.scale(10),
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          SizedBox(height: r.scale(2)),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: r.scale(10),
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
       ),
     );
   }

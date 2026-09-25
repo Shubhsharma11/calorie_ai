@@ -169,20 +169,42 @@ class DailyCalorieGoalView extends GetView<UserController> {
                       ),
                     ),
                     if (showWeightChoice) ...[
-                      SizedBox(height: r.scale(24)),
-                      _WeightTargetSection(
-                        goal: user.goal!,
-                        currentWeightKg: user.weightKg?.toDouble() ?? 0,
-                        userTargetKg: controller.resolvedUserGoalWeightKg!,
-                        aiTargetKg: controller.resolvedAiGoalWeightKg!,
-                        selected: controller.weightTargetSource.value,
-                        enabled: !refreshing,
-                        onSelect: (source) async {
-                          final error =
-                              await controller.selectWeightTarget(source);
-                          if (error != null) {
-                            AppSnackbar.error(error, title: 'Plan update failed');
+                      Builder(
+                        builder: (context) {
+                          final goalType = user.goal;
+                          final userTargetKg =
+                              controller.resolvedUserGoalWeightKg;
+                          final aiTargetKg = controller.resolvedAiGoalWeightKg;
+                          if (goalType == null ||
+                              userTargetKg == null ||
+                              aiTargetKg == null) {
+                            return const SizedBox.shrink();
                           }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(height: r.scale(24)),
+                              _WeightTargetSection(
+                                goal: goalType,
+                                currentWeightKg:
+                                    user.weightKg?.toDouble() ?? 0,
+                                userTargetKg: userTargetKg,
+                                aiTargetKg: aiTargetKg,
+                                selected: controller.weightTargetSource.value,
+                                enabled: !refreshing,
+                                onSelect: (source) async {
+                                  final error = await controller
+                                      .selectWeightTarget(source);
+                                  if (error != null) {
+                                    AppSnackbar.error(
+                                      error,
+                                      title: 'Plan update failed',
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+                          );
                         },
                       ),
                     ],

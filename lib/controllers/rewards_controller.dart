@@ -235,12 +235,19 @@ class RewardsController extends GetxController {
   ];
 
   final balance = _defaultBalance.obs;
+  /// Lifetime earned from GET /api/v1/wallet (`lifetimeEarned`), when present.
+  final lifetimeEarned = 0.obs;
   final claimedDateKey = ''.obs;
   final isClaiming = false.obs;
   /// Coins available to claim from GET /api/v1/coins/claimable (today).
   final claimableCoins = 0.obs;
+  /// Today's claimable chunks from the latest claimable GET.
+  final RxList<ClaimableCoinItem> claimableItems = <ClaimableCoinItem>[].obs;
   /// Claimable coins keyed by `YYYY-MM-DD` (today, yesterday, custom days).
   final RxMap<String, int> claimableByDate = <String, int>{}.obs;
+  /// Claimable chunks keyed by `YYYY-MM-DD`.
+  final RxMap<String, List<ClaimableCoinItem>> claimableItemsByDate =
+      <String, List<ClaimableCoinItem>>{}.obs;
   /// Earned / display coins keyed by `YYYY-MM-DD` (from claimable API when present).
   final RxMap<String, int> earnedCoinsByDate = <String, int>{}.obs;
   final isLoadingClaimable = false.obs;
@@ -524,7 +531,7 @@ class RewardsController extends GetxController {
     }
   }
 
-  /// GET /api/v1/coins — total wallet balance (home coin chip).
+  /// GET /api/v1/wallet — total wallet balance (home coin chip).
   ///
   /// Concurrent callers join the same in-flight Future (no duplicate GET).
   Future<void> refreshWalletFromApi({bool retryOnRateLimit = false}) {
@@ -571,15 +578,22 @@ class RewardsController extends GetxController {
         return;
       }
       balance.value = result.balance;
+      if (result.lifetimeEarned != null) {
+        lifetimeEarned.value = result.lifetimeEarned!;
+      }
       walletApiErrorMessage.value = null;
-      debugPrint('RewardsController: wallet balance=${result.balance}');
+      debugPrint(
+        'RewardsController: wallet balance=${result.balance} '
+        'lifetimeEarned=${result.lifetimeEarned} '
+        'rewardType=${result.rewardType}',
+      );
     } on CoinsApiException catch (error) {
       if (sessionGen != _sessionGeneration) return;
       debugPrint('RewardsController: wallet fetch failed: $error');
       // Never retry 401/403 — clear the dead session once.
       if (error.statusCode == 401 || error.statusCode == 403) {
         await _clearSessionOnAuthFailure(
-          endpoint: 'GET /coins',
+          endpoint: 'GET /wallet',
           statusCode: error.statusCode,
         );
         return;
@@ -712,6 +726,9 @@ class RewardsController extends GetxController {
       }
       claimableByDate[key] = result.claimableCoins;
       claimableByDate.refresh();
+      claimableItemsByDate[key] =
+          List<ClaimableCoinItem>.unmodifiable(result.items);
+      claimableItemsByDate.refresh();
 
       final earned = result.earnedCoins ??
           (result.claimableCoins > 0 ? result.claimableCoins : null);
@@ -724,6 +741,7 @@ class RewardsController extends GetxController {
 
       if (isToday) {
         claimableCoins.value = result.claimableCoins;
+        claimableItems.assignAll(result.items);
         claimableApiErrorMessage.value = null;
         hasCompletedClaimableFetch.value = true;
       }
@@ -733,8 +751,8 @@ class RewardsController extends GetxController {
       }
       debugPrint(
         'RewardsController: claimable[$key]=${result.claimableCoins} '
-        'earned=${earnedCoinsByDate[key]} canClaim=${result.canClaim} '
-        'balance=${balance.value}',
+        'items=${result.items.length} earned=${earnedCoinsByDate[key]} '
+        'canClaim=${result.canClaim} balance=${balance.value}',
       );
     } on CoinsApiException catch (error) {
       if (sessionGen != _sessionGeneration) return;
@@ -795,6 +813,12 @@ class RewardsController extends GetxController {
     } else if (!result.canClaim) {
       claimableCoins.value = 0;
     }
+    if (result.items.isNotEmpty || !result.canClaim) {
+      claimableItems.assignAll(result.items);
+      claimableItemsByDate[_todayKey] =
+          List<ClaimableCoinItem>.unmodifiable(result.items);
+      claimableItemsByDate.refresh();
+    }
     claimableByDate[_todayKey] = claimableCoins.value;
     claimableByDate.refresh();
     final earned = result.earnedCoins ?? result.displayCoins;
@@ -808,6 +832,7 @@ class RewardsController extends GetxController {
   Future<bool> claimDailyStepReward({DateTime? date}) async {
     lastClaimError.value = null;
     final day = MealEntry.normalizeDate(date ?? DateTime.now());
+    final dateKey = MealEntry.dateToKey(day);
     final amount = claimableForDate(day);
     if (isClaiming.value || amount <= 0) {
       if (amount <= 0) {
@@ -826,6 +851,11 @@ class RewardsController extends GetxController {
       return false;
     }
 
+    final ids = (claimableItemsByDate[dateKey] ?? const <ClaimableCoinItem>[])
+        .where((item) => item.id.isNotEmpty && item.isClaimable)
+        .map((item) => item.id)
+        .toList(growable: false);
+
     isClaiming.value = true;
     try {
       final today = MealEntry.normalizeDate(DateTime.now());
@@ -833,34 +863,40 @@ class RewardsController extends GetxController {
         accessToken: token,
         date: day,
         timezone: resolveApiTimezone(),
+        claimableIds: ids.isEmpty ? null : ids,
       );
 
-      final dateKey = MealEntry.dateToKey(day);
       final credited =
           result.claimedCoins > 0 ? result.claimedCoins : amount;
 
       // Clear claimable for this day; keep in-memory earned display.
       claimableByDate[dateKey] = 0;
       claimableByDate.refresh();
+      claimableItemsByDate[dateKey] = const [];
+      claimableItemsByDate.refresh();
       _rememberEarnedForDate(dateKey, credited);
 
       if (day == today) {
         claimedDateKey.value = _todayKey;
         claimableCoins.value = 0;
+        claimableItems.clear();
       }
 
       if (result.balance != null && result.balance! >= 0) {
         balance.value = result.balance!;
-      } else {
-        // Authoritative wallet must come from GET /coins — never invent.
-        await refreshWalletFromApi();
+      }
+      if (result.lifetimeEarned != null) {
+        lifetimeEarned.value = result.lifetimeEarned!;
       }
 
-      // Claimable for this day is already cleared in memory; avoid a redundant
-      // wallet+claimable refresh storm after a successful claim.
+      // Always re-read wallet from API after claim (authoritative balance).
+      // Also re-fetch claimable so earned/claimed chunks come from the server.
+      await refreshWalletFromApi();
+      await refreshClaimableForDate(day);
+
       debugPrint(
         'RewardsController: claimed=$credited '
-        'date=$dateKey wallet=${balance.value}',
+        'date=$dateKey ids=${ids.length} wallet=${balance.value}',
       );
       return true;
     } on CoinsApiException catch (error) {
@@ -914,9 +950,12 @@ class RewardsController extends GetxController {
     _walletRetryScheduled = false;
     _claimableFetchInFlight.clear();
     balance.value = _defaultBalance;
+    lifetimeEarned.value = 0;
     claimedDateKey.value = '';
     claimableCoins.value = 0;
+    claimableItems.clear();
     claimableByDate.clear();
+    claimableItemsByDate.clear();
     earnedCoinsByDate.clear();
     isLoadingClaimable.value = false;
     hasCompletedClaimableFetch.value = false;

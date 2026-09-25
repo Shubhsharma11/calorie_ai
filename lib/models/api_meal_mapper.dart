@@ -98,8 +98,9 @@ abstract final class ApiMealMapper {
       final parsed = entryFromApiJson(map, fallbackDate: source.date);
       if (parsed == null) continue;
       final id = _readId(map);
-      final incomingFood =
-          parsed.food.name == 'Food' ? source.food : parsed.food;
+      final incomingFood = parsed.food.name == 'Food'
+          ? source.food
+          : parsed.food;
       return parsed.copyWith(
         id: (id != null && id.isNotEmpty) ? id : parsed.id,
         food: incomingFood.withServingFrom(source.food),
@@ -146,9 +147,8 @@ abstract final class ApiMealMapper {
         ? _foodFromApiJson(foodMap)
         : _foodFromFlatMealJson(json, grams: grams);
     if (food == null) return null;
-    final image = food.imageUrl ??
-        MediaUrl.fromJson(foodMap) ??
-        MediaUrl.fromJson(json);
+    final image =
+        food.imageUrl ?? MediaUrl.fromJson(foodMap) ?? MediaUrl.fromJson(json);
     if (image != null && image != food.imageUrl) {
       food = food.copyWith(imageUrl: image);
     }
@@ -157,7 +157,8 @@ abstract final class ApiMealMapper {
       food = _applyLoggedMealServing(food, foodMap);
     }
 
-    final date = _readDate(json['date']) ??
+    final date =
+        _readDate(json['date']) ??
         _readDate(json['loggedAt']) ??
         _readDate(json['logged_at']) ??
         _readDate(json['createdAt']) ??
@@ -200,9 +201,13 @@ abstract final class ApiMealMapper {
     ]);
     if (name == null) return null;
 
-    final portionCalories =
-        _readInt(json, const ['calories', 'totalCalories', 'kcal']);
-    var caloriesPer100g = _readInt(json, const [
+    final portionCalories = _readInt(json, const [
+      'calories',
+      'totalCalories',
+      'kcal',
+    ]);
+    var caloriesPer100g =
+        _readInt(json, const [
           'caloriesPer100g',
           'calories_per_100g',
           'caloriesPer100G',
@@ -258,9 +263,11 @@ abstract final class ApiMealMapper {
   static FoodItem _foodFromApiJson(Map<String, dynamic> json) {
     return FoodItem.tryFromApiJson(json) ??
         FoodItem(
-          name: _readString(json, const ['name', 'foodName', 'food_name']) ??
+          name:
+              _readString(json, const ['name', 'foodName', 'food_name']) ??
               'Food',
-          caloriesPer100g: _readInt(json, const [
+          caloriesPer100g:
+              _readInt(json, const [
                 'caloriesPer100g',
                 'calories_per_100g',
                 'caloriesPer100G',
@@ -269,7 +276,7 @@ abstract final class ApiMealMapper {
               0,
           protein:
               _readDouble(json, const ['protein', 'proteinG', 'protein_g']) ??
-                  0,
+              0,
           carbs: _readDouble(json, const ['carbs', 'carbsG', 'carbs_g']) ?? 0,
           fat: _readDouble(json, const ['fat', 'fatG', 'fat_g']) ?? 0,
           emoji: _readString(json, const ['emoji']) ?? '🍽️',
@@ -286,10 +293,8 @@ abstract final class ApiMealMapper {
       'unit',
     ]);
     final unit = FoodServing.normalizeUnit(unitRaw ?? 'g');
-    final gramsPerServing = _readInt(json, const [
-          'gramsPerServing',
-          'grams_per_serving',
-        ]) ??
+    final gramsPerServing =
+        _readInt(json, const ['gramsPerServing', 'grams_per_serving']) ??
         FoodServing.typicalGramsFor(unit);
     final explicitGrams = _readInt(json, const [
       'grams',
@@ -365,10 +370,8 @@ abstract final class ApiMealMapper {
     }
     if (!FoodServing.isHouseholdUnit(unit)) return food;
 
-    final gramsPerServing = _readInt(json, const [
-          'gramsPerServing',
-          'grams_per_serving',
-        ]) ??
+    final gramsPerServing =
+        _readInt(json, const ['gramsPerServing', 'grams_per_serving']) ??
         FoodServing.typicalGramsFor(unit);
     return food.copyWith(
       servingQuantity: 1,

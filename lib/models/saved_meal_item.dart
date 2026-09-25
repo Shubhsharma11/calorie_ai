@@ -196,9 +196,7 @@ class SavedMealItem {
     final history = <SavedMealItem>[];
     final hidden = excludeFoodNames == null
         ? const <String>{}
-        : {
-            for (final name in excludeFoodNames) name.trim().toLowerCase(),
-          };
+        : {for (final name in excludeFoodNames) name.trim().toLowerCase()};
     final sorted = entries.toList()
       ..sort((a, b) {
         final byDate = b.date.compareTo(a.date);
@@ -251,18 +249,18 @@ class SavedMealItem {
   }
 
   Map<String, dynamic> toJson() => {
-        if (id != null) 'id': id,
-        'food': food.toJson(),
-        'grams': grams,
-        'meal': meal,
-        if (servingQuantity != null) 'servingQuantity': servingQuantity,
-        'servingUnit': servingUnit,
-        if (nutritionBasisQuantity != null)
-          'nutritionBasisQuantity': nutritionBasisQuantity,
-        if (basisCarbs != null) 'basisCarbs': basisCarbs,
-        if (basisProtein != null) 'basisProtein': basisProtein,
-        if (basisFat != null) 'basisFat': basisFat,
-      };
+    if (id != null) 'id': id,
+    'food': food.toJson(),
+    'grams': grams,
+    'meal': meal,
+    if (servingQuantity != null) 'servingQuantity': servingQuantity,
+    'servingUnit': servingUnit,
+    if (nutritionBasisQuantity != null)
+      'nutritionBasisQuantity': nutritionBasisQuantity,
+    if (basisCarbs != null) 'basisCarbs': basisCarbs,
+    if (basisProtein != null) 'basisProtein': basisProtein,
+    if (basisFat != null) 'basisFat': basisFat,
+  };
 
   factory SavedMealItem.fromJson(Map<String, dynamic> json) {
     return SavedMealItem(
@@ -272,8 +270,8 @@ class SavedMealItem {
       meal: json['meal'] as String,
       servingQuantity: (json['servingQuantity'] as num?)?.toDouble(),
       servingUnit: json['servingUnit'] as String? ?? 'g',
-      nutritionBasisQuantity:
-          (json['nutritionBasisQuantity'] as num?)?.toDouble(),
+      nutritionBasisQuantity: (json['nutritionBasisQuantity'] as num?)
+          ?.toDouble(),
       basisCarbs: (json['basisCarbs'] as num?)?.toDouble(),
       basisProtein: (json['basisProtein'] as num?)?.toDouble(),
       basisFat: (json['basisFat'] as num?)?.toDouble(),

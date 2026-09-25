@@ -1,10 +1,7 @@
 import 'meal_entry.dart';
 
 class DailyWaterIntake {
-  const DailyWaterIntake({
-    required this.date,
-    required this.totalMl,
-  });
+  const DailyWaterIntake({required this.date, required this.totalMl});
 
   /// Standard glass size used for glass-equivalent display.
   static const int mlPerGlass = 250;
@@ -12,10 +9,8 @@ class DailyWaterIntake {
   final DateTime date;
   final int totalMl;
 
-  factory DailyWaterIntake.empty(DateTime date) => DailyWaterIntake(
-        date: MealEntry.normalizeDate(date),
-        totalMl: 0,
-      );
+  factory DailyWaterIntake.empty(DateTime date) =>
+      DailyWaterIntake(date: MealEntry.normalizeDate(date), totalMl: 0);
 
   int get glasses => (totalMl / mlPerGlass).round();
 

@@ -10,14 +10,14 @@ enum MealShareVisibility {
   public;
 
   String get label => switch (this) {
-        MealShareVisibility.onlyMe => 'Only me',
-        MealShareVisibility.public => 'Public',
-      };
+    MealShareVisibility.onlyMe => 'Only me',
+    MealShareVisibility.public => 'Public',
+  };
 
   String get badgeLabel => switch (this) {
-        MealShareVisibility.onlyMe => 'Private',
-        MealShareVisibility.public => 'Public',
-      };
+    MealShareVisibility.onlyMe => 'Private',
+    MealShareVisibility.public => 'Public',
+  };
 
   static MealShareVisibility fromJson(String? value) {
     return switch (value) {
@@ -51,23 +51,13 @@ class CustomMealPreset {
   final Uint8List? imageBytes;
   final String? imageUrl;
 
-  int get totalCalories =>
-      items.fold(0, (sum, item) => sum + item.calories);
+  int get totalCalories => items.fold(0, (sum, item) => sum + item.calories);
 
-  double get totalCarbs => items.fold(
-        0.0,
-        (sum, item) => sum + item.carbs,
-      );
+  double get totalCarbs => items.fold(0.0, (sum, item) => sum + item.carbs);
 
-  double get totalProtein => items.fold(
-        0.0,
-        (sum, item) => sum + item.protein,
-      );
+  double get totalProtein => items.fold(0.0, (sum, item) => sum + item.protein);
 
-  double get totalFat => items.fold(
-        0.0,
-        (sum, item) => sum + item.fat,
-      );
+  double get totalFat => items.fold(0.0, (sum, item) => sum + item.fat);
 
   /// Macro calorie split used for ring progress (carbs/protein = 4, fat = 9).
   double get carbsCalorieShare {
@@ -88,8 +78,7 @@ class CustomMealPreset {
     return (totalFat * 9) / total;
   }
 
-  double get _macroCalories =>
-      totalCarbs * 4 + totalProtein * 4 + totalFat * 9;
+  double get _macroCalories => totalCarbs * 4 + totalProtein * 4 + totalFat * 9;
 
   String get itemSummary {
     if (items.isEmpty) return 'No foods';
@@ -147,15 +136,15 @@ class CustomMealPreset {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'createdAt': createdAt.toIso8601String(),
-        'meal': meal,
-        'items': items.map((item) => item.toJson()).toList(),
-        'visibility': visibility.toJson(),
-        if (imageBytes != null) 'imageBase64': base64Encode(imageBytes!),
-        if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
-      };
+    'id': id,
+    'name': name,
+    'createdAt': createdAt.toIso8601String(),
+    'meal': meal,
+    'items': items.map((item) => item.toJson()).toList(),
+    'visibility': visibility.toJson(),
+    if (imageBytes != null) 'imageBase64': base64Encode(imageBytes!),
+    if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
+  };
 
   factory CustomMealPreset.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'] as List<dynamic>;
@@ -174,9 +163,7 @@ class CustomMealPreset {
       createdAt: DateTime.parse(json['createdAt'] as String),
       meal: json['meal'] as String,
       items: rawItems
-          .map(
-            (item) => SavedMealItem.fromJson(item as Map<String, dynamic>),
-          )
+          .map((item) => SavedMealItem.fromJson(item as Map<String, dynamic>))
           .toList(),
       visibility: MealShareVisibility.fromJson(json['visibility'] as String?),
       imageBytes: imageBytes,
@@ -184,8 +171,8 @@ class CustomMealPreset {
         (json['imageUrl'] as String?)?.trim().isNotEmpty == true
             ? (json['imageUrl'] as String).trim()
             : (json['image'] as String?)?.trim().isNotEmpty == true
-                ? (json['image'] as String).trim()
-                : null,
+            ? (json['image'] as String).trim()
+            : null,
       ),
     );
   }

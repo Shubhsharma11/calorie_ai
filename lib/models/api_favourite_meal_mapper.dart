@@ -26,7 +26,8 @@ abstract final class ApiFavouriteMealMapper {
       'mealtime': mealtimeForApi(item.meal),
     };
 
-    final image = _itemImageForApi(imageUrl) ?? _itemImageForApi(item.food.imageUrl);
+    final image =
+        _itemImageForApi(imageUrl) ?? _itemImageForApi(item.food.imageUrl);
     if (image != null) {
       body['image'] = image;
     }
@@ -96,7 +97,8 @@ abstract final class ApiFavouriteMealMapper {
     }
 
     if (data is Map) {
-      final nested = data['favouriteMeals'] ??
+      final nested =
+          data['favouriteMeals'] ??
           data['favoriteMeals'] ??
           data['favourites'] ??
           data['favorites'] ??
@@ -109,7 +111,8 @@ abstract final class ApiFavouriteMealMapper {
       return single == null ? [] : [single];
     }
 
-    final topLevel = map['favouriteMeals'] ??
+    final topLevel =
+        map['favouriteMeals'] ??
         map['favoriteMeals'] ??
         map['favourites'] ??
         map['favorites'] ??
@@ -131,7 +134,8 @@ abstract final class ApiFavouriteMealMapper {
     if (source == null) return parsed;
 
     final parsedEmoji = parsed.food.emoji.trim();
-    final keepParsedEmoji = parsedEmoji.isNotEmpty &&
+    final keepParsedEmoji =
+        parsedEmoji.isNotEmpty &&
         parsedEmoji != '🍽️' &&
         parsedEmoji != '⭐' &&
         !MediaUrl.looksLikeImageRef(parsedEmoji);
@@ -161,7 +165,8 @@ abstract final class ApiFavouriteMealMapper {
     final name = (json['name'] as String?)?.trim();
     if (name == null || name.isEmpty) return null;
 
-    final id = json['id']?.toString() ??
+    final id =
+        json['id']?.toString() ??
         json['_id']?.toString() ??
         json['favouriteMealId']?.toString() ??
         json['favoriteMealId']?.toString();

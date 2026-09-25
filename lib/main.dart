@@ -156,6 +156,7 @@ Future<String> _resolveInitialRoute() async {
       error,
       stackTrace,
       reason: 'startup_auth_restore',
+      
     );
   }
 
@@ -197,6 +198,10 @@ class _FitBuddyAiAppState extends State<FitBuddyAiApp> {
   @override
   void initState() {
     super.initState();
+    // GetX keeps a process-wide route tree; rebuild it from AppPages so newly
+    // added named routes work after hot restart without a full process kill.
+    Get.clearRouteTree();
+    Get.addPages(AppPages.pages);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(AnalyticsService.logScreenView(widget.initialRoute));
       // Push stored ThemeMode into GetMaterialApp after the shell is mounted.

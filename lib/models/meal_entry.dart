@@ -7,8 +7,8 @@ class MealEntry {
     required this.food,
     required this.grams,
     required this.meal,
-  })  : id = id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-        date = normalizeDate(date ?? DateTime.now());
+  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+       date = normalizeDate(date ?? DateTime.now());
 
   final String id;
   final DateTime date;
@@ -59,18 +59,18 @@ class MealEntry {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'date': dateToKey(date),
-        'food': food.toJson(),
-        'grams': grams,
-        'meal': meal,
-      };
+    'id': id,
+    'date': dateToKey(date),
+    'food': food.toJson(),
+    'grams': grams,
+    'meal': meal,
+  };
 
   factory MealEntry.fromJson(Map<String, dynamic> json) => MealEntry(
-        id: json['id'] as String?,
-        date: dateFromKey(json['date'] as String),
-        food: FoodItem.fromJson(json['food'] as Map<String, dynamic>),
-        grams: json['grams'] as int,
-        meal: json['meal'] as String,
-      );
+    id: json['id'] as String?,
+    date: dateFromKey(json['date'] as String),
+    food: FoodItem.fromJson(json['food'] as Map<String, dynamic>),
+    grams: json['grams'] as int,
+    meal: json['meal'] as String,
+  );
 }

@@ -95,7 +95,7 @@ class _CaloriesBurnViewState extends State<CaloriesBurnView> {
           Padding(
             padding: EdgeInsets.only(right: r.scale(12)),
             child: CoinBalanceChip(
-              onTap: () => Get.toNamed(AppRoutes.rewardsShop),
+              onTap: StepsClaimBanner.openCoinHistory,
             ),
           ),
         ],

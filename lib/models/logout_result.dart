@@ -1,8 +1,5 @@
 class LogoutResult {
-  const LogoutResult({
-    required this.backendRevoked,
-    this.errorMessage,
-  });
+  const LogoutResult({required this.backendRevoked, this.errorMessage});
 
   final bool backendRevoked;
   final String? errorMessage;

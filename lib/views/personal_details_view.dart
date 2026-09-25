@@ -11,10 +11,11 @@ import '../models/onboarding_request_model.dart';
 import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
-import '../widgets/onboarding_entrance.dart';
+import '../widgets/onboarding_question_transition.dart';
 import '../widgets/onboarding_step_scaffold.dart';
+import '../core/onboarding_nav.dart';
 
-enum _PersonalStep { gender, age, height }
+enum _PersonalStep { gender, age, height, weight }
 
 class PersonalDetailsView extends StatefulWidget {
   const PersonalDetailsView({super.key});
@@ -31,19 +32,31 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   static const _genders = ['Male', 'Female', 'Other'];
   static final _ages = [for (var i = 13; i <= 100; i++) i];
   static final _heightsCm = [for (var i = 100; i <= 275; i++) i];
+  static final _weightsKg = [
+    for (
+      var i = BodyMeasurementUnits.minWeightKg;
+      i <= BodyMeasurementUnits.maxWeightKg;
+      i++
+    )
+      i,
+  ];
 
   late final FixedExtentScrollController _ageCtrl;
   late final FixedExtentScrollController _heightCtrl;
+  late final FixedExtentScrollController _weightCtrl;
 
   late _PersonalStep _step;
   bool _heightUseCm = true;
+  bool _weightUseKg = true;
   String? _stepError;
   bool _saving = false;
   bool _transitioning = false;
+  bool _forward = true;
 
   late String? _gender;
   late int _age;
   late int _heightCm;
+  late int _weightKg;
 
   bool get _fromProfile => RouteArgs.isEditingFromProfile;
 
@@ -51,6 +64,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   void initState() {
     super.initState();
     _heightUseCm = _settings.useMetricUnits.value;
+    _weightUseKg = _settings.useMetricUnits.value;
 
     if (!_fromProfile && !_user.personalDetailsComplete) {
       if (!_user.hasOnboardingDraft) {
@@ -62,10 +76,14 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     // New users start with no selection — don't auto-pick Male.
     _gender = _genders.contains(u.gender) ? u.gender : null;
     _age = (u.age != null && u.age! >= 13 && u.age! <= 100) ? u.age! : 25;
-    _heightCm = (u.heightCm != null &&
-            BodyMeasurementUnits.isValidCm(u.heightCm!))
+    _heightCm =
+        (u.heightCm != null && BodyMeasurementUnits.isValidCm(u.heightCm!))
         ? u.heightCm!
         : 170;
+    _weightKg =
+        (u.weightKg != null && BodyMeasurementUnits.isValidKg(u.weightKg!))
+        ? u.weightKg!
+        : 70;
 
     _ageCtrl = FixedExtentScrollController(
       initialItem: _ages.indexOf(_age).clamp(0, _ages.length - 1),
@@ -73,8 +91,12 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     _heightCtrl = FixedExtentScrollController(
       initialItem: _heightIndexForCm(_heightCm),
     );
+    _weightCtrl = FixedExtentScrollController(
+      initialItem: _weightIndexForKg(_weightKg),
+    );
 
     _step = switch (RouteArgs.onboardingStartStep) {
+      RouteArgs.stepWeight => _PersonalStep.weight,
       RouteArgs.stepHeight => _PersonalStep.height,
       RouteArgs.stepAge => _PersonalStep.age,
       _ => _PersonalStep.gender,
@@ -84,10 +106,11 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   }
 
   int get _progressIndex => switch (_step) {
-        _PersonalStep.gender => OnboardingFlowProgress.gender,
-        _PersonalStep.age => OnboardingFlowProgress.age,
-        _PersonalStep.height => OnboardingFlowProgress.height,
-      };
+    _PersonalStep.gender => OnboardingFlowProgress.gender,
+    _PersonalStep.age => OnboardingFlowProgress.age,
+    _PersonalStep.height => OnboardingFlowProgress.height,
+    _PersonalStep.weight => OnboardingFlowProgress.currentWeight,
+  };
 
   int _heightIndexForCm(int cm) {
     if (_heightUseCm) {
@@ -97,6 +120,16 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     final labels = _heightFtLabels;
     final label = "${fi.feet}'${fi.inches}\"";
     final idx = labels.indexOf(label);
+    return idx >= 0 ? idx : labels.length ~/ 2;
+  }
+
+  int _weightIndexForKg(int kg) {
+    if (_weightUseKg) {
+      return _weightsKg.indexOf(kg).clamp(0, _weightsKg.length - 1);
+    }
+    final lbs = BodyMeasurementUnits.lbsFromKg(kg);
+    final labels = _weightLbLabels;
+    final idx = labels.indexOf(lbs);
     return idx >= 0 ? idx : labels.length ~/ 2;
   }
 
@@ -112,10 +145,15 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     return out;
   }
 
+  List<int> get _weightLbLabels {
+    return [for (var lbs = 66; lbs <= 661; lbs++) lbs];
+  }
+
   @override
   void dispose() {
     _ageCtrl.dispose();
     _heightCtrl.dispose();
+    _weightCtrl.dispose();
     super.dispose();
   }
 
@@ -125,6 +163,7 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     if (_gender != null) u.gender = _gender;
     u.age = _age;
     u.heightCm = _heightCm;
+    u.weightKg = _weightKg;
     _user.scheduleOnboardingDraftSave();
   }
 
@@ -142,6 +181,11 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       case _PersonalStep.height:
         if (!BodyMeasurementUnits.isValidCm(_heightCm)) {
           error = 'Use a height between 100 and 275 cm';
+        }
+      case _PersonalStep.weight:
+        if (!BodyMeasurementUnits.isValidKg(_weightKg)) {
+          error =
+              'Use a weight between ${BodyMeasurementUnits.minWeightKg} and ${BodyMeasurementUnits.maxWeightKg} kg';
         }
     }
     setState(() => _stepError = error);
@@ -174,22 +218,24 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       return;
     }
 
-    // Onboarding: gender → age → goal → height → weight goal
+    // Onboarding: gender → age → height → current weight → goals
     if (_step == _PersonalStep.gender) {
       await _transitionTo(_PersonalStep.age, forward: true);
       return;
     }
     if (_step == _PersonalStep.age) {
-      await _user.persistOnboardingStep(AppRoutes.goalSetup);
-      Get.offNamed(AppRoutes.goalSetup);
+      await _transitionTo(_PersonalStep.height, forward: true);
+      return;
+    }
+    if (_step == _PersonalStep.height) {
+      await _transitionTo(_PersonalStep.weight, forward: true);
       return;
     }
 
-    // Height → weight goal screen (Current / Goal).
     _user.markPersonalDetailsComplete();
     _user.onProfileUpdated();
-    await _user.persistOnboardingStep(AppRoutes.goalAmount);
-    Get.offNamed(AppRoutes.goalAmount);
+    await _user.persistOnboardingStep(AppRoutes.goalSetup);
+    await OnboardingNav.offNamed(AppRoutes.goalSetup);
   }
 
   Future<void> _onBack() async {
@@ -211,13 +257,8 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
       Get.back();
       return;
     }
-    if (_step == _PersonalStep.age) {
-      await _transitionTo(_PersonalStep.gender, forward: false);
-      return;
-    }
-    // Height → goal
-    await _user.persistOnboardingStep(AppRoutes.goalSetup);
-    Get.offNamed(AppRoutes.goalSetup);
+    OnboardingNav.markBackward();
+    await _transitionTo(_PersonalStep.values[_step.index - 1], forward: false);
   }
 
   Future<void> _transitionTo(
@@ -226,11 +267,17 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   }) async {
     if (_transitioning || next == _step) return;
     _transitioning = true;
+    if (forward) {
+      OnboardingNav.markForward();
+    } else {
+      OnboardingNav.markBackward();
+    }
     setState(() {
+      _forward = forward;
       _step = next;
       _stepError = null;
     });
-    await Future<void>.delayed(const Duration(milliseconds: 420));
+    await Future<void>.delayed(OnboardingMotion.duration);
     if (!mounted) return;
     _transitioning = false;
   }
@@ -282,19 +329,42 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
     });
   }
 
+  void _toggleWeightUnit(bool useKg) {
+    if (useKg == _weightUseKg) return;
+    setState(() {
+      _weightUseKg = useKg;
+      _stepError = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final idx = _weightIndexForKg(_weightKg);
+      if (_weightCtrl.hasClients) {
+        _weightCtrl.jumpToItem(idx);
+      }
+    });
+  }
+
   (String, String?) get _copy {
     switch (_step) {
       case _PersonalStep.gender:
-        return ('Select Your Gender', null);
+        return (
+          'What’s your gender?',
+          'This helps us calibrate your calorie target.',
+        );
       case _PersonalStep.age:
         return (
           'How old are you?',
-          'This helps us personalize your calorie and health goals',
+          'Age shapes your metabolism and daily energy needs.',
         );
       case _PersonalStep.height:
         return (
-          "What's your height?",
-          'This helps us personalize your calorie and health goals',
+          'What’s your height?',
+          'We use height with weight to personalize your plan.',
+        );
+      case _PersonalStep.weight:
+        return (
+          'What’s your current weight?',
+          'We’ll use this as the starting point for your goal.',
         );
     }
   }
@@ -303,19 +373,18 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
   Widget build(BuildContext context) {
     AppColors.syncFromContext(context);
     final r = context.responsive;
-    final isLast = _step == _PersonalStep.height;
-    final pageBg = AppColors.backgroundOf(context);
-    final (title, subtitle) = _copy;
+    final isLastProfile = _fromProfile && _step == _PersonalStep.height;
+    final (title, description) = _copy;
 
     return PopScope(
       canPop: _fromProfile && _step == _PersonalStep.gender,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        OnboardingNav.markBackward();
         _onBack();
       },
-      child: Scaffold(
-        backgroundColor: pageBg,
-        body: SafeArea(
+      child: OnboardingCupertinoShell(
+        child: SafeArea(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: r.scale(20, tablet: 28)),
             child: Column(
@@ -324,81 +393,42 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
                 OnboardingStepTopBar(
                   stepIndex: _progressIndex,
                   totalSteps: OnboardingFlowProgress.totalSteps,
-                  onBack: _onBack,
+                  onBack: () {
+                    OnboardingNav.markBackward();
+                    _onBack();
+                  },
+                  sectionLabel: OnboardingJourney.labelForStep(_progressIndex),
                 ),
                 SizedBox(height: r.scale(28)),
                 Expanded(
-                  child: OnboardingEntrance(
-                    replayToken: _step,
-                    builder: (context, entrance) {
-                      return Column(
-                        children: [
-                          entrance.item(
-                            index: 0,
-                            child: Text(
-                              title,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: r.scale(28, tablet: 32),
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.textPrimaryOf(context),
-                                height: 1.15,
-                                letterSpacing: -0.4,
-                              ),
-                            ),
-                          ),
-                          if (subtitle != null) ...[
-                            SizedBox(height: r.scale(10)),
-                            entrance.item(
-                              index: 1,
-                              child: Text(
-                                subtitle,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: r.scale(14, tablet: 15),
-                                  color: AppColors.textSecondaryOf(context),
-                                  height: 1.4,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                          if (_stepError != null) ...[
-                            SizedBox(height: r.scale(12)),
-                            Text(
-                              _stepError!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.error,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                          Expanded(
-                            child: entrance.item(
-                              index: 2,
-                              child: _buildStepBody(r),
-                            ),
-                          ),
-                          entrance.item(
-                            index: 3,
-                            child: OnboardingContinueButton(
-                              label: _fromProfile && isLast
-                                  ? (_saving ? 'Saving...' : 'Save')
-                                  : (_saving ? 'Please wait...' : 'Continue'),
-                              onPressed: () {
-                                if (_saving || _transitioning) return;
-                                _onContinue();
-                              },
-                            ),
-                          ),
-                          SizedBox(height: r.scale(12)),
-                        ],
-                      );
-                    },
+                  child: OnboardingQuestionTransition(
+                    stepKey: _step,
+                    forward: _forward,
+                    question: OnboardingQuestionHeader(
+                      title: title,
+                      errorText: _stepError,
+                    ),
+                    description: description == null
+                        ? null
+                        : OnboardingQuestionDescription(description),
+                    answer: _buildStepBody(r),
                   ),
                 ),
+                OnboardingContinueButton(
+                  label: isLastProfile
+                      ? (_saving ? 'Saving...' : 'Save')
+                      : (_saving ? 'Please wait...' : 'Continue'),
+                  onPressed:
+                      (_saving ||
+                          _transitioning ||
+                          (_step == _PersonalStep.gender && _gender == null))
+                      ? null
+                      : () {
+                          OnboardingNav.markForward();
+                          _onContinue();
+                        },
+                ),
+                SizedBox(height: r.scale(12)),
               ],
             ),
           ),
@@ -472,6 +502,42 @@ class _PersonalDetailsViewState extends State<PersonalDetailsView> {
                           inches,
                         );
                       }
+                    }
+                    _stepError = null;
+                  });
+                  _syncDraft();
+                },
+              ),
+            ),
+          ],
+        );
+      case _PersonalStep.weight:
+        final labels = _weightUseKg
+            ? _weightsKg.map((e) => '$e').toList(growable: false)
+            : _weightLbLabels.map((e) => '$e').toList(growable: false);
+        return Column(
+          children: [
+            OnboardingUnitToggle(
+              left: 'lbs',
+              right: 'kg',
+              leftSelected: !_weightUseKg,
+              onLeft: () => _toggleWeightUnit(false),
+              onRight: () => _toggleWeightUnit(true),
+            ),
+            Expanded(
+              child: OnboardingCupertinoValuePicker(
+                key: ValueKey('w-$_weightUseKg'),
+                controller: _weightCtrl,
+                labels: labels,
+                unit: _weightUseKg ? 'kg' : 'lb',
+                onSelectedItemChanged: (i) {
+                  setState(() {
+                    if (_weightUseKg) {
+                      _weightKg = _weightsKg[i];
+                    } else {
+                      _weightKg = BodyMeasurementUnits.kgFromLbs(
+                        _weightLbLabels[i].toDouble(),
+                      );
                     }
                     _stepError = null;
                   });

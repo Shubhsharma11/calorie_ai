@@ -36,7 +36,12 @@ class ImageUploadResult {
   static String? keyFromResponse(Map<String, dynamic>? json) {
     if (json == null) return null;
     for (final map in _maps(json)) {
-      for (final field in [map['key'], map['objectKey'], map['object_key'], map['url']]) {
+      for (final field in [
+        map['key'],
+        map['objectKey'],
+        map['object_key'],
+        map['url'],
+      ]) {
         if (field is! String) continue;
         final key = MediaUrl.uploadObjectKey(field);
         if (key != null) return key;

@@ -6,13 +6,13 @@ import 'package:get/get.dart';
 
 import '../controllers/user_controller.dart';
 import '../core/app_snackbar.dart';
+import '../core/onboarding_nav.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/goal_type.dart';
 import '../models/onboarding_request_model.dart';
 import '../routes/app_routes.dart';
-import '../theme/app_colors.dart';
-import '../widgets/onboarding_entrance.dart';
+import '../widgets/onboarding_question_transition.dart';
 import '../widgets/onboarding_step_scaffold.dart';
 
 class GoalSetupView extends StatefulWidget {
@@ -68,6 +68,7 @@ class _GoalSetupViewState extends State<GoalSetupView> {
       Get.back<void>();
       return;
     }
+    OnboardingNav.markBackward();
     await controller.goToPreviousOnboardingStep(AppRoutes.goalSetup);
   }
 
@@ -117,19 +118,15 @@ class _GoalSetupViewState extends State<GoalSetupView> {
       return;
     }
 
-    // Height comes next in onboarding (weight goal follows height).
-    await controller.persistOnboardingStep(AppRoutes.personalDetails);
-    Get.offNamed(
-      AppRoutes.personalDetails,
-      arguments: RouteArgs.onboardingHeightMap,
-    );
+    // Onboarding: goal type → target weight.
+    await controller.persistOnboardingStep(AppRoutes.goalAmount);
+    await OnboardingNav.offNamed(AppRoutes.goalAmount);
   }
 
   @override
   Widget build(BuildContext context) {
     final r = context.responsive;
     final fromProfile = RouteArgs.isEditingFromProfile;
-    final pageBg = AppColors.backgroundOf(context);
 
     return PopScope(
       canPop: fromProfile,
@@ -141,12 +138,12 @@ class _GoalSetupViewState extends State<GoalSetupView> {
         builder: (_) {
           final selected = controller.user.goal;
 
-          return Scaffold(
-            backgroundColor: pageBg,
-            body: SafeArea(
+          return OnboardingCupertinoShell(
+            child: SafeArea(
               child: Padding(
-                padding:
-                    EdgeInsets.symmetric(horizontal: r.scale(20, tablet: 28)),
+                padding: EdgeInsets.symmetric(
+                  horizontal: r.scale(20, tablet: 28),
+                ),
                 child: Column(
                   children: [
                     SizedBox(height: r.scale(4)),
@@ -160,85 +157,51 @@ class _GoalSetupViewState extends State<GoalSetupView> {
                       showProgress: true,
                       onBack: () =>
                           unawaited(_onBack(fromProfile: fromProfile)),
+                      sectionLabel: fromProfile
+                          ? 'GOALS'
+                          : OnboardingJourney.labelForStep(
+                              OnboardingFlowProgress.goalSetup,
+                            ),
                     ),
                     SizedBox(height: r.scale(28)),
                     Expanded(
-                      child: OnboardingEntrance(
-                        builder: (context, entrance) {
-                          return Column(
-                            children: [
-                              entrance.item(
-                                index: 0,
-                                child: Text(
-                                  "What's Your Goal?",
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: r.scale(28, tablet: 32),
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.textPrimaryOf(context),
-                                    height: 1.15,
-                                    letterSpacing: -0.4,
-                                  ),
-                                ),
+                      child: OnboardingQuestionTransition(
+                        stepKey: OnboardingFlowProgress.goalSetup,
+                        question: const OnboardingQuestionHeader(
+                          title: 'What’s your goal?',
+                        ),
+                        description: const OnboardingQuestionDescription(
+                          'We’ll shape your calories and plan around this.',
+                        ),
+                        answer: ListView(
+                          physics: const BouncingScrollPhysics(),
+                          children: [
+                            for (final goal in GoalType.values) ...[
+                              OnboardingOptionCard(
+                                title: goal.title,
+                                subtitle: _subtitleFor(goal),
+                                leading: _iconFor(goal),
+                                selected: selected == goal,
+                                onTap: () => _onSelectGoal(goal),
                               ),
                               SizedBox(height: r.scale(10)),
-                              entrance.item(
-                                index: 1,
-                                child: Text(
-                                  'What do you want to achieve with MyCaloriePal?',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: r.scale(14, tablet: 15),
-                                    color: AppColors.textSecondaryOf(context),
-                                    height: 1.4,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: r.scale(28)),
-                              Expanded(
-                                child: entrance.item(
-                                  index: 2,
-                                  child: ListView(
-                                    physics: const BouncingScrollPhysics(),
-                                    children: [
-                                      for (final goal in GoalType.values) ...[
-                                        OnboardingOptionCard(
-                                          title: goal.title,
-                                          subtitle: _subtitleFor(goal),
-                                          leading: _iconFor(goal),
-                                          selected: selected == goal,
-                                          onTap: () => _onSelectGoal(goal),
-                                        ),
-                                        SizedBox(height: r.scale(12)),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              entrance.item(
-                                index: 3,
-                                child: OnboardingContinueButton(
-                                  label: _isSaving
-                                      ? 'Please wait...'
-                                      : (fromProfile &&
-                                              selected ==
-                                                  GoalType.maintainWeight
-                                          ? 'Save'
-                                          : 'Continue'),
-                                  onPressed: selected == null || _isSaving
-                                      ? null
-                                      : () => _onContinue(
-                                            fromProfile: fromProfile,
-                                          ),
-                                ),
-                              ),
-                              SizedBox(height: r.scale(12)),
                             ],
-                          );
-                        },
+                          ],
+                        ),
                       ),
                     ),
+                    OnboardingContinueButton(
+                      label: _isSaving
+                          ? 'Saving...'
+                          : (fromProfile ? 'Next' : 'Continue'),
+                      onPressed: selected == null || _isSaving
+                          ? null
+                          : () {
+                              OnboardingNav.markForward();
+                              unawaited(_onContinue(fromProfile: fromProfile));
+                            },
+                    ),
+                    SizedBox(height: r.scale(12)),
                   ],
                 ),
               ),

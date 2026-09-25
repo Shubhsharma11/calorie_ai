@@ -78,7 +78,9 @@ abstract final class ApiStepsMapper {
     if (meta is Map) {
       final metaMap = Map<String, dynamic>.from(meta);
       final metaDate =
-          _readDate(metaMap['date']) ?? _readDate(metaMap['day']) ?? fallbackDate;
+          _readDate(metaMap['date']) ??
+          _readDate(metaMap['day']) ??
+          fallbackDate;
       final metaSteps = _readInt(
         metaMap['totalSteps'] ?? metaMap['total_steps'] ?? metaMap['steps'],
       );
@@ -120,7 +122,9 @@ abstract final class ApiStepsMapper {
         Map<String, dynamic>.from(coinsRaw),
       );
     } else if (data.containsKey('earnableCoins') ||
-        data.containsKey('canClaim')) {
+        data.containsKey('canClaim') ||
+        data.containsKey('totalClaimable') ||
+        data['claimable'] is List) {
       coins = CoinsApiService.claimableFromMap(data);
     }
 
@@ -177,16 +181,15 @@ abstract final class ApiStepsMapper {
     );
     if (steps == null || steps < 0) return null;
 
-    final date = _readDate(json['recordedAt']) ??
+    final date =
+        _readDate(json['recordedAt']) ??
         _readDate(json['recorded_at']) ??
         _readDate(json['date']) ??
         fallbackDate;
     if (date == null) return null;
 
     final parsedCalories = _readInt(
-      json['caloriesBurned'] ??
-          json['calories_burned'] ??
-          json['calories'],
+      json['caloriesBurned'] ?? json['calories_burned'] ?? json['calories'],
     );
 
     return StepLogEntry(
@@ -200,7 +203,8 @@ abstract final class ApiStepsMapper {
   }
 
   static List<dynamic> _readEntryMaps(Map<String, dynamic> data) {
-    final items = data['entries'] ??
+    final items =
+        data['entries'] ??
         data['stepEntries'] ??
         data['step_entries'] ??
         data['stepsLogs'] ??

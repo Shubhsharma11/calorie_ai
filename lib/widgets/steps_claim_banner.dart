@@ -16,6 +16,8 @@ class StepsClaimBanner extends StatefulWidget {
   /// Opens the rewards shop from the home coin chip or claim button.
   static void openRewardsShop() => Get.toNamed(AppRoutes.rewardsShop);
 
+  static void openCoinHistory() => Get.toNamed(AppRoutes.coinHistory);
+
   @override
   State<StepsClaimBanner> createState() => _StepsClaimBannerState();
 }

@@ -14,11 +14,11 @@ class WeightEntry {
   final DateTime? loggedAt;
 
   Map<String, dynamic> toJson() => {
-        if (id != null) 'id': id,
-        'date': DateTime(date.year, date.month, date.day).toIso8601String(),
-        'kg': kg,
-        if (loggedAt != null) 'loggedAt': loggedAt!.toIso8601String(),
-      };
+    if (id != null) 'id': id,
+    'date': DateTime(date.year, date.month, date.day).toIso8601String(),
+    'kg': kg,
+    if (loggedAt != null) 'loggedAt': loggedAt!.toIso8601String(),
+  };
 
   factory WeightEntry.fromJson(Map<String, dynamic> json) {
     return WeightEntry(

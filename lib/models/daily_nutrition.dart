@@ -19,13 +19,13 @@ class DailyNutrition {
   final int mealCount;
 
   factory DailyNutrition.empty(DateTime date) => DailyNutrition(
-        date: MealEntry.normalizeDate(date),
-        calories: 0,
-        protein: 0,
-        carbs: 0,
-        fat: 0,
-        mealCount: 0,
-      );
+    date: MealEntry.normalizeDate(date),
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    mealCount: 0,
+  );
 
   factory DailyNutrition.fromEntries(
     DateTime date,
@@ -38,16 +38,16 @@ class DailyNutrition {
       protein: list.fold(0.0, (sum, e) => sum + e.protein),
       carbs: list.fold(0.0, (sum, e) => sum + e.carbs),
       fat: list.fold(0.0, (sum, e) => sum + e.fat),
-      mealCount: list.length, 
+      mealCount: list.length,
     );
   }
 
   double valueFor(NutritionTrendMetric metric) => switch (metric) {
-        NutritionTrendMetric.calories => calories.toDouble(),
-        NutritionTrendMetric.protein => protein,
-        NutritionTrendMetric.carbs => carbs,
-        NutritionTrendMetric.fat => fat,
-      };
+    NutritionTrendMetric.calories => calories.toDouble(),
+    NutritionTrendMetric.protein => protein,
+    NutritionTrendMetric.carbs => carbs,
+    NutritionTrendMetric.fat => fat,
+  };
 
   bool get hasData => mealCount > 0;
 }

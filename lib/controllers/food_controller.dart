@@ -18,6 +18,7 @@ import '../models/meal_entry.dart';
 import '../models/meal_suggestion.dart';
 import '../models/meal_summary.dart';
 import '../models/meal_type.dart';
+import '../models/planned_meal.dart';
 import '../models/saved_meal_item.dart';
 import '../repositories/custom_meals_repository.dart';
 import '../repositories/favourite_meals_repository.dart';
@@ -2913,6 +2914,63 @@ class FoodController extends GetxController {
     _markEntriesDirty(celebrationDay: entry.date);
     selectedGrams.value = 100;
     return _syncCreateMeal(entry);
+  }
+
+  /// Logs an AI weekly-plan meal into the diary via `POST /api/v1/meals`.
+  Future<bool> logPlannedMeal(
+    PlannedMeal planned, {
+    DateTime? date,
+  }) async {
+    final day = MealEntry.normalizeDate(date ?? selectedLogDate.value);
+    final slot = _mealSlotFromPlanned(planned.mealType);
+    final calories = planned.calories.clamp(0, 10000);
+    final protein = planned.proteinG.toDouble().clamp(0.0, 1000.0).toDouble();
+    final carbs = planned.carbsG.toDouble().clamp(0.0, 1000.0).toDouble();
+    final fat = planned.fatG.toDouble().clamp(0.0, 1000.0).toDouble();
+
+    // Represent the whole planned meal as a 100g “serving” so diary macros
+    // match the plan totals when quantity/grams = 100.
+    final food = FoodItem(
+      name: planned.name.trim().isEmpty ? slot : planned.name.trim(),
+      caloriesPer100g: calories,
+      protein: protein,
+      carbs: carbs,
+      fat: fat,
+      emoji: '🍽️',
+      category: 'ai_meal_plan',
+      servingQuantity: 100,
+      servingUnit: 'g',
+      gramsPerServing: 1,
+      ingredients: [
+        for (final name in planned.ingredients)
+          if (name.trim().isNotEmpty)
+            SavedMealItem(
+              food: FoodItem(
+                name: name.trim(),
+                caloriesPer100g: 0,
+                protein: 0,
+                carbs: 0,
+                fat: 0,
+              ),
+              grams: 0,
+              meal: slot,
+            ),
+      ],
+    );
+
+    return addToLog(food, meal: slot, date: day, grams: 100);
+  }
+
+  static String _mealSlotFromPlanned(String raw) {
+    final value = raw.trim().toLowerCase();
+    if (value.contains('breakfast')) return MealType.breakfast;
+    if (value.contains('lunch')) return MealType.lunch;
+    if (value.contains('dinner')) return MealType.dinner;
+    if (value.contains('snack')) return MealType.snacks;
+    if (MealType.all.any((m) => m.toLowerCase() == value)) {
+      return MealType.all.firstWhere((m) => m.toLowerCase() == value);
+    }
+    return MealType.lunch;
   }
 
   Future<String?> _mealAccessToken() async {

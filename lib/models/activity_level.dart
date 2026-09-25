@@ -1,9 +1,4 @@
-enum ActivityLevel {
-  sedentary,
-  lightlyActive,
-  moderatelyActive,
-  veryActive,
-}
+enum ActivityLevel { sedentary, lightlyActive, moderatelyActive, veryActive }
 
 extension ActivityLevelLabel on ActivityLevel {
   String get title {

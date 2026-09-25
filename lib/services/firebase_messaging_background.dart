@@ -8,12 +8,12 @@ import 'notification_service.dart';
 /// Top-level handler required for background/terminated FCM messages.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  if (kDebugMode) {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform); 
+  if (kDebugMode) {   
     debugPrint(
       'FCM background message: ${message.messageId} '
       'data=${message.data}',
     );
   }
   await NotificationService.instance.handleBackgroundMessage(message);
-}
+}          

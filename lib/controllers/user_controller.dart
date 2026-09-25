@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/access_token_resolution.dart';
 import '../models/activity_level.dart';
 import '../models/avatar_upload_result.dart';
+import '../models/diet_plan_interest.dart';
 import '../models/diet_type.dart';
 import '../models/goal_type.dart';
 import '../models/health_concern.dart';
@@ -22,6 +23,7 @@ import '../repositories/onboarding_repository.dart';
 import '../routes/app_routes.dart';
 import '../core/app_log.dart';
 import '../core/app_snackbar.dart';
+import '../core/onboarding_nav.dart';
 import '../core/auth_token_debug.dart';
 import '../core/body_measurement_units.dart';
 import '../core/home_hydrate.dart';
@@ -71,6 +73,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
   bool isLoggedIn = false;
   bool isLoggingOut = false;
   bool isDeletingAccount = false;
+
   /// Drives the full-screen lock overlay during logout / account deletion.
   final isSessionBusy = false.obs;
   bool isSubmittingOnboarding = false;
@@ -123,6 +126,12 @@ class UserController extends GetxController with WidgetsBindingObserver {
   final weightTargetSource = WeightTargetSource.user.obs;
   final isRefreshingWeightTarget = false.obs;
 
+  /// Profile inputs that matched the last successful nutrition-plan generate.
+  ProfileSyncSnapshot? _planSyncedSnapshot;
+
+  /// True while Profile “Update plan” is regenerating the nutrition plan.
+  bool isRefreshingNutritionPlan = false;
+
   /// Snapshot of API-synced goal state when the user opens Goals edit.
   /// Diffs / restores against this so lose/gain/maintain always PATCH correctly.
   _GoalEditCheckpoint? _goalEditCheckpoint;
@@ -131,13 +140,25 @@ class UserController extends GetxController with WidgetsBindingObserver {
   static const int minDailyCalories = 1200;
   static const int maxDailyCalories = 4000;
 
+  /// Ordered onboarding routes (Personal → Goals → Lifestyle → Preferences).
+  /// [AppRoutes.dietPreferences] is visited twice (lifestyle + avoid); use
+  /// [goToPreviousOnboardingStep] phase-aware helpers for those hops.
   static const _setupRouteOrder = <String>[
     AppRoutes.personalDetails,
     AppRoutes.goalSetup,
     AppRoutes.goalAmount,
     AppRoutes.activityLevel,
+    AppRoutes.eatingHabits,
+    AppRoutes.livingArea,
+    AppRoutes.dietPreferences, // lifestyle: diet type + meals
+    AppRoutes.cookingSkills,
     AppRoutes.healthProblem,
-    AppRoutes.dietPreferences,
+    AppRoutes.medications,
+    AppRoutes.dietPlanInterest,
+    AppRoutes.foodPreferences,
+    AppRoutes.meatPreferences,
+    AppRoutes.habitFoodAllergies,
+    // dietPreferences avoid phase is entered with RouteArgs.dietAvoidMap
     AppRoutes.nutritionPlanLoading,
     AppRoutes.dailyCalorieGoal,
   ];
@@ -307,11 +328,15 @@ class UserController extends GetxController with WidgetsBindingObserver {
     // dedicated session avatarUrl so a custom upload from /auth/me wins.
     _applyAvatarFromResponse(backendLoginResponse);
     _applyStoredAvatar(saved);
-    AuthTokenDebug.log('Auth: loadAuthSession applied', accessToken, source: 'disk');
+    AuthTokenDebug.log(
+      'Auth: loadAuthSession applied',
+      accessToken,
+      source: 'disk',
+    );
     // TEMP — remove after debugging
-  
-      debugPrint('ACCESS_TOKEN=$accessToken');
-    
+
+    debugPrint('ACCESS_TOKEN=$accessToken');
+
     update();
   }
 
@@ -422,14 +447,15 @@ class UserController extends GetxController with WidgetsBindingObserver {
         final value = map[key];
         if (value is String && value.trim().isNotEmpty) return value.trim();
         if (value is Map) {
-          final composed = [
-            value['givenName'] ?? value['given_name'],
-            value['familyName'] ?? value['family_name'],
-          ]
-              .whereType<String>()
-              .map((part) => part.trim())
-              .where((part) => part.isNotEmpty)
-              .join(' ');
+          final composed =
+              [
+                    value['givenName'] ?? value['given_name'],
+                    value['familyName'] ?? value['family_name'],
+                  ]
+                  .whereType<String>()
+                  .map((part) => part.trim())
+                  .where((part) => part.isNotEmpty)
+                  .join(' ');
           if (composed.isNotEmpty) return composed;
         }
       }
@@ -472,7 +498,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
   ) sync* {
     yield response;
 
-    final data = response['data']; 
+    final data = response['data'];
     if (data is Map<String, dynamic>) {
       yield data;
       final nestedUser = data['user'];
@@ -593,12 +619,15 @@ class UserController extends GetxController with WidgetsBindingObserver {
     try {
       final lost = await _imagePicker.retrieveLostData();
       if (lost.isEmpty) return;
-      final file = lost.file ??
+      final file =
+          lost.file ??
           ((lost.files != null && lost.files!.isNotEmpty)
               ? lost.files!.first
               : null);
       if (file == null) return;
-      debugPrint('UserController: recovered profile photo after camera restart');
+      debugPrint(
+        'UserController: recovered profile photo after camera restart',
+      );
       final resumed = await waitForAppResumed();
       if (!resumed || isClosed) return;
       Uint8List bytes;
@@ -615,7 +644,9 @@ class UserController extends GetxController with WidgetsBindingObserver {
         if (cropped == null) return;
         bytes = cropped.isEmpty ? await file.readAsBytes() : cropped;
       } catch (error, stackTrace) {
-        debugPrint('UserController: recovered crop failed: $error\n$stackTrace');
+        debugPrint(
+          'UserController: recovered crop failed: $error\n$stackTrace',
+        );
         bytes = await file.readAsBytes();
       }
       if (bytes.isEmpty || isClosed) return;
@@ -642,7 +673,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   Future<void> _uploadAvatarBytes(Uint8List bytes) async {
     if (isClosed || isUploadingAvatar || bytes.isEmpty) return;
-    
+
     final token = await resolveAccessToken();
     if (token == null || token.isEmpty || isClosed) return;
 
@@ -706,10 +737,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     final currentIsGoogle = MediaUrl.isGooglePhoto(user.avatarUrl);
     // Google photos are a fallback. Always re-read /auth/me so a custom
     // `avatars/…` upload is not stuck behind the Google Sign-In picture.
-    if (!force &&
-        !currentIsGoogle &&
-        user.avatarUrl != null &&
-        stillFresh) {
+    if (!force && !currentIsGoogle && user.avatarUrl != null && stillFresh) {
       return;
     }
 
@@ -753,7 +781,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
       }
     }
     if (MediaUrl.isUploadedAvatar(url)) {
-      _rememberUploadedAvatarInLoginPayload(url);                  
+      _rememberUploadedAvatarInLoginPayload(url);
     }
   }
 
@@ -803,10 +831,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     _avatarUiDirty = true;
   }
 
-   Future<String?> updateDisplayName(
-    String name, {
-    bool force = false,
-  }) async {
+  Future<String?> updateDisplayName(String name, {bool force = false}) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return 'Enter your name.';
     if (!force && trimmed == user.name.trim()) return null;
@@ -917,8 +942,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
   void popToMyGoals() {
     if (Get.currentRoute == AppRoutes.myGoals) return;
     Get.until(
-      (route) =>
-          route.settings.name == AppRoutes.myGoals || route.isFirst,
+      (route) => route.settings.name == AppRoutes.myGoals || route.isFirst,
     );
     if (Get.currentRoute != AppRoutes.myGoals) {
       Get.offNamed(AppRoutes.myGoals);
@@ -942,7 +966,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
     } else {
       final current = resolvedCurrentWeightKg();
       final pinned = user.pinnedGoalWeightKg;
-      final pinStillValid = pinned != null &&
+      final pinStillValid =
+          pinned != null &&
           current > 0 &&
           WeightGoalCalculator.targetMatchesGoal(
             goal: goal,
@@ -954,10 +979,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
         user.pinGoalWeight(pinned, goalType: goal);
       } else if (current > 0) {
         // Goal type changed — retarget from live weight (not stale profile kg).
-        user.pinGoalWeight(
-          recommendedTargetKg(goal),
-          goalType: goal,
-        );
+        user.pinGoalWeight(recommendedTargetKg(goal), goalType: goal);
         _captureGoalStartWeight();
       } else if (previous != goal) {
         // No reliable current weight yet — drop stale pin from the old goal.
@@ -1046,7 +1068,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     if (!isGoalEditFromProfile) scheduleOnboardingDraftSave();
   }
 
-  void  useRecommendedGoalWeight() {
+  void useRecommendedGoalWeight() {
     final previousTarget = user.goalWeightKg;
     // Pin once for lose/gain/maintain — do not let it track live weigh-ins.
     user.pinGoalWeight(recommendedTargetKg(), goalType: user.goal);
@@ -1162,7 +1184,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
       // Once the user has a pinned target (lose/gain/maintain), casual profile
       // refreshes must not adopt server mutations caused by weight logs
       // (goalWeight rewritten ≈ current).
-      final hasPinnedTarget = user.pinnedGoalWeightKg != null &&
+      final hasPinnedTarget =
+          user.pinnedGoalWeightKg != null &&
           (user.pinnedGoalType ?? user.goal) != null;
       _applyOnboardingResponse(
         response,
@@ -1192,8 +1215,9 @@ class UserController extends GetxController with WidgetsBindingObserver {
         return error.message;
       }
       if (error.statusCode == 429) {
-        _profileRateLimitedUntil =
-            DateTime.now().add(_profileRateLimitCooldown);
+        _profileRateLimitedUntil = DateTime.now().add(
+          _profileRateLimitCooldown,
+        );
         ApiClient.noteRateLimited(cooldown: _profileRateLimitCooldown);
         debugPrint(
           'UserController: rate-limited — cooling down until '
@@ -1232,15 +1256,12 @@ class UserController extends GetxController with WidgetsBindingObserver {
     final inFlight = _clearInvalidSessionInFlight;
     if (inFlight != null) {
       // TEMPORARY — HOME_STUCK_DEBUG
-      HomeStuckDebug.log(
-        'clearInvalidSession JOIN in-flight',
-        {
-          'controller': debugController,
-          'endpoint': debugEndpoint,
-          'status': debugStatusCode,
-          'requestType': debugRequestType,
-        },
-      );
+      HomeStuckDebug.log('clearInvalidSession JOIN in-flight', {
+        'controller': debugController,
+        'endpoint': debugEndpoint,
+        'status': debugStatusCode,
+        'requestType': debugRequestType,
+      });
       return inFlight;
     }
 
@@ -1256,21 +1277,18 @@ class UserController extends GetxController with WidgetsBindingObserver {
         final shellBefore = Get.isRegistered<MainController>()
             ? Get.find<MainController>().shellReady.value
             : null;
-        HomeStuckDebug.log(
-          'clearInvalidSession START',
-          {
-            'controller': debugController,
-            'endpoint': debugEndpoint,
-            'status': debugStatusCode,
-            'requestType': debugRequestType,
-            ...HomeStuckDebug.snapshotAuthShell(
-              isLoggedIn: isLoggedIn,
-              shellReady: shellBefore ?? false,
-              userSessionEpoch: _sessionEpoch,
-              homeHydrateGeneration: HomeHydrate.stuckDebugGeneration,
-            ),
-          },
-        );
+        HomeStuckDebug.log('clearInvalidSession START', {
+          'controller': debugController,
+          'endpoint': debugEndpoint,
+          'status': debugStatusCode,
+          'requestType': debugRequestType,
+          ...HomeStuckDebug.snapshotAuthShell(
+            isLoggedIn: isLoggedIn,
+            shellReady: shellBefore ?? false,
+            userSessionEpoch: _sessionEpoch,
+            homeHydrateGeneration: HomeHydrate.stuckDebugGeneration,
+          ),
+        });
 
         _clearApiOwnedControllers();
         _clearInMemoryAuthState();
@@ -1385,6 +1403,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     user.foodAllergies = List<String>.from(foodAllergies);
     user.foodsToAvoid = foodsToAvoid.trim();
     user.mealsPerDay = mealsPerDay;
+    user.applyDietTypeConstraints();
     update();
     // Flush immediately so PUT /onboarding never races a debounced draft save.
     await saveOnboardingDraft();
@@ -1490,8 +1509,58 @@ class UserController extends GetxController with WidgetsBindingObserver {
     }
 
     await _persistNutritionTargets();
+    markNutritionPlanSynced();
     update();
     _notifyCalorieGoalChanged();
+  }
+
+  /// Marks the current profile as matching the active nutrition plan.
+  void markNutritionPlanSynced() {
+    if (!user.hasProfileBasics) return;
+    _planSyncedSnapshot = captureProfileSyncSnapshot();
+  }
+
+  /// Seeds the plan baseline on first Profile open so later edits can detect drift.
+  void ensureNutritionPlanBaseline() {
+    if (_planSyncedSnapshot != null) return;
+    markNutritionPlanSynced();
+  }
+
+  /// True when Profile edits would change plan inputs since the last generate.
+  bool get needsNutritionPlanRefresh {
+    final baseline = _planSyncedSnapshot;
+    if (baseline == null) return false;
+    if (!user.hasProfileBasics) return false;
+    return !ProfileSyncSnapshot.planInputsEqual(
+      baseline,
+      captureProfileSyncSnapshot(),
+    );
+  }
+
+  /// Regenerates the nutrition plan from the current profile (Profile banner).
+  Future<String?> refreshNutritionPlanFromProfile() async {
+    if (isRefreshingNutritionPlan) return null;
+    if (!isLoggedIn || accessToken.isEmpty) {
+      return 'Please sign in to update your plan.';
+    }
+
+    isRefreshingNutritionPlan = true;
+    update();
+    try {
+      await _createAndLoadNutritionPlan(
+        accessToken: accessToken,
+        applyTargetWeight: false,
+      );
+      markNutritionPlanSynced();
+      return null;
+    } on NutritionPlanApiException catch (error) {
+      return error.message;
+    } catch (_) {
+      return 'Unable to update your plan. Please try again.';
+    } finally {
+      isRefreshingNutritionPlan = false;
+      update();
+    }
   }
 
   void _captureUserOnboardingGoalWeightIfNeeded() {
@@ -1543,10 +1612,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     }
 
     if (isManual == false && userOnboardingGoalWeightKg != null) {
-      user.pinGoalWeight(
-        userOnboardingGoalWeightKg!,
-        goalType: user.goal,
-      );
+      user.pinGoalWeight(userOnboardingGoalWeightKg!, goalType: user.goal);
     } else {
       user.pinGoalWeight(clamped, goalType: user.goal);
     }
@@ -1646,7 +1712,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
     );
 
     // Prefer POST response when it already has meals / homePreview.
-    final hasMeals = created.previewMeal != null ||
+    final hasMeals =
+        created.previewMeal != null ||
         created.meals.isNotEmpty ||
         (created.weeklyPlan?.isNotEmpty ?? false);
     final plan = hasMeals
@@ -1712,8 +1779,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     }
 
     final previousSource = weightTargetSource.value;
-    final previousPinned =
-        user.pinnedGoalWeightKg ?? user.manualGoalWeightKg;
+    final previousPinned = user.pinnedGoalWeightKg ?? user.manualGoalWeightKg;
 
     isRefreshingWeightTarget.value = true;
     weightTargetSource.value = source;
@@ -1786,9 +1852,9 @@ class UserController extends GetxController with WidgetsBindingObserver {
     }
   }
 
-  void finishSetup() {
-    unawaited(persistOnboardingStep(AppRoutes.healthProblem));
-    Get.offNamed(AppRoutes.healthProblem);
+  Future<void> finishSetup() async {
+    await persistOnboardingStep(AppRoutes.eatingHabits);
+    await OnboardingNav.offNamed(AppRoutes.eatingHabits);
   }
 
   static const _resumeableSetupRoutes = <String>{
@@ -1796,8 +1862,16 @@ class UserController extends GetxController with WidgetsBindingObserver {
     AppRoutes.goalSetup,
     AppRoutes.goalAmount,
     AppRoutes.activityLevel,
-    AppRoutes.healthProblem,
+    AppRoutes.eatingHabits,
+    AppRoutes.livingArea,
     AppRoutes.dietPreferences,
+    AppRoutes.cookingSkills,
+    AppRoutes.healthProblem,
+    AppRoutes.medications,
+    AppRoutes.dietPlanInterest,
+    AppRoutes.foodPreferences,
+    AppRoutes.meatPreferences,
+    AppRoutes.habitFoodAllergies,
     AppRoutes.nutritionPlanLoading,
     AppRoutes.dailyCalorieGoal,
   };
@@ -1826,6 +1900,14 @@ class UserController extends GetxController with WidgetsBindingObserver {
       'manualGoalWeightKg': user.manualGoalWeightKg,
       'pinnedGoalWeightKg': user.pinnedGoalWeightKg,
       'activityLevel': user.activityLevel?.name,
+      'dietPlanInterest': user.dietPlanInterest?.apiValue,
+      'foodPreferences': List<String>.from(user.foodPreferences),
+      'meatPreferences': List<String>.from(user.meatPreferences),
+      'cookingSkills': user.cookingSkills,
+      'medications': List<String>.from(user.medications),
+      'eatingHabits': user.eatingHabits,
+      'livingArea': user.livingArea,
+      'livingState': user.livingState,
       'dietType': user.dietType?.apiValue,
       'foodAllergies': List<String>.from(user.foodAllergies),
       'foodsToAvoid': user.foodsToAvoid,
@@ -1895,6 +1977,74 @@ class UserController extends GetxController with WidgetsBindingObserver {
       user.activityLevel = null;
     }
 
+    final dietPlanInterest = draft['dietPlanInterest'];
+    if (dietPlanInterest is String) {
+      user.dietPlanInterest = DietPlanInterestX.tryParse(dietPlanInterest);
+    } else if (dietPlanInterest == null) {
+      user.dietPlanInterest = null;
+    }
+
+    final foodPreferences = draft['foodPreferences'];
+    if (foodPreferences is List) {
+      user.foodPreferences = foodPreferences
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    } else if (foodPreferences == null) {
+      user.foodPreferences = [];
+    }
+
+    final meatPreferences = draft['meatPreferences'];
+    if (meatPreferences is List) {
+      user.meatPreferences = meatPreferences
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    } else if (meatPreferences == null) {
+      user.meatPreferences = [];
+    }
+
+    final cookingSkills = draft['cookingSkills'];
+    if (cookingSkills is String && cookingSkills.trim().isNotEmpty) {
+      user.cookingSkills = cookingSkills.trim();
+    } else if (cookingSkills == null) {
+      user.cookingSkills = null;
+    }
+
+    final eatingHabits = draft['eatingHabits'];
+    if (eatingHabits is String && eatingHabits.trim().isNotEmpty) {
+      user.eatingHabits = eatingHabits.trim();
+    } else if (eatingHabits == null) {
+      user.eatingHabits = null;
+    }
+
+    final livingArea = draft['livingArea'];
+    if (livingArea is String && livingArea.trim().isNotEmpty) {
+      user.livingArea = livingArea.trim();
+    } else if (livingArea == null) {
+      user.livingArea = null;
+    }
+
+    final livingState = draft['livingState'];
+    if (livingState is String && livingState.trim().isNotEmpty) {
+      user.livingState = livingState.trim();
+    } else if (livingState == null) {
+      user.livingState = null;
+    }
+
+    final medications = draft['medications'];
+    if (medications is List) {
+      user.medications = medications
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    } else if (medications == null) {
+      user.medications = [];
+    }
+
     final dietType = draft['dietType'];
     if (dietType is String) {
       user.dietType = DietTypeLabel.tryParse(dietType);
@@ -1956,8 +2106,9 @@ class UserController extends GetxController with WidgetsBindingObserver {
   }
 
   String? previousOnboardingRoute(String currentRoute) {
-    if (currentRoute == AppRoutes.dailyCalorieGoal) {
-      // Skip the loading screen so Back does not re-trigger setup.
+    if (currentRoute == AppRoutes.dailyCalorieGoal ||
+        currentRoute == AppRoutes.nutritionPlanLoading) {
+      // Skip loading / land on foods-to-avoid (preferences tail).
       return AppRoutes.dietPreferences;
     }
     if (currentRoute == AppRoutes.activityLevel) {
@@ -1970,20 +2121,78 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   /// Saves draft, marks the previous step as current, then opens that route.
   Future<void> goToPreviousOnboardingStep(String currentRoute) async {
-    // Age → Goal → Height → Weight goal: land on the right personal-details step.
+    // Goal ← current weight (personal).
     if (currentRoute == AppRoutes.goalSetup) {
       await persistOnboardingStep(AppRoutes.personalDetails);
-      Get.offNamed(
+      await OnboardingNav.offNamed(
         AppRoutes.personalDetails,
-        arguments: RouteArgs.onboardingAgeMap,
+        arguments: RouteArgs.onboardingWeightMap,
+        forward: false,
       );
       return;
     }
+    // Target weight ← goal type.
     if (currentRoute == AppRoutes.goalAmount) {
-      await persistOnboardingStep(AppRoutes.personalDetails);
-      Get.offNamed(
-        AppRoutes.personalDetails,
-        arguments: RouteArgs.onboardingHeightMap,
+      await persistOnboardingStep(AppRoutes.goalSetup);
+      await OnboardingNav.offNamed(AppRoutes.goalSetup, forward: false);
+      return;
+    }
+    // Cooking ← meals (lifestyle diet prefs).
+    if (currentRoute == AppRoutes.cookingSkills) {
+      await persistOnboardingStep(AppRoutes.dietPreferences);
+      await OnboardingNav.offNamed(
+        AppRoutes.dietPreferences,
+        arguments: RouteArgs.dietLifestyleMealsMap,
+        forward: false,
+      );
+      return;
+    }
+    // Diet prefs: phase-aware back.
+    if (currentRoute == AppRoutes.dietPreferences) {
+      final phase = RouteArgs.dietPreferencesPhase;
+      if (phase == RouteArgs.dietPhaseAvoid) {
+        await persistOnboardingStep(AppRoutes.habitFoodAllergies);
+        await OnboardingNav.offNamed(
+          AppRoutes.habitFoodAllergies,
+          forward: false,
+        );
+        return;
+      }
+      // Lifestyle diet prefs ← living area.
+      await persistOnboardingStep(AppRoutes.livingArea);
+      await OnboardingNav.offNamed(AppRoutes.livingArea, forward: false);
+      return;
+    }
+    // Living area ← eating habits.
+    if (currentRoute == AppRoutes.livingArea) {
+      await persistOnboardingStep(AppRoutes.eatingHabits);
+      await OnboardingNav.offNamed(AppRoutes.eatingHabits, forward: false);
+      return;
+    }
+    // Eating habits ← activity.
+    if (currentRoute == AppRoutes.eatingHabits) {
+      await persistOnboardingStep(AppRoutes.activityLevel);
+      await OnboardingNav.offNamed(AppRoutes.activityLevel, forward: false);
+      return;
+    }
+    // Allergies ← meat (or food prefs when meat is skipped for veg diets).
+    if (currentRoute == AppRoutes.habitFoodAllergies) {
+      final diet = user.dietType;
+      final previous = (diet != null && !diet.asksMeatPreferences)
+          ? AppRoutes.foodPreferences
+          : AppRoutes.meatPreferences;
+      await persistOnboardingStep(previous);
+      await OnboardingNav.offNamed(previous, forward: false);
+      return;
+    }
+    // Loading / calorie confirm ← foods to avoid.
+    if (currentRoute == AppRoutes.nutritionPlanLoading ||
+        currentRoute == AppRoutes.dailyCalorieGoal) {
+      await persistOnboardingStep(AppRoutes.dietPreferences);
+      await OnboardingNav.offNamed(
+        AppRoutes.dietPreferences,
+        arguments: RouteArgs.dietAvoidMap,
+        forward: false,
       );
       return;
     }
@@ -1995,7 +2204,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     // Always navigate by name. Get.back() is unreliable here because the plan
     // loading screen uses offNamed (stack may not match the intended step),
     // and PopScope(canPop: false) on setup screens can interfere with pops.
-    Get.offNamed(previous);
+    await OnboardingNav.offNamed(previous, forward: false);
   }
 
   Future<void> restoreOnboardingProgress() async {
@@ -2067,7 +2276,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
       // Same-session only: user just finished plan create and is confirming calories.
       // Re-login / cold start with an existing plan must open Home — not
       // "Your nutrition plan is ready" again.
-      final confirmingCaloriesThisSession = !_onboardingCompleted &&
+      final confirmingCaloriesThisSession =
+          !_onboardingCompleted &&
           _onboardingStep == AppRoutes.dailyCalorieGoal;
       if (confirmingCaloriesThisSession) {
         return AppRoutes.dailyCalorieGoal;
@@ -2129,9 +2339,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
           ? _NutritionPlanGateResult.ready
           : _NutritionPlanGateResult.missing;
     } on NutritionPlanApiException catch (error) {
-      debugPrint(
-        'UserController: nutrition plan gate fetch failed: $error',
-      );
+      debugPrint('UserController: nutrition plan gate fetch failed: $error');
       if (_isTransientNutritionPlanFailure(error)) {
         return _NutritionPlanGateResult.unavailable;
       }
@@ -2142,9 +2350,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
       // Unknown 4xx — safer as unavailable than kicking into plan recreate.
       return _NutritionPlanGateResult.unavailable;
     } catch (error) {
-      debugPrint(
-        'UserController: nutrition plan gate fetch failed: $error',
-      );
+      debugPrint('UserController: nutrition plan gate fetch failed: $error');
       return _NutritionPlanGateResult.unavailable;
     }
   }
@@ -2280,7 +2486,9 @@ class UserController extends GetxController with WidgetsBindingObserver {
         accessToken: token,
         applyTargetWeight: false,
       );
-      debugPrint('UserController: nutrition plan refreshed after profile change');
+      debugPrint(
+        'UserController: nutrition plan refreshed after profile change',
+      );
     } catch (error, stackTrace) {
       debugPrint(
         'UserController: nutrition plan refresh failed: $error\n$stackTrace',
@@ -2356,11 +2564,16 @@ class UserController extends GetxController with WidgetsBindingObserver {
       final request = OnboardingRequestModel.fromUser(user);
       final payload = request.toJson();
       debugPrint(
-        'UserController: PUT /api/v1/onboarding diet fields '
+        'UserController: PUT /api/v1/onboarding lifestyle+prefs '
         'dietType=${payload['dietType']}, '
+        'mealsPerDay=${payload['mealsPerDay']}, '
+        'cookingSkills=${payload['cookingSkills']}, '
+        'dietPlanInterest=${payload['dietPlanInterest']}, '
+        'foodPreferences=${payload['foodPreferences']}, '
+        'meatPreferences=${payload['meatPreferences']}, '
         'foodAllergies=${payload['foodAllergies']}, '
         'foodsToAvoid=${payload['foodsToAvoid']}, '
-        'mealsPerDay=${payload['mealsPerDay']}',
+        'medications=${payload['medications']}',
       );
       final response = await _onboardingRepository.submitOnboarding(
         accessToken: accessToken,
@@ -2408,9 +2621,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
     await clearOnboardingProgress();
     await _persistCurrentAuthSession();
     _notifyDashboard();
-    unawaited(
-      AnalyticsService.logGoalCompleted(goalType: 'onboarding'),
-    );
+    unawaited(AnalyticsService.logGoalCompleted(goalType: 'onboarding'));
     MainController.resetHomeTabIfRegistered();
     Get.offAllNamed(AppRoutes.main);
     // Apply invite code captured before signup (backend awards coins).
@@ -2683,6 +2894,15 @@ class UserController extends GetxController with WidgetsBindingObserver {
     ]);
     if (avoid != null) {
       user.foodsToAvoid = avoid;
+    } else {
+      final avoidList = map['foodsToAvoid'] ?? map['foods_to_avoid'];
+      if (avoidList is List) {
+        user.foodsToAvoid = avoidList
+            .whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .join(',');
+      }
     }
 
     final meals = _readResponseInt(map, const [
@@ -2692,6 +2912,74 @@ class UserController extends GetxController with WidgetsBindingObserver {
     ]);
     if (meals != null && MealsPerDayOptions.values.contains(meals)) {
       user.mealsPerDay = meals;
+    }
+
+    final cooking = _readResponseString(map, const [
+      'cookingSkills',
+      'cooking_skills',
+    ]);
+    if (cooking != null) {
+      user.cookingSkills = cooking;
+    }
+
+    final eatingHabits = _readResponseString(map, const [
+      'eatingHabits',
+      'eating_habits',
+    ]);
+    if (eatingHabits != null) {
+      user.eatingHabits = eatingHabits;
+    }
+
+    final livingArea = _readResponseString(map, const [
+      'livingArea',
+      'living_area',
+    ]);
+    if (livingArea != null) {
+      user.livingArea = livingArea;
+    }
+
+    final livingState = _readResponseString(map, const [
+      'livingState',
+      'living_state',
+    ]);
+    if (livingState != null) {
+      user.livingState = livingState;
+    }
+
+    final medications = map['medications'];
+    if (medications is List) {
+      user.medications = medications
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    }
+
+    final planInterest = _readResponseString(map, const [
+      'dietPlanInterest',
+      'diet_plan_interest',
+    ]);
+    final parsedPlan = DietPlanInterestX.tryParse(planInterest);
+    if (parsedPlan != null) {
+      user.dietPlanInterest = parsedPlan;
+    }
+
+    final foodPrefs = map['foodPreferences'] ?? map['food_preferences'];
+    if (foodPrefs is List) {
+      user.foodPreferences = foodPrefs
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    }
+
+    final meatPrefs = map['meatPreferences'] ?? map['meat_preferences'];
+    if (meatPrefs is List) {
+      user.meatPreferences = meatPrefs
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
     }
   }
 
@@ -2746,18 +3034,26 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
   static GoalType? _parseGoalType(String? value) {
     if (value == null) return null;
-    final normalized = value.trim().toLowerCase().replaceAll(RegExp(r'[\s\-]+'), '_');
+    final normalized = value.trim().toLowerCase().replaceAll(
+      RegExp(r'[\s\-]+'),
+      '_',
+    );
     return switch (normalized) {
-      'loseweight' || 'lose_weight' || 'lose' || 'weight_loss' || 'weightloss' =>
-        GoalType.loseWeight,
-      'gainweight' || 'gain_weight' || 'gain' || 'weight_gain' || 'weightgain' =>
-        GoalType.gainWeight,
+      'loseweight' ||
+      'lose_weight' ||
+      'lose' ||
+      'weight_loss' ||
+      'weightloss' => GoalType.loseWeight,
+      'gainweight' ||
+      'gain_weight' ||
+      'gain' ||
+      'weight_gain' ||
+      'weightgain' => GoalType.gainWeight,
       'maintainweight' ||
       'maintain_weight' ||
       'maintain' ||
       'maintenance' ||
-      'keep_weight' =>
-        GoalType.maintainWeight,
+      'keep_weight' => GoalType.maintainWeight,
       _ => null,
     };
   }
@@ -2901,9 +3197,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
 
     // Existing accounts: open Home from cache — do NOT force GET /onboarding.
     // [HomeHydrate] syncs quietly after the first frame (like other apps).
-    final existing = isSetupComplete ||
-        isLikelyExistingBackendUser ||
-        user.hasProfileBasics;
+    final existing =
+        isSetupComplete || isLikelyExistingBackendUser || user.hasProfileBasics;
     if (existing) {
       debugPrint(
         'UserController: existing user — skip forced profile; '
@@ -2960,17 +3255,14 @@ class UserController extends GetxController with WidgetsBindingObserver {
   void _clearApiOwnedControllers() {
     appLog('Auth: clearApiOwnedControllers');
     // TEMPORARY — HOME_STUCK_DEBUG
-    HomeStuckDebug.log(
-      'clearApiOwnedControllers START',
-      {
-        'isLoggedIn': isLoggedIn,
-        'userSessionEpoch': _sessionEpoch,
-        'homeHydrateGen': HomeHydrate.stuckDebugGeneration,
-        'shellReady': Get.isRegistered<MainController>()
-            ? Get.find<MainController>().shellReady.value
-            : null,
-      },
-    );
+    HomeStuckDebug.log('clearApiOwnedControllers START', {
+      'isLoggedIn': isLoggedIn,
+      'userSessionEpoch': _sessionEpoch,
+      'homeHydrateGen': HomeHydrate.stuckDebugGeneration,
+      'shellReady': Get.isRegistered<MainController>()
+          ? Get.find<MainController>().shellReady.value
+          : null,
+    });
     // One session's 429 cooldown must not throttle the next login.
     ApiClient.clearRateLimit();
     HomeHydrate.resetSession();
@@ -3142,10 +3434,7 @@ class UserController extends GetxController with WidgetsBindingObserver {
         afterFrame: () {
           if (Get.testMode) return;
           if (result.backendRevoked) {
-            AppSnackbar.success(
-              'You’ve been logged out.',
-              title: 'Logged out',
-            );
+            AppSnackbar.success('You’ve been logged out.', title: 'Logged out');
           } else if (result.hasBackendError) {
             AppSnackbar.info(
               'Could not reach the server, but your session was cleared.',
@@ -3185,6 +3474,8 @@ class UserController extends GetxController with WidgetsBindingObserver {
     user.clearPinnedGoalWeight();
     user.pinnedGoalType = null;
     _goalEditCheckpoint = null;
+    _planSyncedSnapshot = null;
+    isRefreshingNutritionPlan = false;
     weightTargetSource.value = WeightTargetSource.user;
     isRefreshingWeightTarget.value = false;
     isUploadingAvatar = false;
@@ -3218,8 +3509,8 @@ enum _NutritionPlanGateResult {
 }
 
 /// In-memory checkpoint for a My Goals → Goal Setup/Amount/Weight edit journey.
-    class _GoalEditCheckpoint {
-     const _GoalEditCheckpoint({
+class _GoalEditCheckpoint {
+  const _GoalEditCheckpoint({
     required this.syncBaseline,
     required this.goal,
     required this.pinnedGoalType,

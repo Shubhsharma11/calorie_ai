@@ -1,11 +1,7 @@
 import 'meal_entry.dart';
 
 class WaterLogEntry {
-  const WaterLogEntry({
-    this.id,
-    required this.date,
-    required this.amountMl,
-  });
+  const WaterLogEntry({this.id, required this.date, required this.amountMl});
 
   final String? id;
   final DateTime date;
@@ -15,10 +11,7 @@ class WaterLogEntry {
 }
 
 class WaterLogResponse {
-  const WaterLogResponse({
-    this.entry,
-    this.dailyTotalMl,
-  });
+  const WaterLogResponse({this.entry, this.dailyTotalMl});
 
   final WaterLogEntry? entry;
   final int? dailyTotalMl;

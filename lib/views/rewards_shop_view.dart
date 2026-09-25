@@ -36,7 +36,9 @@ class RewardsShopView extends StatelessWidget {
         actions: [
           Padding(
             padding: EdgeInsets.only(right: r.scale(12)),
-            child: const CoinBalanceChip(),
+            child: const CoinBalanceChip(
+              onTap: StepsClaimBanner.openCoinHistory,
+            ),
           ),
         ],
       ),

@@ -22,31 +22,32 @@ class MealStreakModel {
     final streak = _firstMap(data, const ['streak']) ?? data;
 
     final loggedDates = _readLoggedDates(streak);
-    final current = _readInt(streak, const [
+    final current =
+        _readInt(streak, const [
           'currentStreak',
           'current_streak',
           'streak',
           'days',
         ]) ??
         StreakCalculator.computeCurrentStreak(loggedDates);
-    final longest = _readInt(streak, const [
+    final longest =
+        _readInt(streak, const [
           'longestStreak',
           'longest_streak',
           'bestStreak',
           'best_streak',
         ]) ??
         StreakCalculator.computeLongestStreak(loggedDates);
-    final hasLoggedToday = _readBool(streak, const [
+    final hasLoggedToday =
+        _readBool(streak, const [
           'hasLoggedToday',
           'has_logged_today',
           'loggedToday',
           'logged_today',
         ]) ??
-        StreakCalculator.hasLoggedOn(
-          loggedDates,
-          day: DateTime.now(),
-        );
-    final isAtRisk = _readBool(streak, const [
+        StreakCalculator.hasLoggedOn(loggedDates, day: DateTime.now());
+    final isAtRisk =
+        _readBool(streak, const [
           'isAtRisk',
           'is_at_risk',
           'atRisk',
@@ -181,7 +182,8 @@ class MealStreakModel {
     }
     if (value is Map) {
       final map = Map<String, dynamic>.from(value);
-      final raw = map['date'] ??
+      final raw =
+          map['date'] ??
           map['day'] ??
           map['loggedAt'] ??
           map['logged_at'] ??

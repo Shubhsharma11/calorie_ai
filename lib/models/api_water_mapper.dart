@@ -46,7 +46,7 @@ abstract final class ApiWaterMapper {
     for (final entry in entries) {
       final day = entry.normalizedDate;
       totals[day] = (totals[day] ?? 0) + entry.amountMl;
-    } 
+    }
 
     final dailyTotalMl = _readMl(
       data['dailyTotalMl'] ??
@@ -66,8 +66,7 @@ abstract final class ApiWaterMapper {
   static Map<DateTime, int> dailyTotalsFromResponse(
     Map<String, dynamic> json, {
     DateTime? fallbackDate,
-  }) =>
-      fetchResultFromResponse(json, fallbackDate: fallbackDate).dailyTotalsMl;
+  }) => fetchResultFromResponse(json, fallbackDate: fallbackDate).dailyTotalsMl;
 
   static WaterLogResponse logResponseFromJson(Map<String, dynamic> json) {
     final data = _unwrapData(json);
@@ -113,14 +112,16 @@ abstract final class ApiWaterMapper {
       );
     }
 
-    final amountMl = _readMl(json) ??
+    final amountMl =
+        _readMl(json) ??
         _quantityToMl(
           _readDouble(json, const ['quantity', 'amount', 'value']),
           json['unit']?.toString(),
         );
     if (amountMl == null || amountMl <= 0) return null;
 
-    final date = _readDate(json['recordedAt']) ??
+    final date =
+        _readDate(json['recordedAt']) ??
         _readDate(json['recorded_at']) ??
         _readDate(json['date']) ??
         fallbackDate;
@@ -134,7 +135,8 @@ abstract final class ApiWaterMapper {
   }
 
   static List<dynamic> _readEntryMaps(Map<String, dynamic> data) {
-    final items = data['entries'] ??
+    final items =
+        data['entries'] ??
         data['waterEntries'] ??
         data['water_entries'] ??
         data['waterLogs'] ??
@@ -165,7 +167,9 @@ abstract final class ApiWaterMapper {
     if (value is num) return value.round();
     if (value is String) return int.tryParse(value);
     if (value is Map) {
-      return _readMl(value['totalMl'] ?? value['total_ml'] ?? value['amountMl']);
+      return _readMl(
+        value['totalMl'] ?? value['total_ml'] ?? value['amountMl'],
+      );
     }
     return null;
   }
@@ -185,8 +189,11 @@ abstract final class ApiWaterMapper {
     final normalized = unit?.trim().toLowerCase();
     return switch (normalized) {
       'ml' || 'milliliter' || 'milliliters' => quantity.round(),
-      'l' || 'liter' || 'liters' || 'litre' || 'litres' =>
-        (quantity * 1000).round(),
+      'l' ||
+      'liter' ||
+      'liters' ||
+      'litre' ||
+      'litres' => (quantity * 1000).round(),
       'glass' || 'glasses' => (quantity * 250).round(),
       _ => (quantity * 1000).round(),
     };
@@ -210,14 +217,8 @@ abstract final class ApiWaterMapper {
   }
 
   /// Converts millilitres to API request fields.
-  static Map<String, dynamic> requestBodyFromMl(
-    int ml, {
-    DateTime? date,
-  }) {
-    final body = <String, dynamic>{
-      'quantity': ml,
-      'unit': 'ml',
-    };
+  static Map<String, dynamic> requestBodyFromMl(int ml, {DateTime? date}) {
+    final body = <String, dynamic>{'quantity': ml, 'unit': 'ml'};
     if (date != null) {
       body['date'] = MealEntry.dateToKey(date);
     }

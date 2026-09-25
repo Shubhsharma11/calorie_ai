@@ -57,7 +57,8 @@ class NotificationModel {
     return NotificationModel(
       id: json['id'] as String? ?? json['messageId'] as String?,
       type: NotificationType.resolve(
-        type: _jsonString(json, const [
+        type:
+            _jsonString(json, const [
               'type',
               'notification_type',
               'notificationType',
@@ -83,15 +84,15 @@ class NotificationModel {
   }
 
   Map<String, dynamic> toJson() => {
-        if (id != null) 'id': id,
-        'type': type.value,
-        'title': title,
-        'body': body,
-        'data': data,
-        if (messageId != null) 'messageId': messageId,
-        'isRead': isRead,
-        if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
-      };
+    if (id != null) 'id': id,
+    'type': type.value,
+    'title': title,
+    'body': body,
+    'data': data,
+    if (messageId != null) 'messageId': messageId,
+    'isRead': isRead,
+    if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+  };
 
   NotificationModel copyWith({
     String? id,
@@ -206,13 +207,12 @@ class NotificationListResult {
     final rawList = payload['notifications'];
     final notifications = rawList is List
         ? rawList
-            .whereType<Map>()
-            .map(
-              (item) => NotificationModel.fromJson(
-                Map<String, dynamic>.from(item),
-              ),
-            )
-            .toList()
+              .whereType<Map>()
+              .map(
+                (item) =>
+                    NotificationModel.fromJson(Map<String, dynamic>.from(item)),
+              )
+              .toList()
         : const <NotificationModel>[];
 
     return NotificationListResult(
@@ -241,10 +241,7 @@ class NotificationTokenRequest {
 }
 
 class NotificationTokenResponse {
-  const NotificationTokenResponse({
-    required this.success,
-    this.message,
-  });
+  const NotificationTokenResponse({required this.success, this.message});
 
   final bool success;
   final String? message;

@@ -1,9 +1,5 @@
 class OnboardingResponseModel {
-  const OnboardingResponseModel({
-    this.message,
-    this.success = true,
-    this.raw,
-  });
+  const OnboardingResponseModel({this.message, this.success = true, this.raw});
 
   final String? message;
   final bool success;

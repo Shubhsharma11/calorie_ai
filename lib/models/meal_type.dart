@@ -6,5 +6,4 @@ abstract final class MealType {
   static const dinner = 'Dinner';
 
   static const snacks = 'Snacks';
-  
 }

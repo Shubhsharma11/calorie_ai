@@ -1,4 +1,5 @@
 import 'activity_level.dart';
+import 'diet_plan_interest.dart';
 import 'diet_type.dart';
 import 'goal_type.dart';
 import 'health_concern.dart';
@@ -49,9 +50,6 @@ class OnboardingGoal {
   final String goalTimeline;
   final String? goalTimelineCustomDate;
 
-
-
-
   Map<String, dynamic> toJson() => {
     'type': type,
     'isGoalWeightManual': isGoalWeightManual,
@@ -95,8 +93,6 @@ class OnboardingHealthProblem {
     );
   }
 
-
-
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{
       'category': category,
@@ -125,6 +121,14 @@ class OnboardingRequestModel {
     this.foodAllergies = const [],
     this.foodsToAvoid,
     this.mealsPerDay,
+    this.cookingSkills,
+    this.medications = const [],
+    this.eatingHabits,
+    this.livingArea,
+    this.livingState,
+    this.dietPlanInterest,
+    this.foodPreferences = const [],
+    this.meatPreferences = const [],
   });
 
   final OnboardingPersonalDetails personalDetails;
@@ -141,6 +145,14 @@ class OnboardingRequestModel {
   final List<String> foodAllergies;
   final String? foodsToAvoid;
   final int? mealsPerDay;
+  final String? cookingSkills;
+  final List<String> medications;
+  final String? eatingHabits;
+  final String? livingArea;
+  final String? livingState;
+  final String? dietPlanInterest;
+  final List<String> foodPreferences;
+  final List<String> meatPreferences;
 
   OnboardingHealthProblem? get primaryHealthProblem =>
       healthProblems.isEmpty ? null : healthProblems.first;
@@ -161,11 +173,19 @@ class OnboardingRequestModel {
         'goalTimelineCustomDate': goalTimelineCustomDate,
       if (startWeight != null) 'startWeight': startWeight,
       if (startWeightUnit != null) 'startWeightUnit': startWeightUnit,
-      // Diet prefs are always sent on full PUT so nutrition plan AI can use them.
+      // Lifestyle + Preferences — always on full PUT (one API, same as before).
       'dietType': dietType,
       'foodAllergies': foodAllergies,
       'foodsToAvoid': foodsToAvoid ?? '',
       'mealsPerDay': mealsPerDay,
+      'cookingSkills': cookingSkills,
+      'medications': medications,
+      'eatingHabits': eatingHabits,
+      'livingArea': livingArea,
+      'livingState': livingState,
+      'dietPlanInterest': dietPlanInterest,
+      'foodPreferences': foodPreferences,
+      'meatPreferences': meatPreferences,
     };
   }
 
@@ -180,17 +200,17 @@ class OnboardingRequestModel {
       throw const OnboardingPayloadException('Fitness goal is not set.');
     }
 
-    final concerns = _apiConcerns(user); 
+    final concerns = _apiConcerns(user);
 
     final activity = user.activityLevel;
     if (activity == null) {
       throw const OnboardingPayloadException('Activity level is not set.');
-    } 
+    }
 
     final age = user.age;
     final gender = user.gender;
     final heightCm = user.heightCm;
-    final weightKg = user.weightKg; 
+    final weightKg = user.weightKg;
     if (age == null ||
         gender == null ||
         gender.trim().isEmpty ||
@@ -228,6 +248,14 @@ class OnboardingRequestModel {
           ? null
           : user.foodsToAvoid.trim(),
       mealsPerDay: user.mealsPerDay,
+      cookingSkills: user.cookingSkills,
+      medications: List<String>.from(user.medications),
+      eatingHabits: user.eatingHabits,
+      livingArea: user.livingArea,
+      livingState: user.livingState,
+      dietPlanInterest: user.dietPlanInterest?.apiValue,
+      foodPreferences: List<String>.from(user.foodPreferences),
+      meatPreferences: List<String>.from(user.meatPreferences),
     );
   }
 
@@ -288,7 +316,15 @@ class OnboardingPatchModel {
               key == 'dietType' ||
               key == 'foodAllergies' ||
               key == 'foodsToAvoid' ||
-              key == 'mealsPerDay',
+              key == 'mealsPerDay' ||
+              key == 'cookingSkills' ||
+              key == 'medications' ||
+              key == 'eatingHabits' ||
+              key == 'livingArea' ||
+              key == 'livingState' ||
+              key == 'dietPlanInterest' ||
+              key == 'foodPreferences' ||
+              key == 'meatPreferences',
         )) {
       return true;
     }
@@ -319,8 +355,9 @@ class OnboardingPatchModel {
       json['activityLevel'] = activityLevel;
     }
     if (healthProblems != null) {
-      json['healthProblems'] =
-          healthProblems!.map((problem) => problem.toJson()).toList();
+      json['healthProblems'] = healthProblems!
+          .map((problem) => problem.toJson())
+          .toList();
     }
     if (extraFields != null && extraFields!.isNotEmpty) {
       json.addAll(extraFields!);
@@ -400,10 +437,7 @@ class OnboardingPatchModel {
 
   factory OnboardingPatchModel.weightOnly(UserModel user) {
     return OnboardingPatchModel._(
-      personalDetails: {
-        'weight': user.weightKg,
-        'weightUnit': 'kg',
-      },
+      personalDetails: {'weight': user.weightKg, 'weightUnit': 'kg'},
     );
   }
 
@@ -465,8 +499,7 @@ class OnboardingPatchModel {
     }
     // Always send startWeight when goal type or target changes so the API
     // owns the progress baseline (no local storage).
-    if ((goal != null || goalWeightChanged) &&
-        user.goalStartWeightKg != null) {
+    if ((goal != null || goalWeightChanged) && user.goalStartWeightKg != null) {
       extras['startWeight'] = user.goalStartWeightKg;
       extras['startWeightUnit'] = 'kg';
     }
@@ -564,10 +597,72 @@ class OnboardingPatchModel {
     return OnboardingPatchModel.healthConcerns(concerns);
   }
 
+  factory OnboardingPatchModel.dietPlanInterest(DietPlanInterest plan) {
+    return OnboardingPatchModel._(
+      extraFields: {'dietPlanInterest': plan.apiValue},
+    );
+  }
+
+  factory OnboardingPatchModel.foodPreferences(List<String> values) {
+    return OnboardingPatchModel._(
+      extraFields: {'foodPreferences': List<String>.from(values)},
+    );
+  }
+
+  factory OnboardingPatchModel.foodAllergies(List<String> values) {
+    return OnboardingPatchModel._(
+      extraFields: {'foodAllergies': List<String>.from(values)},
+    );
+  }
+
+  factory OnboardingPatchModel.meatPreferences(List<String> values) {
+    return OnboardingPatchModel._(
+      extraFields: {'meatPreferences': List<String>.from(values)},
+    );
+  }
+
+  factory OnboardingPatchModel.cookingSkills(String value) {
+    return OnboardingPatchModel._(extraFields: {'cookingSkills': value});
+  }
+
+  factory OnboardingPatchModel.eatingHabits(String value) {
+    return OnboardingPatchModel._(extraFields: {'eatingHabits': value});
+  }
+
+  factory OnboardingPatchModel.livingArea({
+    required String area,
+    String? state,
+  }) {
+    return OnboardingPatchModel._(
+      extraFields: {
+        'livingArea': area,
+        if (state != null) 'livingState': state,
+      },
+    );
+  }
+
+  factory OnboardingPatchModel.medications(List<String> values) {
+    return OnboardingPatchModel._(
+      extraFields: {'medications': List<String>.from(values)},
+    );
+  }
+
   factory OnboardingPatchModel.dietPreferences(UserModel user) {
     final avoid = user.foodsToAvoid.trim();
     return OnboardingPatchModel._(
       extraFields: {
+        if (user.dietPlanInterest != null)
+          'dietPlanInterest': user.dietPlanInterest!.apiValue,
+        if (user.foodPreferences.isNotEmpty)
+          'foodPreferences': List<String>.from(user.foodPreferences),
+        if (user.meatPreferences.isNotEmpty)
+          'meatPreferences': List<String>.from(user.meatPreferences),
+        if (user.cookingSkills != null) 'cookingSkills': user.cookingSkills,
+        if (user.medications.isNotEmpty)
+          'medications': List<String>.from(user.medications),
+        if (user.eatingHabits != null) 'eatingHabits': user.eatingHabits,
+        if (user.livingArea != null) 'livingArea': user.livingArea,
+        if (user.livingState != null) 'livingState': user.livingState,
         if (user.dietType != null) 'dietType': user.dietType!.apiValue,
         'foodAllergies': List<String>.from(user.foodAllergies),
         'foodsToAvoid': avoid,
@@ -582,6 +677,39 @@ class OnboardingPatchModel {
   ) {
     final extras = <String, dynamic>{};
 
+    if (user.dietPlanInterest != baseline.dietPlanInterest) {
+      extras['dietPlanInterest'] = user.dietPlanInterest?.apiValue;
+    }
+    if (!ProfileSyncSnapshot.stringListsEqual(
+      user.foodPreferences,
+      baseline.foodPreferences,
+    )) {
+      extras['foodPreferences'] = List<String>.from(user.foodPreferences);
+    }
+    if (!ProfileSyncSnapshot.stringListsEqual(
+      user.meatPreferences,
+      baseline.meatPreferences,
+    )) {
+      extras['meatPreferences'] = List<String>.from(user.meatPreferences);
+    }
+    if (user.cookingSkills != baseline.cookingSkills) {
+      extras['cookingSkills'] = user.cookingSkills;
+    }
+    if (!ProfileSyncSnapshot.stringListsEqual(
+      user.medications,
+      baseline.medications,
+    )) {
+      extras['medications'] = List<String>.from(user.medications);
+    }
+    if (user.eatingHabits != baseline.eatingHabits) {
+      extras['eatingHabits'] = user.eatingHabits;
+    }
+    if (user.livingArea != baseline.livingArea) {
+      extras['livingArea'] = user.livingArea;
+    }
+    if (user.livingState != baseline.livingState) {
+      extras['livingState'] = user.livingState;
+    }
     if (user.dietType != baseline.dietType) {
       extras['dietType'] = user.dietType?.apiValue;
     }

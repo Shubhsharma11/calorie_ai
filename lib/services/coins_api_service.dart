@@ -53,17 +53,17 @@ class CoinsApiService {
     return _parseClaimable(response);
   }
 
-  /// GET /api/v1/coins — total wallet balance.
+  /// GET /api/v1/wallet — total wallet balance.
   Future<CoinsWalletResult> fetchWallet({
     required String accessToken,
   }) async {
     debugPrint(
-      'CoinsApiService: GET ${ApiEndpoints.coinsUrl} '
+      'CoinsApiService: GET ${ApiEndpoints.walletUrl} '
       'bearerTokenLength=${accessToken.length}',
     );
 
     final response = await _apiClient.get(
-      ApiEndpoints.coins,
+      ApiEndpoints.wallet,
       headers: apiAuthHeaders(accessToken),
     );
 
@@ -71,19 +71,37 @@ class CoinsApiService {
   }
 
   /// POST /api/v1/coins/claim — move claimable coins into wallet.
+  ///
+  /// Body:
+  /// ```json
+  /// {
+  ///   "date": "2026-09-22",
+  ///   "timezone": "Asia/Kolkata",
+  ///   "claimableIds": ["6ab25520ae7ca2804554f535"]
+  /// }
+  /// ```
   Future<CoinClaimResult> claimCoins({
     required String accessToken,
     DateTime? date,
     String? timezone,
+    List<String>? claimableIds,
   }) async {
     final body = <String, dynamic>{
       'date': MealEntry.dateToKey(date ?? DateTime.now()),
       'timezone': timezone ?? resolveApiTimezone(),
     };
+    final ids = claimableIds
+            ?.map((id) => id.trim())
+            .where((id) => id.isNotEmpty)
+            .toList(growable: false) ??
+        const <String>[];
+    if (ids.isNotEmpty) {
+      body['claimableIds'] = ids;
+    }
 
     debugPrint(
-      'CoinsApiService: POST ${ApiEndpoints.coinsClaimUrl} (payload redacted) '
-      'bearerTokenLength=${accessToken.length}',
+      'CoinsApiService: POST ${ApiEndpoints.coinsClaimUrl} '
+      'ids=${ids.length} bearerTokenLength=${accessToken.length}',
     );
 
     final response = await _apiClient.post(
@@ -102,6 +120,73 @@ class CoinsApiService {
 
   CoinsWalletResult _parseWallet(http.Response response) {
     final data = _requireDataMap(response, action: 'loading wallet');
+
+    final wallets = <CoinsWalletResult>[];
+    final walletsRaw = data['wallets'];
+    if (walletsRaw is List) {
+      for (final entry in walletsRaw) {
+        if (entry is! Map) continue;
+        wallets.add(
+          _walletFromMap(Map<String, dynamic>.from(entry)),
+        );
+      }
+    }
+
+    // Prefer aggregate totals from the new list response.
+    final totalBalance = _readInt(
+      data['totalBalance'] ??
+          data['total_balance'] ??
+          data['totalCoins'] ??
+          data['total_coins'],
+    );
+    final totalLifetime = _readInt(
+      data['totalLifetimeEarned'] ??
+          data['total_lifetime_earned'] ??
+          data['lifetimeEarned'] ??
+          data['lifetime_earned'] ??
+          data['lifetimeCoins'] ??
+          data['lifetime_coins'],
+    );
+
+    // Primary wallet for metadata: prefer "steps", else first entry.
+    CoinsWalletResult? primary;
+    for (final wallet in wallets) {
+      if (wallet.rewardType?.toLowerCase() == 'steps') {
+        primary = wallet;
+        break;
+      }
+    }
+    primary ??= wallets.isNotEmpty ? wallets.first : null;
+
+    // Legacy single-document wallet (no wallets[]).
+    final legacy = wallets.isEmpty ? _walletFromMap(data) : null;
+
+    final summedBalances = wallets.fold<int>(0, (sum, w) => sum + w.balance);
+    final balance = totalBalance ??
+        primary?.balance ??
+        legacy?.balance ??
+        _readWalletBalanceOnly(data) ??
+        (wallets.isNotEmpty ? summedBalances : 0);
+
+    final lifetime = totalLifetime ??
+        primary?.lifetimeEarned ??
+        legacy?.lifetimeEarned;
+
+    return CoinsWalletResult(
+      balance: balance < 0 ? 0 : balance,
+      id: primary?.id ?? legacy?.id,
+      userId: primary?.userId ?? legacy?.userId,
+      rewardTypeId: primary?.rewardTypeId ?? legacy?.rewardTypeId,
+      rewardType: primary?.rewardType ?? legacy?.rewardType,
+      lifetimeEarned: lifetime != null && lifetime >= 0 ? lifetime : null,
+      timezone: primary?.timezone ?? legacy?.timezone,
+      createdAt: primary?.createdAt ?? legacy?.createdAt,
+      updatedAt: primary?.updatedAt ?? legacy?.updatedAt,
+      wallets: List<CoinsWalletResult>.unmodifiable(wallets),
+    );
+  }
+
+  CoinsWalletResult _walletFromMap(Map<String, dynamic> data) {
     final balance = _readWalletBalanceOnly(data) ??
         _readInt(
           data['coins'] ??
@@ -111,25 +196,106 @@ class CoinsApiService {
               data['value'],
         ) ??
         0;
-    return CoinsWalletResult(balance: balance < 0 ? 0 : balance);
+    final lifetime = _readInt(
+      data['lifetimeEarned'] ??
+          data['lifetime_earned'] ??
+          data['lifetimeCoins'] ??
+          data['lifetime_coins'],
+    );
+    return CoinsWalletResult(
+      balance: balance < 0 ? 0 : balance,
+      id: _readIdString(data['id'] ?? data['_id']),
+      userId: _readIdString(data['userId'] ?? data['user_id']),
+      rewardTypeId: _readIdString(
+        data['rewardTypeId'] ?? data['reward_type_id'],
+      ),
+      rewardType: _readString(data['rewardType'] ?? data['reward_type']),
+      lifetimeEarned: lifetime != null && lifetime >= 0 ? lifetime : null,
+      timezone: _readString(data['timezone']),
+      createdAt: _readString(data['createdAt'] ?? data['created_at']),
+      updatedAt: _readString(data['updatedAt'] ?? data['updated_at']),
+    );
+  }
+
+  static String? _readString(dynamic value) {
+    if (value == null) return null;
+    final text = value.toString().trim();
+    return text.isEmpty ? null : text;
+  }
+
+  /// Accepts plain strings or Mongo-style `{ "$oid": "..." }` maps.
+  static String? _readIdString(dynamic value) {
+    if (value == null) return null;
+    if (value is String) {
+      final text = value.trim();
+      return text.isEmpty ? null : text;
+    }
+    if (value is Map) {
+      final oid = value[r'$oid'] ?? value['oid'] ?? value['_id'] ?? value['id'];
+      return _readIdString(oid);
+    }
+    return _readString(value);
   }
 
   CoinClaimResult _parseClaim(http.Response response) {
     final data = _requireDataMap(response, action: 'claiming coins');
+    final claimableRaw = data['claimable'];
     final claimed = _readInt(
           data['claimed'] ??
               data['claimedCoins'] ??
               data['claimed_coins'] ??
+              data['claimedAmount'] ??
+              data['claimed_amount'] ??
+              data['totalClaimed'] ??
+              data['total_claimed'] ??
+              data['totalClaimable'] ??
+              data['total_claimable'] ??
               data['earnableCoins'] ??
               data['earnable_coins'] ??
-              data['coins'] ??  
+              data['coins'] ??
               data['amount'] ??
-              data['claimable'],
+              (claimableRaw is List ? null : claimableRaw),
         ) ??
         0;
+    final lifetime = _readInt(
+      data['lifetimeEarned'] ??
+          data['lifetime_earned'] ??
+          data['lifetimeCoins'] ??
+          data['lifetime_coins'] ??
+          data['totalLifetimeEarned'] ??
+          data['total_lifetime_earned'],
+    );
+
+    // Prefer explicit wallet fields, then nested wallet / wallets[] totals.
+    var balance = _readWalletBalanceOnly(data);
+    balance ??= _readInt(
+      data['totalBalance'] ??
+          data['total_balance'] ??
+          data['totalCoins'] ??
+          data['total_coins'],
+    );
+    if (balance == null) {
+      final walletsRaw = data['wallets'];
+      if (walletsRaw is List) {
+        var sum = 0;
+        var any = false;
+        for (final entry in walletsRaw) {
+          if (entry is! Map) continue;
+          final walletBalance = _readWalletBalanceOnly(
+            Map<String, dynamic>.from(entry),
+          );
+          if (walletBalance == null) continue;
+          sum += walletBalance;
+          any = true;
+        }
+        if (any) balance = sum;
+      }
+    }
+
     return CoinClaimResult(
       claimedCoins: claimed < 0 ? 0 : claimed,
-      balance: _readBalance(data),
+      balance: balance != null && balance >= 0 ? balance : null,
+      lifetimeEarned: lifetime != null && lifetime >= 0 ? lifetime : null,
     );
   }
 
@@ -141,38 +307,80 @@ class CoinsApiService {
       data = {...data, ...Map<String, dynamic>.from(nested)};
     }
 
-    final claimable = _readIntStatic(
-          data['earnableCoins'] ??  
+    final items = <ClaimableCoinItem>[];
+    final claimableRaw = data['claimable'];
+    if (claimableRaw is List) {
+      for (final entry in claimableRaw) {
+        if (entry is! Map) continue;
+        final item = ClaimableCoinItem.fromJson(
+          Map<String, dynamic>.from(entry),
+        );
+        if (item.id.isEmpty && item.amount <= 0) continue;
+        items.add(item);
+      }
+    }
+
+    final fromItems = items
+        .where((item) => item.isClaimable)
+        .fold<int>(0, (sum, item) => sum + item.amount);
+
+    // After claim, API often returns status="claimed" chunks with amounts but
+    // totalClaimable=0. Sum all chunk amounts so earned/history stays API-backed.
+    final fromAllItems =
+        items.fold<int>(0, (sum, item) => sum + item.amount);
+    final fromClaimedItems = items
+        .where((item) {
+          final status = item.status?.toLowerCase();
+          return status == 'claimed' || status == 'credited';
+        })
+        .fold<int>(0, (sum, item) => sum + item.amount);
+
+    final totalClaimable = _readIntStatic(
+          data['totalClaimable'] ??
+              data['total_claimable'] ??
+              data['earnableCoins'] ??
               data['earnable_coins'] ??
-              data['claimable'] ??
               data['claimableCoins'] ??
               data['claimable_coins'] ??
-              data['amount'] ??   
+              // Legacy: `claimable` was a number (not a list).
+              (claimableRaw is List ? null : claimableRaw) ??
+              data['amount'] ??
               data['pending'] ??
               data['pendingCoins'] ??
               data['pending_coins'],
         ) ??
-        0;
+        fromItems;
 
     final canClaimFlag = data['canClaim'] == true ||
         data['can_claim'] == true ||
-        (data['status']?.toString().toLowerCase() == 'claimable');
+        (data['status']?.toString().toLowerCase() == 'claimable') ||
+        items.any((item) => item.isClaimable && item.amount > 0);
 
-    final amount = claimable < 0 ? 0 : claimable;
+    final amount = totalClaimable < 0 ? 0 : totalClaimable;
     final earned = _readIntStatic(
-      data['earnedCoins'] ??
-          data['earned_coins'] ??
-          data['coinsEarned'] ??
-          data['coins_earned'] ??
-          data['totalEarned'] ??
-          data['total_earned'] ??
-          data['totalCoins'] ??
-          data['total_coins'] ??
-          data['rewardCoins'] ??
-          data['reward_coins'] ??
-          data['claimedCoins'] ??
-          data['claimed_coins'],
+          data['earnedCoins'] ??
+              data['earned_coins'] ??
+              data['coinsEarned'] ??
+              data['coins_earned'] ??
+              data['totalEarned'] ??
+              data['total_earned'] ??
+              data['totalCoins'] ??
+              data['total_coins'] ??
+              data['rewardCoins'] ??
+              data['reward_coins'] ??
+              data['claimedCoins'] ??
+              data['claimed_coins'],
+        ) ??
+        (fromClaimedItems > 0
+            ? fromClaimedItems
+            : (fromAllItems > 0 && amount == 0 ? fromAllItems : null));
+
+    final expiresAt = _readString(
+      data['expiresAt'] ??
+          data['expires_at'] ??
+          (items.isNotEmpty ? items.first.expiresAt : null),
     );
+    final timezone = _readString(data['timezone']);
 
     return ClaimableResult(
       claimableCoins: (amount > 0 || canClaimFlag) ? amount : 0,
@@ -180,6 +388,9 @@ class CoinsApiService {
       // Only real wallet fields — never day totals like totalCoins.
       balance: _readWalletBalanceOnly(data),
       canClaim: canClaimFlag || amount > 0,
+      items: List<ClaimableCoinItem>.unmodifiable(items),
+      expiresAt: expiresAt,
+      timezone: timezone,
     );
   }
 

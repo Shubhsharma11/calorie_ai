@@ -1,4 +1,5 @@
 import 'activity_level.dart';
+import 'diet_plan_interest.dart';
 import 'diet_type.dart';
 import 'goal_type.dart';
 import 'health_concern.dart';
@@ -17,6 +18,14 @@ class ProfileSyncSnapshot {
     required this.targetDate,
     required this.activityLevel,
     required this.healthConcerns,
+    required this.dietPlanInterest,
+    required this.foodPreferences,
+    required this.meatPreferences,
+    required this.cookingSkills,
+    required this.medications,
+    required this.eatingHabits,
+    required this.livingArea,
+    required this.livingState,
     required this.dietType,
     required this.foodAllergies,
     required this.foodsToAvoid,
@@ -33,6 +42,14 @@ class ProfileSyncSnapshot {
   final DateTime targetDate;
   final ActivityLevel? activityLevel;
   final List<HealthConcern> healthConcerns;
+  final DietPlanInterest? dietPlanInterest;
+  final List<String> foodPreferences;
+  final List<String> meatPreferences;
+  final String? cookingSkills;
+  final List<String> medications;
+  final String? eatingHabits;
+  final String? livingArea;
+  final String? livingState;
   final DietType? dietType;
   final List<String> foodAllergies;
   final String foodsToAvoid;
@@ -54,6 +71,14 @@ class ProfileSyncSnapshot {
       ),
       activityLevel: user.activityLevel,
       healthConcerns: List<HealthConcern>.from(user.healthConcerns),
+      dietPlanInterest: user.dietPlanInterest,
+      foodPreferences: List<String>.from(user.foodPreferences),
+      meatPreferences: List<String>.from(user.meatPreferences),
+      cookingSkills: user.cookingSkills,
+      medications: List<String>.from(user.medications),
+      eatingHabits: user.eatingHabits,
+      livingArea: user.livingArea,
+      livingState: user.livingState,
       dietType: user.dietType,
       foodAllergies: List<String>.from(user.foodAllergies),
       foodsToAvoid: user.foodsToAvoid,
@@ -61,7 +86,7 @@ class ProfileSyncSnapshot {
     );
   }
 
-  static bool foodAllergiesEqual(List<String> left, List<String> right) {
+  static bool stringListsEqual(List<String> left, List<String> right) {
     final a = List<String>.from(left)..sort();
     final b = List<String>.from(right)..sort();
     if (a.length != b.length) return false;
@@ -70,6 +95,9 @@ class ProfileSyncSnapshot {
     }
     return true;
   }
+
+  static bool foodAllergiesEqual(List<String> left, List<String> right) =>
+      stringListsEqual(left, right);
 
   static bool healthConcernsEqual(
     List<HealthConcern> left,
@@ -92,6 +120,33 @@ class ProfileSyncSnapshot {
     }
 
     return true;
+  }
+
+  /// Fields that affect nutrition-plan generation (Profile “Update plan” banner).
+  static bool planInputsEqual(ProfileSyncSnapshot a, ProfileSyncSnapshot b) {
+    return a.age == b.age &&
+        a.gender == b.gender &&
+        a.heightCm == b.heightCm &&
+        a.weightKg == b.weightKg &&
+        a.goal == b.goal &&
+        (a.goalWeightKg - b.goalWeightKg).abs() < 0.05 &&
+        a.targetDate.year == b.targetDate.year &&
+        a.targetDate.month == b.targetDate.month &&
+        a.targetDate.day == b.targetDate.day &&
+        a.activityLevel == b.activityLevel &&
+        a.dietPlanInterest == b.dietPlanInterest &&
+        a.cookingSkills == b.cookingSkills &&
+        a.eatingHabits == b.eatingHabits &&
+        a.livingArea == b.livingArea &&
+        a.livingState == b.livingState &&
+        a.dietType == b.dietType &&
+        a.mealsPerDay == b.mealsPerDay &&
+        a.foodsToAvoid.trim() == b.foodsToAvoid.trim() &&
+        stringListsEqual(a.foodPreferences, b.foodPreferences) &&
+        stringListsEqual(a.meatPreferences, b.meatPreferences) &&
+        stringListsEqual(a.medications, b.medications) &&
+        foodAllergiesEqual(a.foodAllergies, b.foodAllergies) &&
+        healthConcernsEqual(a.healthConcerns, b.healthConcerns);
   }
 
   static List<HealthConcern> _normalizedConcerns(List<HealthConcern> concerns) {

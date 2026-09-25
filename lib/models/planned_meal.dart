@@ -1,5 +1,3 @@
-import '../models/meal_type.dart';
-
 enum PlannedMealStatus { next, upcoming, completed }
 
 class PlannedMeal {
@@ -16,6 +14,7 @@ class PlannedMeal {
     required this.description,
     required this.ingredients,
     required this.why,
+    this.alternatives = const [],
   });
 
   final String id;
@@ -31,55 +30,79 @@ class PlannedMeal {
   final List<String> ingredients;
   final String why;
 
-  PlannedMeal copyWith({PlannedMealStatus? status}) {
+  /// API-provided swap options for this slot (when present).
+  final List<PlannedMeal> alternatives;
+
+  PlannedMeal copyWith({
+    String? id,
+    String? mealType,
+    String? name,
+    String? timeLabel,
+    int? calories,
+    int? proteinG,
+    int? carbsG,
+    int? fatG,
+    PlannedMealStatus? status,
+    String? description,
+    List<String>? ingredients,
+    String? why,
+    List<PlannedMeal>? alternatives,
+  }) {
     return PlannedMeal(
-      id: id,
-      mealType: mealType,
-      name: name,
-      timeLabel: timeLabel,
-      calories: calories,
-      proteinG: proteinG,
-      carbsG: carbsG,
-      fatG: fatG,
+      id: id ?? this.id,
+      mealType: mealType ?? this.mealType,
+      name: name ?? this.name,
+      timeLabel: timeLabel ?? this.timeLabel,
+      calories: calories ?? this.calories,
+      proteinG: proteinG ?? this.proteinG,
+      carbsG: carbsG ?? this.carbsG,
+      fatG: fatG ?? this.fatG,
       status: status ?? this.status,
-      description: description,
-      ingredients: ingredients,
-      why: why,
+      description: description ?? this.description,
+      ingredients: ingredients ?? this.ingredients,
+      why: why ?? this.why,
+      alternatives: alternatives ?? this.alternatives,
     );
   }
 
   factory PlannedMeal.fromJson(Map<String, dynamic> json) {
-    final mealTypeLabel = _string(json, const [
+    final mealTypeLabel =
+        _string(json, const [
           'mealTypeLabel',
           'meal_type_label',
           'title',
           'type',
         ]) ??
         '';
-    final mealTypeRaw = _string(json, const [
-          'mealType',
-          'meal_type',
-          'slot',
-        ]) ??
-        mealTypeLabel;
+    final mealTypeRaw =
+        _string(json, const ['mealType', 'meal_type', 'slot']) ?? mealTypeLabel;
     final mealType = _normalizeMealType(mealTypeLabel, mealTypeRaw);
 
-    final name = _string(json, const [
-          'name',
-          'mealName',
-          'meal_name',
-          'displayName',
-        ]) ??
+    final name =
+        _string(json, const ['name', 'mealName', 'meal_name', 'displayName']) ??
         mealType;
 
-    final id = _string(json, const ['id', 'mealId', 'meal_id']) ??
+    final id =
+        _string(json, const ['id', 'mealId', 'meal_id']) ??
         '${mealType}_$name'.toLowerCase().replaceAll(' ', '_');
+
+    final embeddedAlts = <PlannedMeal>[];
+    final altsRaw =
+        json['alternatives'] ?? json['swapOptions'] ?? json['swap_options'];
+    if (altsRaw is List) {
+      for (final item in altsRaw.whereType<Map>()) {
+        embeddedAlts.add(
+          PlannedMeal.fromJson(Map<String, dynamic>.from(item)),
+        );
+      }
+    }
 
     return PlannedMeal(
       id: id,
       mealType: mealType,
       name: name,
-      timeLabel: _string(json, const [
+      timeLabel:
+          _string(json, const [
             'timeLabel',
             'time_label',
             'scheduledTime',
@@ -92,12 +115,8 @@ class PlannedMeal {
       carbsG: _int(json, const ['carbsG', 'carbs', 'carbs_g']) ?? 0,
       fatG: _int(json, const ['fatG', 'fat', 'fat_g']) ?? 0,
       status: _parseStatus(json['status']?.toString()),
-      description: _string(json, const [
-            'description',
-            'summary',
-            'tagline',
-          ]) ??
-          '',
+      description:
+          _string(json, const ['description', 'summary', 'tagline']) ?? '',
       ingredients: _stringList(json, const [
         'ingredients',
         'items',
@@ -105,6 +124,7 @@ class PlannedMeal {
         'foodItems',
       ]),
       why: _string(json, const ['why', 'reason', 'insight']) ?? '',
+      alternatives: embeddedAlts,
     );
   }
 
@@ -112,20 +132,23 @@ class PlannedMeal {
     final value = (raw ?? '').trim().toLowerCase();
     return switch (value) {
       'next' => PlannedMealStatus.next,
-      'completed' || 'complete' || 'done' || 'logged' =>
-        PlannedMealStatus.completed,
+      'completed' ||
+      'complete' ||
+      'done' ||
+      'logged' => PlannedMealStatus.completed,
       _ => PlannedMealStatus.upcoming,
     };
   }
 
   static String _normalizeMealType(String label, String raw) {
     final combined = '$label $raw'.toLowerCase();
-    if (combined.contains('breakfast')) return MealType.breakfast;
-    if (combined.contains('lunch')) return MealType.lunch;
-    if (combined.contains('dinner')) return MealType.dinner;
+    if (combined.contains('breakfast')) return 'Breakfast';
+    if (combined.contains('lunch')) return 'Lunch';
+    if (combined.contains('dinner')) return 'Dinner';
     if (combined.contains('snack')) {
-      if (combined.contains('evening')) return 'Evening Snacks';
-      return MealType.snacks;
+      if (combined.contains('morning')) return 'Morning Snack';
+      if (combined.contains('evening')) return 'Evening Snack';
+      return 'Snack';
     }
     if (label.trim().isNotEmpty) return label.trim();
     if (raw.trim().isNotEmpty) {
@@ -294,6 +317,66 @@ class WeeklyMealPlanData {
     }
     return const [];
   }
+
+  /// Unique swap candidates for [current] from this week's plan (same slot type).
+  List<PlannedMeal> swapAlternativesFor(
+    PlannedMeal current, {
+    Set<String> suppressedNames = const {},
+  }) {
+    final typeKey = current.mealType.trim().toLowerCase();
+    final currentName = current.name.trim().toLowerCase();
+    final seen = <String>{currentName};
+    final options = <PlannedMeal>[];
+
+    for (final day in days) {
+      for (final meal in day.meals) {
+        final nameKey = meal.name.trim().toLowerCase();
+        if (nameKey.isEmpty || seen.contains(nameKey)) continue;
+        if (suppressedNames.contains(nameKey)) continue;
+        if (meal.mealType.trim().toLowerCase() != typeKey) continue;
+        seen.add(nameKey);
+        options.add(meal);
+      }
+    }
+    return options;
+  }
+
+  /// Broader pool for “more options” (same type first, then other week meals).
+  List<PlannedMeal> moreOptionsFor(
+    PlannedMeal current, {
+    String query = '',
+    Set<String> suppressedNames = const {},
+  }) {
+    final sameType = swapAlternativesFor(
+      current,
+      suppressedNames: suppressedNames,
+    );
+    final currentName = current.name.trim().toLowerCase();
+    final seen = <String>{
+      currentName,
+      ...sameType.map((m) => m.name.trim().toLowerCase()),
+    };
+    final extras = <PlannedMeal>[];
+    for (final day in days) {
+      for (final meal in day.meals) {
+        final nameKey = meal.name.trim().toLowerCase();
+        if (nameKey.isEmpty || seen.contains(nameKey)) continue;
+        if (suppressedNames.contains(nameKey)) continue;
+        seen.add(nameKey);
+        extras.add(meal);
+      }
+    }
+    final pool = [...sameType, ...extras];
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return pool;
+    return pool
+        .where(
+          (m) =>
+              m.name.toLowerCase().contains(q) ||
+              m.ingredients.any((i) => i.toLowerCase().contains(q)),
+        )
+        .toList();
+  }
 }
 
 String? _string(Map<String, dynamic> map, List<String> keys) {
@@ -322,17 +405,14 @@ List<String> _stringList(Map<String, dynamic> map, List<String> keys) {
           .map((item) {
             if (item is String) return item.trim();
             if (item is Map) {
-              return _string(
-                    Map<String, dynamic>.from(item),
-                    const [
-                      'name',
-                      'title',
-                      'text',
-                      'label',
-                      'food',
-                      'ingredient',
-                    ],
-                  ) ??
+              return _string(Map<String, dynamic>.from(item), const [
+                    'name',
+                    'title',
+                    'text',
+                    'label',
+                    'food',
+                    'ingredient',
+                  ]) ??
                   '';
             }
             return item?.toString().trim() ?? '';

@@ -43,10 +43,7 @@ class FoodItem {
   bool isSameFavoriteFood(FoodItem other) {
     final id = catalogId?.trim();
     final otherId = other.catalogId?.trim();
-    if (id != null &&
-        id.isNotEmpty &&
-        otherId != null &&
-        otherId.isNotEmpty) {
+    if (id != null && id.isNotEmpty && otherId != null && otherId.isNotEmpty) {
       return id == otherId;
     }
     return name.trim().toLowerCase() == other.name.trim().toLowerCase();
@@ -85,16 +82,16 @@ class FoodItem {
   }
 
   String get servingDescription => FoodServing.formatVisible(
-        quantity: servingQuantity,
-        unit: servingUnit,
-        grams: usesHouseholdServing ? defaultGrams : null,
-      );
+    quantity: servingQuantity,
+    unit: servingUnit,
+    grams: usesHouseholdServing ? defaultGrams : null,
+  );
 
   String servingLabelForGrams(int grams) => FoodServing.formatVisible(
-        quantity: servingCountForGrams(grams),
-        unit: servingUnit,
-        grams: usesHouseholdServing ? grams : null,
-      );
+    quantity: servingCountForGrams(grams),
+    unit: servingUnit,
+    grams: usesHouseholdServing ? grams : null,
+  );
 
   String get searchSubtitle {
     final cat = category?.trim();
@@ -104,11 +101,9 @@ class FoodItem {
     return servingDescription;
   }
 
-  int caloriesForGrams(int grams) =>
-      (caloriesPer100g * grams / 100).round();
+  int caloriesForGrams(int grams) => (caloriesPer100g * grams / 100).round();
 
-  double macroForGrams(double per100g, int grams) =>
-      per100g * grams / 100;
+  double macroForGrams(double per100g, int grams) => per100g * grams / 100;
 
   int get caloriesForDefaultServing => caloriesForGrams(defaultGrams);
 
@@ -173,39 +168,41 @@ class FoodItem {
     if (!isCompositeMeal) return const [];
     final basePortions = servingQuantity <= 0 ? 1.0 : servingQuantity;
     final factor = portions / basePortions;
-    return [
-      for (final item in ingredients) scaleIngredient(item, factor),
-    ];
+    return [for (final item in ingredients) scaleIngredient(item, factor)];
   }
 
   int totalCaloriesForPortions(double portions) {
     if (isCompositeMeal) {
-      return ingredientsForPortions(portions)
-          .fold(0, (sum, item) => sum + item.calories);
+      return ingredientsForPortions(
+        portions,
+      ).fold(0, (sum, item) => sum + item.calories);
     }
     return caloriesForGrams(gramsForServings(portions));
   }
 
   double totalProteinForPortions(double portions) {
     if (isCompositeMeal) {
-      return ingredientsForPortions(portions)
-          .fold(0.0, (sum, item) => sum + item.protein);
+      return ingredientsForPortions(
+        portions,
+      ).fold(0.0, (sum, item) => sum + item.protein);
     }
     return macroForGrams(protein, gramsForServings(portions));
   }
 
   double totalCarbsForPortions(double portions) {
     if (isCompositeMeal) {
-      return ingredientsForPortions(portions)
-          .fold(0.0, (sum, item) => sum + item.carbs);
+      return ingredientsForPortions(
+        portions,
+      ).fold(0.0, (sum, item) => sum + item.carbs);
     }
     return macroForGrams(carbs, gramsForServings(portions));
   }
 
   double totalFatForPortions(double portions) {
     if (isCompositeMeal) {
-      return ingredientsForPortions(portions)
-          .fold(0.0, (sum, item) => sum + item.fat);
+      return ingredientsForPortions(
+        portions,
+      ).fold(0.0, (sum, item) => sum + item.fat);
     }
     return macroForGrams(fat, gramsForServings(portions));
   }
@@ -214,7 +211,8 @@ class FoodItem {
   FoodItem withServingFrom(FoodItem source, {int? loggedGrams}) {
     final missingEmoji = emoji.trim().isEmpty || emoji == '🍽️';
     final image = MediaUrl.preferLoadable([imageUrl, source.imageUrl]);
-    final icon = missingEmoji &&
+    final icon =
+        missingEmoji &&
             source.emoji.trim().isNotEmpty &&
             !MediaUrl.looksLikeImageRef(source.emoji)
         ? source.emoji
@@ -251,22 +249,21 @@ class FoodItem {
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'caloriesPer100g': caloriesPer100g,
-        'protein': protein,
-        'carbs': carbs,
-        'fat': fat,
-        'emoji': emoji,
-        if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
-        if (category != null && category!.trim().isNotEmpty) 'category': category,
-        'servingQuantity': servingQuantity,
-        'servingUnit': servingUnit,
-        'gramsPerServing': gramsPerServing,
-        if (catalogId != null && catalogId!.isNotEmpty) 'catalogId': catalogId,
-        if (ingredients.isNotEmpty)
-          'ingredients':
-              ingredients.map((item) => item.toJson()).toList(),
-      };
+    'name': name,
+    'caloriesPer100g': caloriesPer100g,
+    'protein': protein,
+    'carbs': carbs,
+    'fat': fat,
+    'emoji': emoji,
+    if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
+    if (category != null && category!.trim().isNotEmpty) 'category': category,
+    'servingQuantity': servingQuantity,
+    'servingUnit': servingUnit,
+    'gramsPerServing': gramsPerServing,
+    if (catalogId != null && catalogId!.isNotEmpty) 'catalogId': catalogId,
+    if (ingredients.isNotEmpty)
+      'ingredients': ingredients.map((item) => item.toJson()).toList(),
+  };
 
   factory FoodItem.fromJson(Map<String, dynamic> json) {
     final unit = FoodServing.normalizeUnit(
@@ -284,17 +281,18 @@ class FoodItem {
         (json['imageUrl'] as String?)?.trim().isNotEmpty == true
             ? (json['imageUrl'] as String).trim()
             : (json['image'] as String?)?.trim().isNotEmpty == true
-                ? (json['image'] as String).trim()
-                : null,
+            ? (json['image'] as String).trim()
+            : null,
       ),
       category: (json['category'] as String?)?.trim().isNotEmpty == true
           ? (json['category'] as String).trim()
           : null,
-      servingQuantity: (json['servingQuantity'] as num?)?.toDouble() ??
+      servingQuantity:
+          (json['servingQuantity'] as num?)?.toDouble() ??
           (household ? 1 : 100),
       servingUnit: unit,
-      gramsPerServing: (json['gramsPerServing'] as num?)?.round() ??
-          (household ? 100 : 1),
+      gramsPerServing:
+          (json['gramsPerServing'] as num?)?.round() ?? (household ? 100 : 1),
       catalogId: (json['catalogId'] as String?)?.trim().isNotEmpty == true
           ? (json['catalogId'] as String).trim()
           : null,
@@ -306,9 +304,7 @@ class FoodItem {
     if (raw is! List) return const [];
     return raw
         .whereType<Map>()
-        .map(
-          (item) => SavedMealItem.fromJson(Map<String, dynamic>.from(item)),
-        )
+        .map((item) => SavedMealItem.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
 
@@ -331,8 +327,8 @@ class FoodItem {
 
     final serving = FoodServing.parseFromApi(source);
     final servingGrams = serving.defaultGrams;
-    final convertFromServing = serving.isHousehold &&
-        !_hasExplicitPer100gCalories(source);
+    final convertFromServing =
+        serving.isHousehold && !_hasExplicitPer100gCalories(source);
 
     final explicitCalories = _readNum(source, const [
       'caloriesPer100g',
@@ -356,14 +352,16 @@ class FoodItem {
       }
     }
 
-    var protein = _readNum(source, const [
+    var protein =
+        _readNum(source, const [
           'protein',
           'proteins',
           'proteinG',
           'protein_g',
         ])?.toDouble() ??
         0;
-    var carbs = _readNum(source, const [
+    var carbs =
+        _readNum(source, const [
           'carbs',
           'carbohydrates',
           'carb',
@@ -371,12 +369,8 @@ class FoodItem {
           'carbs_g',
         ])?.toDouble() ??
         0;
-    var fat = _readNum(source, const [
-          'fat',
-          'fats',
-          'fatG',
-          'fat_g',
-        ])?.toDouble() ??
+    var fat =
+        _readNum(source, const ['fat', 'fats', 'fatG', 'fat_g'])?.toDouble() ??
         0;
 
     if (convertFromServing && servingGrams > 0 && explicitCalories == null) {
@@ -385,7 +379,8 @@ class FoodItem {
       fat = fat * 100 / servingGrams;
     }
 
-    final fallbackMeal = _mealSlotFromApi(
+    final fallbackMeal =
+        _mealSlotFromApi(
           _readString(source, const ['mealTime', 'mealtime', 'meal']) ??
               _readString(json, const ['mealTime', 'mealtime', 'meal']),
         ) ??
@@ -402,7 +397,8 @@ class FoodItem {
       carbs: carbs.clamp(0, 200),
       fat: fat.clamp(0, 200),
       emoji: _emojiFromApi(source),
-      imageUrl: MediaUrl.fromJson(source) ??
+      imageUrl:
+          MediaUrl.fromJson(source) ??
           (nestedFood is Map ? MediaUrl.fromJson(json) : null),
       category: FoodServing.categoryFromApi(source),
       servingQuantity: serving.quantity,

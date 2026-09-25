@@ -8,13 +8,14 @@ import '../controllers/settings_controller.dart';
 import '../controllers/user_controller.dart';
 import '../core/app_snackbar.dart';
 import '../core/body_measurement_units.dart';
+import '../core/onboarding_nav.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/goal_type.dart';
 import '../models/onboarding_request_model.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
-import '../widgets/onboarding_entrance.dart';
+import '../widgets/onboarding_question_transition.dart';
 import '../widgets/onboarding_step_scaffold.dart';
 
 class GoalAmountView extends StatefulWidget {
@@ -42,24 +43,30 @@ class _GoalAmountViewState extends State<GoalAmountView> {
   late FixedExtentScrollController _goalCtrl;
   String? _errorText;
   bool _isSaving = false;
-  /// True only when a real saved weight exists or the user scrolled Current.
-  bool _currentChosen = false;
+
   /// True only when a real saved goal exists or the user scrolled Goal.
   bool _goalChosen = false;
+
   /// Ignore picker noise during first layout (do not treat as a user choice).
   bool _pickersReady = false;
 
   List<double> get _weightValues {
     if (_useKg) {
       return [
-        for (var i = (_minWeightKg * 10).round();
-            i <= (_maxWeightKg * 10).round();
-            i++)
+        for (
+          var i = (_minWeightKg * 10).round();
+          i <= (_maxWeightKg * 10).round();
+          i++
+        )
           i / 10.0,
       ];
     }
-    final minLb = BodyMeasurementUnits.lbsFromKg(_minWeightKg.round()).toDouble();
-    final maxLb = BodyMeasurementUnits.lbsFromKg(_maxWeightKg.round()).toDouble();
+    final minLb = BodyMeasurementUnits.lbsFromKg(
+      _minWeightKg.round(),
+    ).toDouble();
+    final maxLb = BodyMeasurementUnits.lbsFromKg(
+      _maxWeightKg.round(),
+    ).toDouble();
     return [
       for (var i = (minLb * 10).round(); i <= (maxLb * 10).round(); i++)
         i / 10.0,
@@ -84,7 +91,9 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     if (goal == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!RouteArgs.isEditingFromProfile) {
-          Get.offNamed(AppRoutes.goalSetup);
+          unawaited(
+            OnboardingNav.offNamed(AppRoutes.goalSetup, animate: false),
+          );
         } else {
           Get.back<void>();
         }
@@ -103,21 +112,24 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     final values = _weightValues;
     final defaultIdx = _nearestIndex(_fromKg(_defaultPickerKg));
 
-    final resolved = _user.resolvedCurrentWeightKg();
-    final hasCurrent =
-        resolved >= _minWeightKg && resolved <= _maxWeightKg;
+    // Prefer the weight the user just set in Personal → Current Weight.
+    // Tracker/history can lag or differ during onboarding.
+    final profileKg = _user.user.weightKg?.toDouble() ?? 0;
+    final resolved = profileKg >= _minWeightKg && profileKg <= _maxWeightKg
+        ? profileKg
+        : _user.resolvedCurrentWeightKg();
+    final hasCurrent = resolved >= _minWeightKg && resolved <= _maxWeightKg;
 
     final rawGoal = _user.user.goalWeightKg;
-    final hasGoal = hasCurrent &&
-        rawGoal >= _minWeightKg &&
-        rawGoal <= _maxWeightKg;
+    final hasGoal =
+        hasCurrent && rawGoal >= _minWeightKg && rawGoal <= _maxWeightKg;
 
     // Default selection is 50 kg when the user has not saved a weight yet.
-    _currentChosen = true;
     _goalChosen = true;
 
-    final currentIdx =
-        hasCurrent ? _nearestIndex(_fromKg(resolved)) : defaultIdx;
+    final currentIdx = hasCurrent
+        ? _nearestIndex(_fromKg(resolved))
+        : defaultIdx;
     final goalIdx = hasGoal ? _nearestIndex(_fromKg(rawGoal)) : currentIdx;
 
     _currentDisplay = values[currentIdx];
@@ -143,8 +155,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
   double _toKg(double display) =>
       _useKg ? display : display / BodyMeasurementUnits.kgToLb;
 
-  double _fromKg(double kg) =>
-      _useKg ? kg : kg * BodyMeasurementUnits.kgToLb;
+  double _fromKg(double kg) => _useKg ? kg : kg * BodyMeasurementUnits.kgToLb;
 
   String _format(double value) {
     return value == value.roundToDouble()
@@ -190,8 +201,10 @@ class _GoalAmountViewState extends State<GoalAmountView> {
 
   void _nudgeGoal(int delta) {
     if (!_goalCtrl.hasClients) return;
-    final next =
-        (_goalCtrl.selectedItem + delta).clamp(0, _weightValues.length - 1);
+    final next = (_goalCtrl.selectedItem + delta).clamp(
+      0,
+      _weightValues.length - 1,
+    );
     setState(() {
       _goalChosen = true;
       _goalDisplay = _weightValues[next];
@@ -205,16 +218,12 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     _persistDraft();
   }
 
-  void _applyWeight({
-    required bool isCurrent,
-    required double displayValue,
-  }) {
+  void _applyWeight({required bool isCurrent, required double displayValue}) {
     final idx = _nearestIndex(displayValue);
     final snapped = _weightValues[idx];
     setState(() {
       _errorText = null;
       if (isCurrent) {
-        _currentChosen = true;
         _currentDisplay = snapped;
       } else {
         _goalChosen = true;
@@ -328,10 +337,11 @@ class _GoalAmountViewState extends State<GoalAmountView> {
 
   void _persistDraft() {
     if (RouteArgs.isEditingFromProfile) return;
-    if (!_currentChosen || !_goalChosen) return;
+    if (!_goalChosen) return;
 
     final currentKg = _toKg(_currentDisplay);
     final goalKg = _toKg(_goalDisplay);
+    // Keep Current in sync with Personal → Current Weight (and any edits here).
     _user.user.weightKg = currentKg.round();
     _user.user.pinGoalWeight(goalKg);
     _inferAndSelectGoal(goalKg - currentKg);
@@ -348,10 +358,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
       type = GoalType.gainWeight;
     }
     if (_user.user.goal != type) {
-      _user.selectGoal(
-        type,
-        persistDraft: !RouteArgs.isEditingFromProfile,
-      );
+      _user.selectGoal(type, persistDraft: !RouteArgs.isEditingFromProfile);
     }
   }
 
@@ -362,7 +369,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
       return 'Current weight must be between $_minWeightKg and $_maxWeightKg kg';
     }
     if (goalKg < _minWeightKg || goalKg > _maxWeightKg) {
-      return 'Goal weight must be between $_minWeightKg and $_maxWeightKg kg';
+      return 'Target weight must be between $_minWeightKg and $_maxWeightKg kg';
     }
     return null;
   }
@@ -376,6 +383,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
       return;
     }
     _persistDraft();
+    OnboardingNav.markBackward();
     await _user.goToPreviousOnboardingStep(AppRoutes.goalAmount);
   }
 
@@ -393,7 +401,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     _user.user.weightKg = currentKg.round();
     _user.setGoalWeight(goalKg, manual: true);
 
-    // Keep a sensible default timeframe (mockup has no timeframe UI).
+    // API still expects a date — default silently (no Target Date question).
     final today = DateTime.now();
     final start = DateTime(today.year, today.month, today.day);
     final weeks = _defaultWeeks.clamp(_minWeeks, _maxWeeks);
@@ -426,7 +434,7 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     }
 
     await _user.persistOnboardingStep(AppRoutes.activityLevel);
-    Get.offNamed(AppRoutes.activityLevel);
+    await OnboardingNav.offNamed(AppRoutes.activityLevel);
   }
 
   @override
@@ -434,7 +442,6 @@ class _GoalAmountViewState extends State<GoalAmountView> {
     AppColors.syncFromContext(context);
     final r = context.responsive;
     final fromProfile = RouteArgs.isEditingFromProfile;
-    final pageBg = AppColors.backgroundOf(context);
     final (badgeLabel, badgeIcon) = _badge;
 
     return PopScope(
@@ -443,9 +450,8 @@ class _GoalAmountViewState extends State<GoalAmountView> {
         if (didPop) return;
         unawaited(_onBack(fromProfile: fromProfile));
       },
-      child: Scaffold(
-        backgroundColor: pageBg,
-        body: SafeArea(
+      child: OnboardingCupertinoShell(
+        child: SafeArea(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: r.scale(20, tablet: 28)),
             child: Column(
@@ -454,180 +460,165 @@ class _GoalAmountViewState extends State<GoalAmountView> {
                 OnboardingStepTopBar(
                   stepIndex: fromProfile
                       ? 1
-                      : OnboardingFlowProgress.goalWeight,
-                  totalSteps:
-                      fromProfile ? 2 : OnboardingFlowProgress.totalSteps,
-                  onBack: () => unawaited(_onBack(fromProfile: fromProfile)),
+                      : OnboardingFlowProgress.targetWeight,
+                  totalSteps: fromProfile
+                      ? 2
+                      : OnboardingFlowProgress.totalSteps,
+                  onBack: () {
+                    OnboardingNav.markBackward();
+                    unawaited(_onBack(fromProfile: fromProfile));
+                  },
+                  sectionLabel: fromProfile
+                      ? 'GOALS'
+                      : OnboardingJourney.labelForStep(
+                          OnboardingFlowProgress.targetWeight,
+                        ),
                 ),
                 SizedBox(height: r.scale(28)),
                 Expanded(
-                  child: OnboardingEntrance(
-                    builder: (context, entrance) {
-                      return Column(
-                        children: [
-                          entrance.item(
-                            index: 0,
-                            child: Text(
-                              "What's your weight goal?",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: r.scale(28, tablet: 32),
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.textPrimaryOf(context),
-                                height: 1.15,
-                                letterSpacing: -0.4,
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: r.scale(18)),
-                          entrance.item(
-                            index: 1,
-                            child: OnboardingUnitToggle(
-                              left: 'lbs',
-                              right: 'kg',
-                              leftSelected: !_useKg,
-                              onLeft: () => _toggleUnit(false),
-                              onRight: () => _toggleUnit(true),
-                            ),
-                          ),
-                          if (_errorText != null) ...[
-                            SizedBox(height: r.scale(10)),
-                            Text(
-                              _errorText!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.error,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                          Expanded(
-                            child: entrance.item(
-                              index: 2,
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    child: _WeightColumn(
-                                      label: 'Current',
-                                      controller: _currentCtrl,
-                                      values: _weightValues,
-                                      format: _format,
-                                      onSelected: (i) {
-                                        if (!_pickersReady) return;
-                                        setState(() {
-                                          _currentChosen = true;
-                                          _currentDisplay = _weightValues[i];
-                                          _errorText = null;
-                                        });
-                                        _persistDraft();
-                                      },
-                                      onTapValue: () => unawaited(
-                                        _editWeight(isCurrent: true),
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: EdgeInsets.only(top: r.scale(28)),
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        OnboardingBoldChevron(
-                                          up: true,
-                                          onTap: () => _nudgeGoal(-1),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        OnboardingBoldChevron(
-                                          up: false,
-                                          onTap: () => _nudgeGoal(1),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _WeightColumn(
-                                      label: 'Goal',
-                                      controller: _goalCtrl,
-                                      values: _weightValues,
-                                      format: _format,
-                                      onSelected: (i) {
-                                        if (!_pickersReady) return;
-                                        setState(() {
-                                          _goalChosen = true;
-                                          _goalDisplay = _weightValues[i];
-                                          _errorText = null;
-                                        });
-                                        _persistDraft();
-                                      },
-                                      onTapValue: () => unawaited(
-                                        _editWeight(isCurrent: false),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          entrance.item(
-                            index: 3,
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: r.scale(14),
-                                vertical: r.scale(8),
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    AppColors.primary.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (badgeIcon != null) ...[
-                                    Icon(
-                                      badgeIcon,
-                                      size: 16,
-                                      color: AppColors.primaryDark,
-                                    ),
-                                    const SizedBox(width: 4),
-                                  ],
-                                  Text(
-                                    badgeLabel,
-                                    style: TextStyle(
-                                      fontSize: r.scale(13),
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.primaryDark,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: r.scale(20)),
-                          entrance.item(
-                            index: 4,
-                            child: OnboardingContinueButton(
-                              label: _isSaving
-                                  ? 'Please wait...'
-                                  : (fromProfile ? 'Save' : 'Continue'),
-                              onPressed: _isSaving
-                                  ? null
-                                  : () =>
-                                      _onContinue(fromProfile: fromProfile),
-                            ),
-                          ),
-                          SizedBox(height: r.scale(12)),
-                        ],
-                      );
-                    },
+                  child: OnboardingQuestionTransition(
+                    stepKey: OnboardingFlowProgress.targetWeight,
+                    question: OnboardingQuestionHeader(
+                      title: fromProfile
+                          ? 'What’s your weight goal?'
+                          : 'What’s your target weight?',
+                      errorText: _errorText,
+                    ),
+                    description: OnboardingQuestionDescription(
+                      fromProfile
+                          ? 'Set your current weight and where you want to be.'
+                          : 'Confirm your current weight and set your target.',
+                    ),
+                    answer: _buildDualWeightAnswer(r, badgeLabel, badgeIcon),
                   ),
                 ),
+                OnboardingContinueButton(
+                  label: _isSaving
+                      ? 'Please wait...'
+                      : (fromProfile ? 'Save' : 'Continue'),
+                  onPressed: _isSaving
+                      ? null
+                      : () {
+                          OnboardingNav.markForward();
+                          _onContinue(fromProfile: fromProfile);
+                        },
+                ),
+                SizedBox(height: r.scale(12)),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDualWeightAnswer(
+    Responsive r,
+    String badgeLabel,
+    IconData? badgeIcon,
+  ) {
+    return Column(
+      children: [
+        OnboardingUnitToggle(
+          left: 'lbs',
+          right: 'kg',
+          leftSelected: !_useKg,
+          onLeft: () => _toggleUnit(false),
+          onRight: () => _toggleUnit(true),
+        ),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: _WeightColumn(
+                  label: 'Current',
+                  controller: _currentCtrl,
+                  values: _weightValues,
+                  format: _format,
+                  onSelected: (i) {
+                    if (!_pickersReady) return;
+                    setState(() {
+                      _currentDisplay = _weightValues[i];
+                      _errorText = null;
+                    });
+                    _persistDraft();
+                  },
+                  onTapValue: () => unawaited(_editWeight(isCurrent: true)),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.only(top: r.scale(28)),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OnboardingBoldChevron(
+                      up: true,
+                      onTap: () => _nudgeGoal(-1),
+                    ),
+                    const SizedBox(height: 12),
+                    OnboardingBoldChevron(
+                      up: false,
+                      onTap: () => _nudgeGoal(1),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _WeightColumn(
+                  label: 'Goal',
+                  controller: _goalCtrl,
+                  values: _weightValues,
+                  format: _format,
+                  onSelected: (i) {
+                    if (!_pickersReady) return;
+                    setState(() {
+                      _goalChosen = true;
+                      _goalDisplay = _weightValues[i];
+                      _errorText = null;
+                    });
+                    _persistDraft();
+                  },
+                  onTapValue: () => unawaited(_editWeight(isCurrent: false)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        _buildBadge(r, badgeLabel, badgeIcon),
+      ],
+    );
+  }
+
+  Widget _buildBadge(Responsive r, String badgeLabel, IconData? badgeIcon) {
+    return Transform.translate(
+      offset: const Offset(0, -8),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: r.scale(14),
+          vertical: r.scale(8),
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (badgeIcon != null) ...[
+              Icon(badgeIcon, size: 16, color: AppColors.primaryDark),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              badgeLabel,
+              style: TextStyle(
+                fontSize: r.scale(15),
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryDark,
+              ),
+            ),
+          ],
         ),
       ),
     );

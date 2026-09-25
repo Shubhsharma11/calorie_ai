@@ -51,16 +51,16 @@ class CustomFoodPreset {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'food': food.toJson(),
-        'defaultGrams': defaultGrams,
-        'createdAt': createdAt.toIso8601String(),
-        if (servingQuantity != null) 'servingQuantity': servingQuantity,
-        'servingUnit': servingUnit,
-        if (nutritionBasisQuantity != null)
-          'nutritionBasisQuantity': nutritionBasisQuantity,
-        if (imageBytes != null) 'imageBase64': base64Encode(imageBytes!),
-      };
+    'id': id,
+    'food': food.toJson(),
+    'defaultGrams': defaultGrams,
+    'createdAt': createdAt.toIso8601String(),
+    if (servingQuantity != null) 'servingQuantity': servingQuantity,
+    'servingUnit': servingUnit,
+    if (nutritionBasisQuantity != null)
+      'nutritionBasisQuantity': nutritionBasisQuantity,
+    if (imageBytes != null) 'imageBase64': base64Encode(imageBytes!),
+  };
 
   factory CustomFoodPreset.fromJson(Map<String, dynamic> json) {
     Uint8List? imageBytes;
@@ -79,8 +79,8 @@ class CustomFoodPreset {
       createdAt: DateTime.parse(json['createdAt'] as String),
       servingQuantity: (json['servingQuantity'] as num?)?.toDouble(),
       servingUnit: json['servingUnit'] as String? ?? 'g',
-      nutritionBasisQuantity:
-          (json['nutritionBasisQuantity'] as num?)?.toDouble(),
+      nutritionBasisQuantity: (json['nutritionBasisQuantity'] as num?)
+          ?.toDouble(),
       imageBytes: imageBytes,
     );
   }

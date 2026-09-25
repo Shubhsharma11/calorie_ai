@@ -6,14 +6,14 @@ import 'package:get/get.dart';
 
 import '../controllers/user_controller.dart';
 import '../core/app_snackbar.dart';
+import '../core/onboarding_nav.dart';
 import '../core/responsive.dart';
 import '../core/route_args.dart';
 import '../models/activity_level.dart';
 import '../models/onboarding_request_model.dart';
 import '../models/profile_sync_snapshot.dart';
 import '../routes/app_routes.dart';
-import '../theme/app_colors.dart';
-import '../widgets/onboarding_entrance.dart';
+import '../widgets/onboarding_question_transition.dart';
 import '../widgets/onboarding_step_scaffold.dart';
 
 class ActivityLevelView extends StatefulWidget {
@@ -56,10 +56,7 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
             _baseline,
           );
           if (patch.isEmpty) {
-            AppSnackbar.info(
-              'No changes to save.',
-              title: 'Nothing changed',
-            );
+            AppSnackbar.info('No changes to save.', title: 'Nothing changed');
             return;
           }
 
@@ -78,7 +75,7 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
         if (mounted) setState(() => _saving = false);
       }
     } else {
-      controller.finishSetup();
+      unawaited(controller.finishSetup());
     }
   }
 
@@ -87,13 +84,13 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
     final r = context.responsive;
     final fromProfile = RouteArgs.isEditingFromProfile;
     final returnToDailyGoal = RouteArgs.shouldReturnToDailyGoal;
-    final pageBg = AppColors.backgroundOf(context);
     final editing = fromProfile || returnToDailyGoal;
 
     return PopScope(
       canPop: editing,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        OnboardingNav.markBackward();
         unawaited(
           controller.goToPreviousOnboardingStep(AppRoutes.activityLevel),
         );
@@ -102,26 +99,32 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
         builder: (_) {
           final selected = controller.user.activityLevel;
 
-          return Scaffold(
-            backgroundColor: pageBg,
-            body: SafeArea(
+          return OnboardingCupertinoShell(
+            child: SafeArea(
               child: Padding(
-                padding:
-                    EdgeInsets.symmetric(horizontal: r.scale(20, tablet: 28)),
+                padding: EdgeInsets.symmetric(
+                  horizontal: r.scale(20, tablet: 28),
+                ),
                 child: Column(
                   children: [
                     SizedBox(height: r.scale(4)),
                     OnboardingStepTopBar(
-                      stepIndex:
-                          editing ? 0 : OnboardingFlowProgress.activity,
-                      totalSteps:
-                          editing ? 1 : OnboardingFlowProgress.totalSteps,
+                      stepIndex: editing ? 0 : OnboardingFlowProgress.activity,
+                      totalSteps: editing
+                          ? 1
+                          : OnboardingFlowProgress.totalSteps,
                       showProgress: !editing,
+                      sectionLabel: editing
+                          ? null
+                          : OnboardingJourney.labelForStep(
+                              OnboardingFlowProgress.activity,
+                            ),
                       onBack: () {
                         if (editing) {
                           Get.back<void>();
                           return;
                         }
+                        OnboardingNav.markBackward();
                         unawaited(
                           controller.goToPreviousOnboardingStep(
                             AppRoutes.activityLevel,
@@ -131,91 +134,55 @@ class _ActivityLevelViewState extends State<ActivityLevelView> {
                     ),
                     SizedBox(height: r.scale(28)),
                     Expanded(
-                      child: OnboardingEntrance(
-                        builder: (context, entrance) {
-                          return Column(
-                            children: [
-                              entrance.item(
-                                index: 0,
-                                child: Text(
-                                  'Choose your activity level',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: r.scale(28, tablet: 32),
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.textPrimaryOf(context),
-                                    height: 1.15,
-                                    letterSpacing: -0.4,
+                      child: OnboardingQuestionTransition(
+                        stepKey: OnboardingFlowProgress.activity,
+                        question: const OnboardingQuestionHeader(
+                          title: 'How active are you?',
+                        ),
+                        description: const OnboardingQuestionDescription(
+                          'Think about a typical week — work, walks, and workouts.',
+                        ),
+                        answer: ListView(
+                          physics: const BouncingScrollPhysics(),
+                          children: [
+                            for (final level in ActivityLevel.values) ...[
+                              OnboardingOptionCard(
+                                title: level.title,
+                                subtitle: level.description,
+                                leading: SizedBox(
+                                  width: 36,
+                                  height: 36,
+                                  child: SvgPicture.asset(
+                                    level.imageAsset,
+                                    fit: BoxFit.contain,
                                   ),
                                 ),
+                                selected: selected == level,
+                                onTap: () => controller.selectActivity(level),
                               ),
                               SizedBox(height: r.scale(10)),
-                              entrance.item(
-                                index: 1,
-                                child: Text(
-                                  'How active are you during a typical week?',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: r.scale(14, tablet: 15),
-                                    color: AppColors.textSecondaryOf(context),
-                                    height: 1.4,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: r.scale(24)),
-                              Expanded(
-                                child: entrance.item(
-                                  index: 2,
-                                  child: ListView(
-                                    physics: const BouncingScrollPhysics(),
-                                    children: [
-                                      for (final level
-                                          in ActivityLevel.values) ...[
-                                        OnboardingOptionCard(
-                                          title: level.title,
-                                          subtitle: level.description,
-                                          leading: SizedBox(
-                                            width: 44,
-                                            height: 44,
-                                            child: SvgPicture.asset(
-                                              level.imageAsset,
-                                              fit: BoxFit.contain,
-                                            ),
-                                          ),
-                                          selected: selected == level,
-                                          onTap: () =>
-                                              controller.selectActivity(level),
-                                        ),
-                                        SizedBox(height: r.scale(12)),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              entrance.item(
-                                index: 3,
-                                child: OnboardingContinueButton(
-                                  label: _saving
-                                      ? 'Saving...'
-                                      : (editing ? 'Save' : 'Continue'),
-                                  onPressed: selected == null || _saving
-                                      ? null
-                                      : () => unawaited(
-                                            _onContinue(
-                                              fromProfile: fromProfile,
-                                              returnToDailyGoal:
-                                                  returnToDailyGoal,
-                                            ),
-                                          ),
-                                ),
-                              ),
-                              SizedBox(height: r.scale(12)),
                             ],
-                          );
-                        },
+                          ],
+                        ),
                       ),
                     ),
+                    OnboardingContinueButton(
+                      label: _saving
+                          ? 'Saving...'
+                          : (editing ? 'Save' : 'Continue'),
+                      onPressed: selected == null || _saving
+                          ? null
+                          : () {
+                              OnboardingNav.markForward();
+                              unawaited(
+                                _onContinue(
+                                  fromProfile: fromProfile,
+                                  returnToDailyGoal: returnToDailyGoal,
+                                ),
+                              );
+                            },
+                    ),
+                    SizedBox(height: r.scale(12)),
                   ],
                 ),
               ),

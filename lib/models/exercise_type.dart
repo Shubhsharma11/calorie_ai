@@ -22,11 +22,31 @@ enum ExerciseIntensity {
 }
 
 enum ExerciseType {
-  walking('Walking', 3.5, Icons.directions_walk_rounded, ExerciseCategory.cardio),
-  running('Running', 9.8, Icons.directions_run_rounded, ExerciseCategory.cardio),
-  cycling('Cycling', 7.5, Icons.directions_bike_rounded, ExerciseCategory.cardio),
+  walking(
+    'Walking',
+    3.5,
+    Icons.directions_walk_rounded,
+    ExerciseCategory.cardio,
+  ),
+  running(
+    'Running',
+    9.8,
+    Icons.directions_run_rounded,
+    ExerciseCategory.cardio,
+  ),
+  cycling(
+    'Cycling',
+    7.5,
+    Icons.directions_bike_rounded,
+    ExerciseCategory.cardio,
+  ),
   swimming('Swimming', 8.0, Icons.pool_rounded, ExerciseCategory.cardio),
-  elliptical('Elliptical', 6.0, Icons.monitor_heart_outlined, ExerciseCategory.cardio),
+  elliptical(
+    'Elliptical',
+    6.0,
+    Icons.monitor_heart_outlined,
+    ExerciseCategory.cardio,
+  ),
   rowing('Rowing', 7.0, Icons.rowing_rounded, ExerciseCategory.cardio),
   gymLight(
     'Light weights',
@@ -46,13 +66,13 @@ enum ExerciseType {
     Icons.sports_gymnastics_rounded,
     ExerciseCategory.strength,
   ),
-  gymHiit(
-    'HIIT / Circuit',
-    9.0,
-    Icons.bolt_rounded,
-    ExerciseCategory.strength,
-  ),
-  yoga('Yoga', 3.0, Icons.self_improvement_rounded, ExerciseCategory.flexibility);
+  gymHiit('HIIT / Circuit', 9.0, Icons.bolt_rounded, ExerciseCategory.strength),
+  yoga(
+    'Yoga',
+    3.0,
+    Icons.self_improvement_rounded,
+    ExerciseCategory.flexibility,
+  );
 
   const ExerciseType(this.label, this.met, this.icon, this.category);
 

@@ -89,17 +89,20 @@ abstract final class ApiWeightMapper {
       );
     }
 
-    final kg = _readDouble(json, const ['weightKg', 'weight_kg']) ??
+    final kg =
+        _readDouble(json, const ['weightKg', 'weight_kg']) ??
         _readDouble(json, const ['weight', 'value']);
     if (kg == null || kg <= 0) return null;
 
-    final date = _readDate(json['recordedAt']) ??
+    final date =
+        _readDate(json['recordedAt']) ??
         _readDate(json['recorded_at']) ??
         _readDate(json['date']) ??
         fallbackDate;
     if (date == null) return null;
 
-    final loggedAt = _readDateTime(json['createdAt']) ??
+    final loggedAt =
+        _readDateTime(json['createdAt']) ??
         _readDateTime(json['created_at']) ??
         _readDateTime(json['updatedAt']) ??
         _readDateTime(json['updated_at']) ??
@@ -120,7 +123,8 @@ abstract final class ApiWeightMapper {
   }
 
   static List<dynamic> _readEntryMaps(Map<String, dynamic> data) {
-    final items = data['entries'] ??
+    final items =
+        data['entries'] ??
         data['weightEntries'] ??
         data['weight_entries'] ??
         data['weightLogs'] ??

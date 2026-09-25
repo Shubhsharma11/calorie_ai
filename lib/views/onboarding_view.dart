@@ -747,8 +747,8 @@ class _TagFeature extends StatelessWidget {
         horizontal: r.scale(8),
         vertical: r.scale(8),
       ),
-      decoration: BoxDecoration(
-        color: Colors.transparent,
+      decoration: BoxDecoration(     
+                    color: Colors.transparent,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark ? AppColors.darkBorder : const Color(0xFFE5E5EA),

@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../widgets/onboarding_question_transition.dart' show OnboardingMotion;
+
 /// Shared route transition settings used across GetX navigation.
 abstract final class AppPageTransitions {
   static const Duration duration = Duration(milliseconds: 320);
@@ -12,8 +14,8 @@ abstract final class AppPageTransitions {
 
   static const Transition transition = Transition.rightToLeftWithFade;
 
-  /// Soft vertical fade for onboarding setup steps (goal → weight → activity).
-  static const Duration onboardingDuration = Duration(milliseconds: 450);
+  /// Match content handoff timing — route shell stays visually still.
+  static const Duration onboardingDuration = OnboardingMotion.duration;
 
   /// Builds a [GetPage] with the app's default forward/back animation.
   static GetPage<T> getPage<T>({
@@ -37,7 +39,8 @@ abstract final class AppPageTransitions {
     );
   }
 
-  /// Onboarding step pages — same soft up/fade feel as Personal Details.
+  /// Onboarding pages: no route slide — content animates via
+  /// [OnboardingQuestionTransition] so every screen feels the same.
   static GetPage<T> onboardingPage<T>({
     required String name,
     required GetPageBuilder page,
@@ -83,11 +86,11 @@ abstract final class AppPageTransitions {
   }
 }
 
-/// Incoming page fades in and drifts up from below (and reverses on back).
+/// Identity route shell — chrome feels persistent.
+///
+/// Real motion is owned by [OnboardingQuestionTransition] using [OnboardingNav].
 class OnboardingStepTransition extends CustomTransition {
   OnboardingStepTransition();
-
-  static const _drift = 0.035;
 
   @override
   Widget buildTransition(
@@ -98,43 +101,8 @@ class OnboardingStepTransition extends CustomTransition {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    final primary = CurvedAnimation(
-      parent: animation,
-      curve: Curves.easeInOutCubic,
-      reverseCurve: Curves.easeInOutCubic,
-    );
-
-    // When another onboarding page is pushed on top, ease this one up & out.
-    final secondary = CurvedAnimation(
-      parent: secondaryAnimation,
-      curve: Curves.easeInOutCubic,
-      reverseCurve: Curves.easeInOutCubic,
-    );
-
-    final incomingSlide = Tween<Offset>(
-      begin: const Offset(0, _drift),
-      end: Offset.zero,
-    ).animate(primary);
-
-    final outgoingSlide = Tween<Offset>(
-      begin: Offset.zero,
-      end: const Offset(0, -_drift),
-    ).animate(secondary);
-
-    final outgoingFade = Tween<double>(begin: 1, end: 0).animate(secondary);
-
-    return SlideTransition(
-      position: outgoingSlide,
-      child: FadeTransition(
-        opacity: outgoingFade,
-        child: FadeTransition(
-          opacity: primary,
-          child: SlideTransition(
-            position: incomingSlide,
-            child: child,
-          ),
-        ),
-      ),
-    );
+    // Keep route swap invisible so in-page and cross-route content
+    // share one motion language.
+    return child;
   }
 }

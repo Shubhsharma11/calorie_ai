@@ -6,7 +6,10 @@
 ///   "referralCode": "AB12CD",
 ///   "referralLink": "https://mycaloriepal.com/r/AB12CD",
 ///   "successfulReferralCount": 3,
-///   "coinsEarned": 300
+///   "coinsEarned": 300,
+///   "recentJoins": [
+///     { "name": "Aman", "joinedAt": "2026-09-24", "coins": 100 }
+///   ]
 /// }
 /// ```
 class ReferralInfo {
@@ -15,6 +18,7 @@ class ReferralInfo {
     this.referralLink,
     this.successfulReferralCount = 0,
     this.coinsEarned = 0,
+    this.recentJoins = const [],
   });
 
   final String referralCode;
@@ -22,8 +26,12 @@ class ReferralInfo {
   final int successfulReferralCount;
   final int coinsEarned;
 
+  /// Friend-join events only (no voucher / spend rows).
+  final List<ReferralJoinEvent> recentJoins;
+
   factory ReferralInfo.fromJson(Map<String, dynamic> json) {
-    final code = _string(json, const [
+    final code =
+        _string(json, const [
           'referralCode',
           'referral_code',
           'code',
@@ -40,7 +48,8 @@ class ReferralInfo {
       'share_url',
       'url',
     ]);
-    final count = _int(json, const [
+    final count =
+        _int(json, const [
           'successfulReferralCount',
           'successful_referral_count',
           'friendsJoined',
@@ -50,7 +59,8 @@ class ReferralInfo {
           'count',
         ]) ??
         0;
-    final coins = _int(json, const [
+    final coins =
+        _int(json, const [
           'coinsEarned',
           'coins_earned',
           'earnedCoins',
@@ -60,12 +70,45 @@ class ReferralInfo {
         ]) ??
         0;
 
+    final joins = _readJoins(json);
+
     return ReferralInfo(
       referralCode: code.trim().toUpperCase(),
       referralLink: (link == null || link.trim().isEmpty) ? null : link.trim(),
       successfulReferralCount: count < 0 ? 0 : count,
       coinsEarned: coins < 0 ? 0 : coins,
+      recentJoins: joins,
     );
+  }
+
+  static List<ReferralJoinEvent> _readJoins(Map<String, dynamic> json) {
+    final raw =
+        json['recentJoins'] ??
+        json['recent_joins'] ??
+        json['referrals'] ??
+        json['history'] ??
+        json['events'];
+    if (raw is! List) return const [];
+
+    final out = <ReferralJoinEvent>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final map = Map<String, dynamic>.from(item);
+      final type =
+          (_string(map, const ['type', 'kind', 'event', 'eventType']) ?? '')
+              .toLowerCase();
+      // Skip spend / voucher style rows.
+      if (type.contains('voucher') ||
+          type.contains('redeem') ||
+          type.contains('spend') ||
+          type.contains('shop') ||
+          type.contains('gift')) {
+        continue;
+      }
+      final event = ReferralJoinEvent.fromJson(map);
+      if (event != null) out.add(event);
+    }
+    return List<ReferralJoinEvent>.unmodifiable(out);
   }
 
   static String? _string(Map<String, dynamic> json, List<String> keys) {
@@ -90,6 +133,63 @@ class ReferralInfo {
   }
 }
 
+/// One friend who joined via the user's code (join credits only).
+class ReferralJoinEvent {
+  const ReferralJoinEvent({
+    required this.name,
+    required this.coins,
+    this.joinedAt,
+  });
+
+  final String name;
+  final int coins;
+  final DateTime? joinedAt;
+
+  static ReferralJoinEvent? fromJson(Map<String, dynamic> json) {
+    final name =
+        ReferralInfo._string(json, const [
+          'name',
+          'displayName',
+          'display_name',
+          'friendName',
+          'friend_name',
+          'userName',
+          'user_name',
+          'title',
+        ]) ??
+        'Friend';
+    final coins =
+        ReferralInfo._int(json, const [
+          'coins',
+          'amount',
+          'reward',
+          'coinsEarned',
+          'coins_earned',
+        ]) ??
+        100;
+    if (coins <= 0) return null;
+
+    final dateRaw = ReferralInfo._string(json, const [
+      'joinedAt',
+      'joined_at',
+      'createdAt',
+      'created_at',
+      'date',
+      'at',
+    ]);
+    DateTime? at;
+    if (dateRaw != null) {
+      at = DateTime.tryParse(dateRaw);
+    }
+
+    return ReferralJoinEvent(
+      name: name.trim().isEmpty ? 'Friend' : name.trim(),
+      coins: coins,
+      joinedAt: at,
+    );
+  }
+}
+
 /// Frontend model for POST /api/v1/referrals/claim.
 class ReferralClaimResult {
   const ReferralClaimResult({
@@ -105,7 +205,8 @@ class ReferralClaimResult {
   final bool rewardConfirmed;
 
   factory ReferralClaimResult.fromJson(Map<String, dynamic> json) {
-    final success = json['success'] == true ||
+    final success =
+        json['success'] == true ||
         json['ok'] == true ||
         json['claimed'] == true ||
         (json['status'] is String &&
@@ -115,7 +216,8 @@ class ReferralClaimResult {
       'detail',
       'error',
     ]);
-    final reward = json['rewardConfirmed'] == true ||
+    final reward =
+        json['rewardConfirmed'] == true ||
         json['reward_confirmed'] == true ||
         json['coinsAwarded'] == true ||
         json['coins_awarded'] == true ||

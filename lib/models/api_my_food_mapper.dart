@@ -11,7 +11,8 @@ abstract final class ApiMyFoodMapper {
     required String mealtime,
     String? imageUrl,
   }) {
-    final image = MediaUrl.apiImageKey(imageUrl) ??
+    final image =
+        MediaUrl.apiImageKey(imageUrl) ??
         MediaUrl.apiImageKey(preset.food.imageUrl) ??
         '';
     return {
@@ -41,7 +42,9 @@ abstract final class ApiMyFoodMapper {
     final body = <String, dynamic>{
       'name': preset.food.name.trim(),
       'quantity': quantityValue,
-      'unit': preset.servingUnit.trim().isEmpty ? 'g' : preset.servingUnit.trim(),
+      'unit': preset.servingUnit.trim().isEmpty
+          ? 'g'
+          : preset.servingUnit.trim(),
       'calories': preset.food.caloriesPer100g,
       'carbs': _roundMacro(preset.food.carbs),
       'protein': _roundMacro(preset.food.protein),
@@ -49,7 +52,8 @@ abstract final class ApiMyFoodMapper {
       'mealtime': mealtimeForApi(mealtime),
     };
 
-    final image = MediaUrl.apiImageKey(imageUrl) ??
+    final image =
+        MediaUrl.apiImageKey(imageUrl) ??
         MediaUrl.apiImageKey(preset.food.imageUrl);
     if (image != null) {
       body['image'] = image;
@@ -116,10 +120,8 @@ abstract final class ApiMyFoodMapper {
     }
 
     if (data is Map) {
-      final nested = data['foods'] ??
-          data['myFoods'] ??
-          data['items'] ??
-          data['results'];
+      final nested =
+          data['foods'] ?? data['myFoods'] ?? data['items'] ?? data['results'];
       if (nested is List) {
         return _presetsFromMaps(nested);
       }
@@ -157,8 +159,9 @@ abstract final class ApiMyFoodMapper {
 
     final mergedFood = FoodItem(
       name: parsed.food.name,
-      caloriesPer100g:
-          hasCalories ? parsed.food.caloriesPer100g : source.food.caloriesPer100g,
+      caloriesPer100g: hasCalories
+          ? parsed.food.caloriesPer100g
+          : source.food.caloriesPer100g,
       protein: hasProtein ? parsed.food.protein : source.food.protein,
       carbs: hasCarbs ? parsed.food.carbs : source.food.carbs,
       fat: hasFat ? parsed.food.fat : source.food.fat,
@@ -174,8 +177,9 @@ abstract final class ApiMyFoodMapper {
       food: mergedFood,
       defaultGrams: hasQuantity ? parsed.defaultGrams : source.defaultGrams,
       createdAt: parsed.createdAt,
-      servingQuantity:
-          hasQuantity ? parsed.servingQuantity : source.servingQuantity,
+      servingQuantity: hasQuantity
+          ? parsed.servingQuantity
+          : source.servingQuantity,
       servingUnit: hasUnit ? parsed.servingUnit : source.servingUnit,
       nutritionBasisQuantity: hasUnit || hasQuantity
           ? parsed.nutritionBasisQuantity
@@ -188,7 +192,8 @@ abstract final class ApiMyFoodMapper {
     final name = (json['name'] as String?)?.trim();
     if (name == null || name.isEmpty) return null;
 
-    final id = json['id']?.toString() ??
+    final id =
+        json['id']?.toString() ??
         json['_id']?.toString() ??
         json['myFoodId']?.toString() ??
         json['foodId']?.toString();

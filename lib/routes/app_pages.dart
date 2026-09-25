@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:get/get.dart';
 
-
 import '../bindings/home_binding.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/nutrition_plan_controller.dart';
@@ -19,6 +18,14 @@ import '../views/add_food_view.dart';
 import '../views/daily_calorie_goal_view.dart';
 import '../views/daily_summary_view.dart';
 import '../views/health_problem_view.dart';
+import '../views/diet_plan_interest_view.dart';
+import '../views/food_preferences_view.dart';
+import '../views/meat_preferences_view.dart';
+import '../views/cooking_skills_view.dart';
+import '../views/eating_habits_view.dart';
+import '../views/living_area_view.dart';
+import '../views/habit_food_allergies_view.dart';
+import '../views/medications_view.dart';
 import '../views/diet_preferences_view.dart';
 import '../controllers/daily_summary_controller.dart';
 import '../views/create_meal_view.dart';
@@ -40,6 +47,9 @@ import '../views/otp_verify_view.dart';
 import '../views/splash_view.dart';
 import '../views/personal_details_view.dart';
 import '../views/personal_information_view.dart';
+import '../views/food_profile_form_view.dart';
+import '../views/lifestyle_form_view.dart';
+import '../views/health_form_view.dart';
 import '../views/progress_view.dart';
 import '../views/register_view.dart';
 import '../controllers/streak_controller.dart';
@@ -49,6 +59,7 @@ import '../views/water_tracker_view.dart';
 import '../views/weight_tracker_view.dart';
 import '../views/weekly_meal_plan_view.dart';
 import '../views/buddy_gifts_view.dart';
+import '../views/coin_history_view.dart';
 import '../views/rewards_shop_view.dart';
 import '../views/invite_friends_view.dart';
 import '../controllers/referral_controller.dart';
@@ -82,7 +93,7 @@ abstract final class AppPages {
         }
       }),
     ),
-   
+
     AppPageTransitions.getPage(
       name: AppRoutes.register,
       page: () => const RegisterView(),
@@ -108,6 +119,18 @@ abstract final class AppPages {
       name: AppRoutes.personalInformation,
       page: () => const PersonalInformationView(),
     ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.foodProfileForm,
+      page: () => const FoodProfileFormView(),
+    ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.lifestyleForm,
+      page: () => const LifestyleFormView(),
+    ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.healthForm,
+      page: () => const HealthFormView(),
+    ),
     AppPageTransitions.onboardingPage(
       name: AppRoutes.goalWeight,
       page: () => const GoalWeightView(),
@@ -124,6 +147,78 @@ abstract final class AppPages {
     AppPageTransitions.onboardingPage(
       name: AppRoutes.healthProblem,
       page: () => const HealthProblemView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<UserController>()) {
+          Get.put(UserController(), permanent: true);
+        }
+      }),
+    ),
+    AppPageTransitions.onboardingPage(
+      name: AppRoutes.dietPlanInterest,
+      page: () => const DietPlanInterestView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<UserController>()) {
+          Get.put(UserController(), permanent: true);
+        }
+      }),
+    ),
+    AppPageTransitions.onboardingPage(
+      name: AppRoutes.foodPreferences,
+      page: () => const FoodPreferencesView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<UserController>()) {
+          Get.put(UserController(), permanent: true);
+        }
+      }),
+    ),
+    AppPageTransitions.onboardingPage(
+      name: AppRoutes.meatPreferences,
+      page: () => const MeatPreferencesView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<UserController>()) {
+          Get.put(UserController(), permanent: true);
+        }
+      }),
+    ),
+    AppPageTransitions.onboardingPage(
+      name: AppRoutes.cookingSkills,
+      page: () => const CookingSkillsView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<UserController>()) {
+          Get.put(UserController(), permanent: true);
+        }
+      }),
+    ),
+    AppPageTransitions.onboardingPage(
+      name: AppRoutes.eatingHabits,
+      page: () => const EatingHabitsView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<UserController>()) {
+          Get.put(UserController(), permanent: true);
+        }
+      }),
+    ),
+    AppPageTransitions.onboardingPage(
+      name: AppRoutes.livingArea,
+      page: () => const LivingAreaView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<UserController>()) {
+          Get.put(UserController(), permanent: true);
+        }
+      }),
+    ),
+    AppPageTransitions.onboardingPage(
+      name: AppRoutes.habitFoodAllergies,
+      page: () => const HabitFoodAllergiesView(),
+      binding: BindingsBuilder(() {
+        if (!Get.isRegistered<UserController>()) {
+          Get.put(UserController(), permanent: true);
+        }
+      }),
+    ),
+    AppPageTransitions.onboardingPage(
+      name: AppRoutes.medications,
+      page: () => const MedicationsView(),
       binding: BindingsBuilder(() {
         if (!Get.isRegistered<UserController>()) {
           Get.put(UserController(), permanent: true);
@@ -255,6 +350,16 @@ abstract final class AppPages {
       name: AppRoutes.inviteFriends,
       page: () => const InviteFriendsView(),
       binding: BindingsBuilder(() {
+        if (!Get.isRegistered<ReferralController>()) {
+          Get.put(ReferralController());
+        }
+      }),
+    ),
+    AppPageTransitions.getPage(
+      name: AppRoutes.coinHistory,
+      page: () => const CoinHistoryView(),
+      binding: BindingsBuilder(() {
+        HomeBinding().dependencies();
         if (!Get.isRegistered<ReferralController>()) {
           Get.put(ReferralController());
         }

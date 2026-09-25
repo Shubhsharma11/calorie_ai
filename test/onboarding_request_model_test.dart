@@ -1,4 +1,5 @@
 import 'package:calorie_ai/models/activity_level.dart';
+import 'package:calorie_ai/models/diet_plan_interest.dart';
 import 'package:calorie_ai/models/diet_type.dart';
 import 'package:calorie_ai/models/goal_type.dart';
 import 'package:calorie_ai/models/health_concern.dart';
@@ -42,10 +43,7 @@ void main() {
     expect(json['activityLevel'], 'moderatelyActive');
     expect(json['goalWeight'], 65);
     expect(json['goalWeightUnit'], 'kg');
-    expect(
-      json['goalTimeline'],
-      anyOf('1week', '2week', '1month', 'custom'),
-    );
+    expect(json['goalTimeline'], anyOf('1week', '2week', '1month', 'custom'));
     if (json['goalTimeline'] == 'custom') {
       expect(json['goalTimelineCustomDate'], '2026-09-23');
     } else {
@@ -67,31 +65,50 @@ void main() {
     expect(json.containsKey('mealsPerDay'), isTrue);
   });
 
-  test('OnboardingRequestModel.fromUser always sends diet preference fields', () {
-    final user = UserModel()
-      ..age = 28
-      ..gender = 'Male'
-      ..heightCm = 175
-      ..weightKg = 70
-      ..goal = GoalType.gainWeight
-      ..manualGoalWeightKg = 75
-      ..targetDate = DateTime(2026, 10, 16)
-      ..activityLevel = ActivityLevel.moderatelyActive
-      ..healthConcerns = [HealthConcern.none()]
-      ..dietType = DietType.vegetarian
-      ..foodAllergies = ['Dairy', 'Nuts']
-      ..foodsToAvoid = 'mushrooms, spicy food'
-      ..mealsPerDay = 4;
+  test(
+    'OnboardingRequestModel.fromUser always sends diet preference fields',
+    () {
+      final user = UserModel()
+        ..age = 28
+        ..gender = 'Male'
+        ..heightCm = 175
+        ..weightKg = 70
+        ..goal = GoalType.gainWeight
+        ..manualGoalWeightKg = 75
+        ..targetDate = DateTime(2026, 10, 16)
+        ..activityLevel = ActivityLevel.moderatelyActive
+        ..healthConcerns = [HealthConcern.none()]
+        ..dietType = DietType.vegetarian
+        ..foodAllergies = ['Dairy', 'Nuts']
+        ..foodsToAvoid = 'mushrooms, spicy food'
+        ..mealsPerDay = 4
+        ..cookingSkills = 'learning'
+        ..medications = ['vitamins']
+        ..dietPlanInterest = DietPlanInterest.heartHealthy
+        ..foodPreferences = ['eggs', 'avocados', 'cheese', 'nuts', 'milk']
+        ..meatPreferences = ['chicken', 'fish'];
 
-    final json = OnboardingRequestModel.fromUser(user).toJson();
+      final json = OnboardingRequestModel.fromUser(user).toJson();
 
-    expect(json['dietType'], 'vegetarian');
-    expect(json['foodAllergies'], ['Dairy', 'Nuts']);
-    expect(json['foodsToAvoid'], 'mushrooms, spicy food');
-    expect(json['mealsPerDay'], 4);
-    expect(json['goal'], 'gainWeight');
-    expect(json['activityLevel'], 'moderatelyActive');
-  });
+      expect(json['dietType'], 'vegetarian');
+      expect(json['foodAllergies'], ['Dairy', 'Nuts']);
+      expect(json['foodsToAvoid'], 'mushrooms, spicy food');
+      expect(json['mealsPerDay'], 4);
+      expect(json['cookingSkills'], 'learning');
+      expect(json['medications'], ['vitamins']);
+      expect(json['dietPlanInterest'], 'heartHealthy');
+      expect(json['foodPreferences'], [
+        'eggs',
+        'avocados',
+        'cheese',
+        'nuts',
+        'milk',
+      ]);
+      expect(json['meatPreferences'], ['chicken', 'fish']);
+      expect(json['goal'], 'gainWeight');
+      expect(json['activityLevel'], 'moderatelyActive');
+    },
+  );
 
   test('OnboardingRequestModel.fromUser maps multiple health concerns', () {
     final user = UserModel()
@@ -140,23 +157,26 @@ void main() {
     expect(json.containsKey('healthProblem'), isFalse);
   });
 
-  test('OnboardingRequestModel.fromUser sends null healthProblems for none', () {
-    final user = UserModel()
-      ..age = 30
-      ..gender = 'Female'
-      ..heightCm = 165
-      ..weightKg = 60
-      ..goal = GoalType.maintainWeight
-      ..targetDate = DateTime(2026, 12, 31)
-      ..activityLevel = ActivityLevel.sedentary
-      ..healthConcerns = [HealthConcern.none()];
+  test(
+    'OnboardingRequestModel.fromUser sends null healthProblems for none',
+    () {
+      final user = UserModel()
+        ..age = 30
+        ..gender = 'Female'
+        ..heightCm = 165
+        ..weightKg = 60
+        ..goal = GoalType.maintainWeight
+        ..targetDate = DateTime(2026, 12, 31)
+        ..activityLevel = ActivityLevel.sedentary
+        ..healthConcerns = [HealthConcern.none()];
 
-    final json = OnboardingRequestModel.fromUser(user).toJson();
+      final json = OnboardingRequestModel.fromUser(user).toJson();
 
-    expect(json['goal'], 'maintainWeight');
-    expect(json['healthProblems'], isNull);
-    expect(json.containsKey('healthProblem'), isFalse);
-  });
+      expect(json['goal'], 'maintainWeight');
+      expect(json['healthProblems'], isNull);
+      expect(json.containsKey('healthProblem'), isFalse);
+    },
+  );
 
   test('OnboardingRequestModel.fromUser maps each goal to backend value', () {
     const mappings = {
@@ -188,10 +208,7 @@ void main() {
     final json = OnboardingPatchModel.weightOnly(user).toJson();
 
     expect(json, {
-      'personalDetails': {
-        'weight': 68,
-        'weightUnit': 'kg',
-      },
+      'personalDetails': {'weight': 68, 'weightUnit': 'kg'},
     });
   });
 
@@ -202,10 +219,7 @@ void main() {
 
     final json = OnboardingPatchModel.goalAndActivity(user).toJson();
 
-    expect(json, {
-      'goal': 'maintainWeight',
-      'activityLevel': 'veryActive',
-    });
+    expect(json, {'goal': 'maintainWeight', 'activityLevel': 'veryActive'});
   });
 
   test('OnboardingPatchModel sends health concerns patch payload', () {
@@ -231,42 +245,45 @@ void main() {
     expect(json.containsKey('healthProblem'), isFalse);
   });
 
-  test('OnboardingPatchModel sends empty healthProblems when none selected', () {
-    final json = OnboardingPatchModel.healthConcerns([
-      HealthConcern.none(),
-    ]).toJson();
+  test(
+    'OnboardingPatchModel sends empty healthProblems when none selected',
+    () {
+      final json = OnboardingPatchModel.healthConcerns([
+        HealthConcern.none(),
+      ]).toJson();
 
-    expect(json['healthProblems'], isEmpty);
-  });
+      expect(json['healthProblems'], isEmpty);
+    },
+  );
 
-  test('OnboardingPatchModel.profileDiff sends personal and activity together', () {
-    final user = UserModel()
-      ..age = 25
-      ..gender = 'Male'
-      ..heightCm = 170
-      ..weightKg = 68
-      ..goal = GoalType.loseWeight
-      ..activityLevel = ActivityLevel.veryActive;
-    final baseline = ProfileSyncSnapshot.fromUser(
-      UserModel()
+  test(
+    'OnboardingPatchModel.profileDiff sends personal and activity together',
+    () {
+      final user = UserModel()
         ..age = 25
         ..gender = 'Male'
         ..heightCm = 170
-        ..weightKg = 70
+        ..weightKg = 68
         ..goal = GoalType.loseWeight
-        ..activityLevel = ActivityLevel.moderatelyActive,
-    );
+        ..activityLevel = ActivityLevel.veryActive;
+      final baseline = ProfileSyncSnapshot.fromUser(
+        UserModel()
+          ..age = 25
+          ..gender = 'Male'
+          ..heightCm = 170
+          ..weightKg = 70
+          ..goal = GoalType.loseWeight
+          ..activityLevel = ActivityLevel.moderatelyActive,
+      );
 
-    final json = OnboardingPatchModel.profileDiff(user, baseline).toJson();
+      final json = OnboardingPatchModel.profileDiff(user, baseline).toJson();
 
-    expect(json, {
-      'personalDetails': {
-        'weight': 68,
-        'weightUnit': 'kg',
-      },
-      'activityLevel': 'veryActive',
-    });
-  });
+      expect(json, {
+        'personalDetails': {'weight': 68, 'weightUnit': 'kg'},
+        'activityLevel': 'veryActive',
+      });
+    },
+  );
 
   test('OnboardingPatchModel.profileDiff is empty when nothing changed', () {
     final user = UserModel()
@@ -281,34 +298,36 @@ void main() {
     expect(OnboardingPatchModel.profileDiff(user, baseline).isEmpty, isTrue);
   });
 
-  test('OnboardingPatchModel.personalDetailsDiff sends only changed fields', () {
-    final user = UserModel()
-      ..age = 25
-      ..gender = 'Male'
-      ..heightCm = 170
-      ..weightKg = 68
-      ..goal = GoalType.loseWeight
-      ..activityLevel = ActivityLevel.moderatelyActive;
-    final baseline = ProfileSyncSnapshot.fromUser(
-      UserModel()
+  test(
+    'OnboardingPatchModel.personalDetailsDiff sends only changed fields',
+    () {
+      final user = UserModel()
         ..age = 25
         ..gender = 'Male'
         ..heightCm = 170
-        ..weightKg = 70
+        ..weightKg = 68
         ..goal = GoalType.loseWeight
-        ..activityLevel = ActivityLevel.moderatelyActive,
-    );
+        ..activityLevel = ActivityLevel.moderatelyActive;
+      final baseline = ProfileSyncSnapshot.fromUser(
+        UserModel()
+          ..age = 25
+          ..gender = 'Male'
+          ..heightCm = 170
+          ..weightKg = 70
+          ..goal = GoalType.loseWeight
+          ..activityLevel = ActivityLevel.moderatelyActive,
+      );
 
-    final json =
-        OnboardingPatchModel.personalDetailsDiff(user, baseline).toJson();
+      final json = OnboardingPatchModel.personalDetailsDiff(
+        user,
+        baseline,
+      ).toJson();
 
-    expect(json, {
-      'personalDetails': {
-        'weight': 68,
-        'weightUnit': 'kg',
-      },
-    });
-  });
+      expect(json, {
+        'personalDetails': {'weight': 68, 'weightUnit': 'kg'},
+      });
+    },
+  );
 
   test('OnboardingPatchModel.goalProfileDiff sends goal weight changes', () {
     final user = UserModel()
@@ -327,10 +346,7 @@ void main() {
     expect(json['goalWeight'], 62);
     expect(json['goalWeightUnit'], 'kg');
     expect(json['targetDate'], '2026-09-23');
-    expect(
-      json['goalTimeline'],
-      anyOf('1week', '2week', '1month', 'custom'),
-    );
+    expect(json['goalTimeline'], anyOf('1week', '2week', '1month', 'custom'));
     if (json['goalTimeline'] == 'custom') {
       expect(json['goalTimelineCustomDate'], '2026-09-23');
     }
@@ -372,10 +388,7 @@ void main() {
     final baseline = ProfileSyncSnapshot.fromUser(user);
 
     expect(
-      OnboardingPatchModel.goalDiff(
-        GoalType.maintainWeight,
-        baseline,
-      ).toJson(),
+      OnboardingPatchModel.goalDiff(GoalType.maintainWeight, baseline).toJson(),
       isEmpty,
     );
   });

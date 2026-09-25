@@ -1,10 +1,7 @@
 import '../core/media_url.dart';
 
 class AvatarUploadResult {
-  const AvatarUploadResult({
-    required this.avatarUrl,
-    this.expiresIn,
-  });
+  const AvatarUploadResult({required this.avatarUrl, this.expiresIn});
 
   final String avatarUrl;
   final int? expiresIn;

@@ -206,7 +206,7 @@ void main() {
     expect(stepsRepo.syncCount, 0);
   });
 
-  test('wallet already completed successfully => no GET /coins', () async {
+  test('wallet already completed successfully => no GET /wallet', () async {
     await rewards.refreshWalletFromApi();
     expect(coinsApi.walletFetches, 1);
     expect(rewards.hasCompletedWalletFetch.value, isTrue);
@@ -228,7 +228,7 @@ void main() {
     expect(rewards.hasCompletedWalletFetch.value, isTrue);
   });
 
-  test('wallet previous error => retries GET /coins', () async {
+  test('wallet previous error => retries GET /wallet', () async {
     coinsApi.walletError = const CoinsApiException('fail', statusCode: 500);
     await rewards.refreshWalletFromApi();
     expect(rewards.hasCompletedWalletFetch.value, isTrue);

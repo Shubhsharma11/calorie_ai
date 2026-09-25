@@ -1,28 +1,30 @@
 import 'package:flutter/material.dart';
 
-/// Staggered fade + slide entrance for onboarding asking pages.
+/// Directional staggered entrance for in-page onboarding questions
+/// (e.g. gender → age on the same route).
 ///
-/// Uses [FadeTransition] + [SlideTransition] under one controller so title,
-/// body, and actions enter one after another.
+/// Forward: slides in from the right. Backward: from the left.
 class OnboardingEntrance extends StatefulWidget {
   const OnboardingEntrance({
     super.key,
     required this.builder,
     this.replayToken,
-    this.duration = const Duration(milliseconds: 520),
-    this.stagger = const Duration(milliseconds: 70),
-    this.itemDuration = const Duration(milliseconds: 360),
-    this.beginOffset = const Offset(0, 0.055),
+    this.forward = true,
+    this.duration = const Duration(milliseconds: 300),
+    this.stagger = const Duration(milliseconds: 50),
+    this.itemDuration = const Duration(milliseconds: 260),
     this.curve = Curves.easeOutCubic,
   });
 
   /// Rebuild/restart when this changes (e.g. current onboarding sub-step).
   final Object? replayToken;
 
+  /// `true` = forward (from right), `false` = back (from left).
+  final bool forward;
+
   final Duration duration;
   final Duration stagger;
   final Duration itemDuration;
-  final Offset beginOffset;
   final Curve curve;
 
   final Widget Function(
@@ -39,7 +41,6 @@ class OnboardingEntranceScope {
 
   final _OnboardingEntranceState _state;
 
-  /// Fade + slide a child at [index] (0 = first).
   Widget item({
     required int index,
     required Widget child,
@@ -53,6 +54,10 @@ class _OnboardingEntranceState extends State<OnboardingEntrance>
   late final AnimationController _controller;
   late OnboardingEntranceScope _scope;
 
+  /// Noticeable horizontal travel — same language as route push.
+  Offset get _beginOffset =>
+      widget.forward ? const Offset(0.22, 0) : const Offset(-0.22, 0);
+
   @override
   void initState() {
     super.initState();
@@ -64,7 +69,8 @@ class _OnboardingEntranceState extends State<OnboardingEntrance>
   @override
   void didUpdateWidget(covariant OnboardingEntrance oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.replayToken != widget.replayToken) {
+    if (oldWidget.replayToken != widget.replayToken ||
+        oldWidget.forward != widget.forward) {
       _controller
         ..duration = widget.duration
         ..forward(from: 0);
@@ -83,8 +89,9 @@ class _OnboardingEntranceState extends State<OnboardingEntrance>
     final totalMs = widget.duration.inMilliseconds.toDouble().clamp(1, 100000);
     final staggerMs = widget.stagger.inMilliseconds.toDouble();
     final itemMs = widget.itemDuration.inMilliseconds.toDouble();
-    final start = (index * staggerMs / totalMs).clamp(0.0, 0.85);
-    final end = ((index * staggerMs + itemMs) / totalMs).clamp(start + 0.05, 1.0);
+    final start = (index * staggerMs / totalMs).clamp(0.0, 0.7);
+    final end =
+        ((index * staggerMs + itemMs) / totalMs).clamp(start + 0.08, 1.0);
 
     final curved = CurvedAnimation(
       parent: _controller,
@@ -92,10 +99,16 @@ class _OnboardingEntranceState extends State<OnboardingEntrance>
     );
 
     return FadeTransition(
-      opacity: curved,
+      opacity: Tween<double>(begin: 0, end: 1).animate(
+        CurvedAnimation(
+          parent: _controller,
+          curve: Interval(start, (start + 0.45).clamp(0.0, 1.0),
+              curve: Curves.easeOut),
+        ),
+      ),
       child: SlideTransition(
         position: Tween<Offset>(
-          begin: widget.beginOffset,
+          begin: _beginOffset,
           end: Offset.zero,
         ).animate(curved),
         child: child,
@@ -106,70 +119,5 @@ class _OnboardingEntranceState extends State<OnboardingEntrance>
   @override
   Widget build(BuildContext context) {
     return widget.builder(context, _scope);
-  }
-}
-
-/// Lightweight one-shot fade/slide for a single block (no stagger needed).
-class OnboardingFadeSlide extends StatefulWidget {
-  const OnboardingFadeSlide({
-    super.key,
-    required this.child,
-    this.duration = const Duration(milliseconds: 380),
-    this.beginOffset = const Offset(0, 0.04),
-    this.curve = Curves.easeOutCubic,
-    this.replayToken,
-  });
-
-  final Widget child;
-  final Duration duration;
-  final Offset beginOffset;
-  final Curve curve;
-  final Object? replayToken;
-
-  @override
-  State<OnboardingFadeSlide> createState() => _OnboardingFadeSlideState();
-}
-
-class _OnboardingFadeSlideState extends State<OnboardingFadeSlide>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _opacity;
-  late final Animation<Offset> _slide;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: widget.duration);
-    _opacity = CurvedAnimation(parent: _controller, curve: widget.curve);
-    _slide = Tween<Offset>(
-      begin: widget.beginOffset,
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: widget.curve));
-    _controller.forward();
-  }
-
-  @override
-  void didUpdateWidget(covariant OnboardingFadeSlide oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.replayToken != widget.replayToken) {
-      _controller.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacity,
-      child: SlideTransition(
-        position: _slide,
-        child: widget.child,
-      ),
-    );
   }
 }

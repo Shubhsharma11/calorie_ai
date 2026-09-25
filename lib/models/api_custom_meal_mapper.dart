@@ -62,8 +62,8 @@ abstract final class ApiCustomMealMapper {
     final items = source.items.isNotEmpty
         ? source.items
         : (parsed.items.isNotEmpty
-            ? _preserveServingMetadata(parsed.items, source.items)
-            : source.items);
+              ? _preserveServingMetadata(parsed.items, source.items)
+              : source.items);
 
     return source.copyWith(
       id: parsed.id,
@@ -96,7 +96,8 @@ abstract final class ApiCustomMealMapper {
         matchingSource.food.imageUrl,
       ]);
       final parsedEmoji = item.food.emoji.trim();
-      final keepParsedEmoji = parsedEmoji.isNotEmpty &&
+      final keepParsedEmoji =
+          parsedEmoji.isNotEmpty &&
           parsedEmoji != '🍽️' &&
           !MediaUrl.looksLikeImageRef(parsedEmoji);
       return item.copyWith(
@@ -155,7 +156,8 @@ abstract final class ApiCustomMealMapper {
     final id = _readId(mealJson);
     if (id == null || id.isEmpty) return null;
 
-    final meal = _mealTimeFromApi(
+    final meal =
+        _mealTimeFromApi(
           mealJson['mealTime'] ?? mealJson['mealtime'] ?? mealJson['meal'],
         ) ??
         MealType.breakfast;
@@ -170,7 +172,8 @@ abstract final class ApiCustomMealMapper {
     return CustomMealPreset(
       id: id,
       name: name.trim(),
-      createdAt: _readDate(mealJson['createdAt'] ?? mealJson['created_at']) ??
+      createdAt:
+          _readDate(mealJson['createdAt'] ?? mealJson['created_at']) ??
           DateTime.now(),
       meal: meal,
       items: items,
@@ -192,30 +195,32 @@ abstract final class ApiCustomMealMapper {
     if (itemCalories > 0) return items;
 
     final nutrients = mealJson['totalNutrients'];
-    final nutrientMap =
-        nutrients is Map ? Map<String, dynamic>.from(nutrients) : null;
+    final nutrientMap = nutrients is Map
+        ? Map<String, dynamic>.from(nutrients)
+        : null;
 
-    final mealCalories = _readInt(
-          mealJson,
-          const ['calories', 'totalCalories', 'kcal'],
-        ) ??
+    final mealCalories =
+        _readInt(mealJson, const ['calories', 'totalCalories', 'kcal']) ??
         (nutrientMap == null
             ? null
             : _readInt(nutrientMap, const ['calories', 'kcal'])) ??
         0;
     if (mealCalories <= 0) return items;
 
-    final mealProtein = _readDouble(mealJson, const ['protein']) ??
+    final mealProtein =
+        _readDouble(mealJson, const ['protein']) ??
         (nutrientMap == null
             ? null
             : _readDouble(nutrientMap, const ['protein'])) ??
         0;
-    final mealCarbs = _readDouble(mealJson, const ['carbs']) ??
+    final mealCarbs =
+        _readDouble(mealJson, const ['carbs']) ??
         (nutrientMap == null
             ? null
             : _readDouble(nutrientMap, const ['carbs'])) ??
         0;
-    final mealFat = _readDouble(mealJson, const ['fat']) ??
+    final mealFat =
+        _readDouble(mealJson, const ['fat']) ??
         (nutrientMap == null
             ? null
             : _readDouble(nutrientMap, const ['fat'])) ??
@@ -243,8 +248,9 @@ abstract final class ApiCustomMealMapper {
       final portionProtein = isLast
           ? mealProtein - assignedProtein
           : mealProtein * share;
-      final portionCarbs =
-          isLast ? mealCarbs - assignedCarbs : mealCarbs * share;
+      final portionCarbs = isLast
+          ? mealCarbs - assignedCarbs
+          : mealCarbs * share;
       final portionFat = isLast ? mealFat - assignedFat : mealFat * share;
 
       assignedCalories += portionCalories;
@@ -355,10 +361,12 @@ abstract final class ApiCustomMealMapper {
 
     return rawItems
         .whereType<Map>()
-        .map((item) => _itemFromApiJson(
-              Map<String, dynamic>.from(item),
-              fallbackMeal: fallbackMeal,
-            ))
+        .map(
+          (item) => _itemFromApiJson(
+            Map<String, dynamic>.from(item),
+            fallbackMeal: fallbackMeal,
+          ),
+        )
         .whereType<SavedMealItem>()
         .toList();
   }
@@ -366,8 +374,7 @@ abstract final class ApiCustomMealMapper {
   static List<SavedMealItem> _itemsFromApi(
     dynamic rawItems, {
     required String fallbackMeal,
-  }) =>
-      savedItemsFromApi(rawItems, fallbackMeal: fallbackMeal);
+  }) => savedItemsFromApi(rawItems, fallbackMeal: fallbackMeal);
 
   static SavedMealItem? _itemFromApiJson(
     Map<String, dynamic> json, {
@@ -377,24 +384,30 @@ abstract final class ApiCustomMealMapper {
     final foodMap = nestedFood is Map
         ? Map<String, dynamic>.from(nestedFood)
         : const <String, dynamic>{};
-    final name = _readString(json, const ['name', 'foodName', 'title']) ??
+    final name =
+        _readString(json, const ['name', 'foodName', 'title']) ??
         _readString(foodMap, const ['name', 'foodName', 'title']);
     if (name == null || name.isEmpty) return null;
 
-    final quantity = _readInt(json, const ['quantity', 'grams', 'servingGrams']) ??
+    final quantity =
+        _readInt(json, const ['quantity', 'grams', 'servingGrams']) ??
         _readInt(foodMap, const ['quantity', 'grams', 'servingGrams']);
     if (quantity == null || quantity <= 0) return null;
 
-    final protein = _readDouble(json, const ['protein']) ??
+    final protein =
+        _readDouble(json, const ['protein']) ??
         _readDouble(foodMap, const ['protein']) ??
         0;
-    final carbs = _readDouble(json, const ['carbs']) ??
+    final carbs =
+        _readDouble(json, const ['carbs']) ??
         _readDouble(foodMap, const ['carbs']) ??
         0;
-    final fat = _readDouble(json, const ['fat']) ??
+    final fat =
+        _readDouble(json, const ['fat']) ??
         _readDouble(foodMap, const ['fat']) ??
         0;
-    var calories = _readInt(json, const ['calories', 'kcal']) ??
+    var calories =
+        _readInt(json, const ['calories', 'kcal']) ??
         _readInt(foodMap, const ['calories', 'kcal']) ??
         0;
     if (calories <= 0 && (protein > 0 || carbs > 0 || fat > 0)) {
@@ -408,9 +421,7 @@ abstract final class ApiCustomMealMapper {
     ]);
     final food = FoodItem(
       name: name.trim(),
-      caloriesPer100g: calories > 0
-          ? (calories * per100Factor).round()
-          : 0,
+      caloriesPer100g: calories > 0 ? (calories * per100Factor).round() : 0,
       protein: protein * per100Factor,
       carbs: carbs * per100Factor,
       fat: fat * per100Factor,
@@ -418,11 +429,7 @@ abstract final class ApiCustomMealMapper {
       imageUrl: imageUrl,
     );
 
-    return SavedMealItem(
-      food: food,
-      grams: quantity,
-      meal: fallbackMeal,
-    );
+    return SavedMealItem(food: food, grams: quantity, meal: fallbackMeal);
   }
 
   static String _mealTimeToApi(String meal) {

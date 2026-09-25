@@ -100,7 +100,8 @@ class AppSheetScaffold extends StatelessWidget {
         children: [
           const AppSheetHandle(),
           SizedBox(height: r.scale(16)),
-          Flexible(fit: FlexFit.loose, child: child),
+          // Avoid Flexible inside min-sized Column (can crash on open).
+          child,
         ],
       ),
     );
